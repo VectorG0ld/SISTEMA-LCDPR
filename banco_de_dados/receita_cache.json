@@ -210,5 +210,131 @@
   "cnpj:49308206000177": {
     "status": "ERROR",
     "message": "CNPJ inválido"
+  },
+  "cnpj:37115367000160": {
+    "abertura": "30/04/1992",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MINISTERIO DO TRABALHO E EMPREGO - MTE",
+    "fantasia": "GABINETE DO MINISTRO",
+    "porte": "DEMAIS",
+    "natureza_juridica": "101-5 - Órgão Público do Poder Executivo Federal",
+    "atividade_principal": [
+      {
+        "code": "84.11-6-00",
+        "text": "Administração pública em geral"
+      }
+    ],
+    "logradouro": "ESP ESPLANADA DOS MINISTERIOS",
+    "numero": "S/N",
+    "complemento": "BLOCO F SEDE",
+    "municipio": "BRASILIA",
+    "bairro": "PLANO PILOTO",
+    "uf": "DF",
+    "cep": "70.059-900",
+    "email": "vilmar.franco@mte.gov.br",
+    "telefone": "(61) 3317-6809/ (61) 3317-6031",
+    "data_situacao": "03/11/2005",
+    "efr": "UNIÃO",
+    "cnpj": "37.115.367/0001-60",
+    "ultima_atualizacao": "2025-07-09T19:39:07.036Z",
+    "status": "OK",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:49239522000130": {
+    "abertura": "18/01/2023",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "49.239.522 JEAN PIERRE BARBOSA DE ARAUJO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      }
+    ],
+    "logradouro": "RUA JI-16",
+    "numero": "SN",
+    "complemento": "QUADRA 04;LOTE 12",
+    "municipio": "URUACU",
+    "bairro": "RES. JARDIM DOS IPES I",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "jeampierrebarbosa@gmail.com",
+    "telefone": "(62) 8549-6404",
+    "data_situacao": "18/01/2023",
+    "cnpj": "49.239.522/0001-30",
+    "ultima_atualizacao": "2025-06-15T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "20000.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "18/01/2023",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": true,
+      "data_opcao": "18/01/2023",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }

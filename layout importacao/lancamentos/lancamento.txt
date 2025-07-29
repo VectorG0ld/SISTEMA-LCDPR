@@ -1,0 +1,2 @@
+2025-07-01|IMV001|CTA001|NF123|1|Venda de soja|1|1|15000.00|0.00|Venda de Produtos
+2025-07-02|IMV002|CTA002|BOL456|3|Pagamento de serviço|2|2|0.00|500.00|Serviços

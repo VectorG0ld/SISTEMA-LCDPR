@@ -5,8 +5,9 @@ import json
 import csv
 import sqlite3
 from datetime import datetime
-
+import pandas as pd
 import requests
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QDateEdit, QComboBox, QLabel, QTextEdit,
@@ -36,6 +37,22 @@ CACHE_FOLDER = 'banco_de_dados'
 CACHE_FILE   = os.path.join(CACHE_FOLDER, 'receita_cache.json')
 API_URL_CNPJ = 'https://www.receitaws.com.br/v1/cnpj/'
 API_URL_CPF  = 'https://www.receitaws.com.br/v1/cpf/'
+
+# —————— Configuração para salvar último caminho do TXT LCDPR ——————
+TXT_PREF_FILE = os.path.join(CACHE_FOLDER, 'lcdpr_txt_path.json')
+
+def load_last_txt_path() -> str:
+    os.makedirs(CACHE_FOLDER, exist_ok=True)
+    try:
+        with open(TXT_PREF_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f).get('last_path', '')
+    except:
+        return ''
+
+def save_last_txt_path(path: str):
+    os.makedirs(CACHE_FOLDER, exist_ok=True)
+    with open(TXT_PREF_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'last_path': path}, f, ensure_ascii=False, indent=2)
 
 def ensure_cache_file():
     os.makedirs(CACHE_FOLDER, exist_ok=True)
@@ -76,14 +93,16 @@ APP_ICON    = 'agro_icon.png'
 
 # --- CLASSE DE ACESSO AOS DADOS ---
 class Database:
-    def __init__(self, filename=DB_FILENAME):
+    def __init__(self, filename: str = DB_FILENAME):
+        # abre/cria o arquivo e gera self.conn
         self.conn = sqlite3.connect(filename)
-        self.create_tables()
-        self.create_views()
+        # garante que todas as tabelas e views existam
+        self._create_tables()
+        self._create_views()
 
-    def create_tables(self):
-        c = self.conn.cursor()
-        c.executescript("""
+    def _create_tables(self):
+        cursor = self.conn.cursor()
+        cursor.executescript("""
         -- Imóveis rurais
         CREATE TABLE IF NOT EXISTS imovel_rural (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +126,7 @@ class Database:
             area_utilizada REAL,
             data_cadastro DATE DEFAULT CURRENT_DATE
         );
+
         -- Contas bancárias
         CREATE TABLE IF NOT EXISTS conta_bancaria (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,6 +139,7 @@ class Database:
             saldo_inicial REAL DEFAULT 0,
             data_abertura DATE DEFAULT CURRENT_DATE
         );
+
         -- Participantes
         CREATE TABLE IF NOT EXISTS participante (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,6 +148,7 @@ class Database:
             tipo_contraparte INTEGER NOT NULL,
             data_cadastro DATE DEFAULT CURRENT_DATE
         );
+
         -- Culturas
         CREATE TABLE IF NOT EXISTS cultura (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -135,6 +157,7 @@ class Database:
             ciclo TEXT,
             unidade_medida TEXT
         );
+
         -- Áreas de produção
         CREATE TABLE IF NOT EXISTS area_producao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,6 +170,7 @@ class Database:
             FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id),
             FOREIGN KEY(cultura_id) REFERENCES cultura(id)
         );
+
         -- Estoques
         CREATE TABLE IF NOT EXISTS estoque (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +184,7 @@ class Database:
             imovel_id INTEGER,
             FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id)
         );
+
         -- Lançamentos contábeis
         CREATE TABLE IF NOT EXISTS lancamento (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,16 +212,18 @@ class Database:
         """)
         self.conn.commit()
 
-    def create_views(self):
-        c = self.conn.cursor()
-        c.executescript("""
+    def _create_views(self):
+        cursor = self.conn.cursor()
+        cursor.executescript("""
         -- Saldo atual das contas
         CREATE VIEW IF NOT EXISTS saldo_contas AS
         SELECT 
             cb.id,
             cb.cod_conta,
             cb.nome_banco,
-            l.saldo_final * (CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo_atual
+            l.saldo_final * 
+              (CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) 
+            AS saldo_atual
         FROM conta_bancaria cb
         LEFT JOIN (
             SELECT cod_conta, MAX(id) AS max_id
@@ -204,12 +231,13 @@ class Database:
             GROUP BY cod_conta
         ) last_l ON cb.id = last_l.cod_conta
         LEFT JOIN lancamento l ON last_l.max_id = l.id;
+
         -- Resumo por categoria
         CREATE VIEW IF NOT EXISTS resumo_categorias AS
         SELECT 
             categoria,
             SUM(valor_entrada) AS total_entradas,
-            SUM(valor_saida) AS total_saidas,
+            SUM(valor_saida)   AS total_saidas,
             strftime('%Y', data) AS ano,
             strftime('%m', data) AS mes
         FROM lancamento
@@ -217,17 +245,17 @@ class Database:
         """)
         self.conn.commit()
 
-    def execute_query(self, sql, params=None):
-        c = self.conn.cursor()
-        c.execute(sql, params or [])
+    def execute_query(self, sql: str, params: list = None):
+        cur = self.conn.cursor()
+        cur.execute(sql, params or [])
         self.conn.commit()
-        return c
+        return cur
 
-    def fetch_all(self, sql, params=None):
-        return self.execute_query(sql, params).fetchall()
-
-    def fetch_one(self, sql, params=None):
+    def fetch_one(self, sql: str, params: list = None):
         return self.execute_query(sql, params).fetchone()
+
+    def fetch_all(self, sql: str, params: list = None):
+        return self.execute_query(sql, params).fetchall()
 
     def close(self):
         self.conn.close()
@@ -414,144 +442,137 @@ class CadastroBaseDialog(QDialog):
 class CadastroImovelDialog(CadastroBaseDialog):
     def __init__(self, parent=None, imovel_id=None):
         super().__init__("Cadastro de Imóvel Rural", parent)
-        self.setMinimumSize(900, 700)    # largura=900, altura=700
         self.imovel_id = imovel_id
         self._build_ui()
         self._load_data()
 
     def _build_ui(self):
-        # Identificação do Imóvel
-        grp_id = QGroupBox("Identificação do Imóvel")
-        grp_id.setContentsMargins(10, 10, 10, 10)
-        form_id = QFormLayout(grp_id)
-        self.cod_imovel = QLineEdit(); self.cod_imovel.setPlaceholderText("Código único do imóvel")
-        form_id.addRow("Código do Imóvel:", self.cod_imovel)
-        self.nome_imovel = QLineEdit(); form_id.addRow("Nome do Imóvel:", self.nome_imovel)
-        self.cad_itr = QLineEdit(); form_id.addRow("CAD ITR:", self.cad_itr)
-        self.caepf = QLineEdit(); form_id.addRow("CAEPF:", self.caepf)
-        self.insc_estadual = QLineEdit(); form_id.addRow("Inscrição Estadual:", self.insc_estadual)
-        self.form_layout.addRow(grp_id)
+        # Grupo Identificação
+        grp = QGroupBox("Identificação do Imóvel")
+        f = QFormLayout(grp)
+        self.cod_imovel      = QLineEdit(); f.addRow("Código:", self.cod_imovel)
+        self.pais            = QComboBox(); self.pais.addItems(["BR","AR","US","…"])
+        f.addRow("País:", self.pais)
+        self.moeda           = QComboBox(); self.moeda.addItems(["BRL","USD","EUR","…"])
+        f.addRow("Moeda:", self.moeda)
+        self.nome_imovel     = QLineEdit(); f.addRow("Nome:", self.nome_imovel)
+        self.cad_itr         = QLineEdit(); f.addRow("CAD ITR:", self.cad_itr)
+        self.caepf           = QLineEdit(); f.addRow("CAEPF:", self.caepf)
+        self.insc_estadual   = QLineEdit(); f.addRow("Inscrição Est.:", self.insc_estadual)
+        self.form_layout.addRow(grp)
 
-        # Localização
-        grp_loc = QGroupBox("Localização")
-        grp_loc.setContentsMargins(10, 10, 10, 10)
-        form_loc = QFormLayout(grp_loc)
-        self.endereco = QLineEdit(); form_loc.addRow("Endereço:", self.endereco)
-        hl = QHBoxLayout(); hl.setContentsMargins(0, 0, 0, 0)
-        self.num = QLineEdit(); self.num.setMaximumWidth(80); hl.addWidget(self.num)
-        self.compl = QLineEdit(); self.compl.setPlaceholderText("Complemento"); hl.addWidget(self.compl)
-        form_loc.addRow("Número/Complemento:", hl)
-        self.bairro = QLineEdit(); form_loc.addRow("Bairro:", self.bairro)
-        hl2 = QHBoxLayout(); hl2.setContentsMargins(0, 0, 0, 0)
-        self.uf = QLineEdit(); self.uf.setMaximumWidth(50); hl2.addWidget(self.uf)
-        self.cod_mun = QLineEdit(); self.cod_mun.setPlaceholderText("Cód. Município"); hl2.addWidget(self.cod_mun)
-        self.cep = QLineEdit(); hl2.addWidget(self.cep)
-        form_loc.addRow("UF / Cód. Mun. / CEP:", hl2)
-        self.form_layout.addRow(grp_loc)
+        # Grupo Localização
+        grp2 = QGroupBox("Localização")
+        f2 = QFormLayout(grp2)
+        self.endereco = QLineEdit(); f2.addRow("Endereço:", self.endereco)
+        self.num      = QLineEdit(); f2.addRow("Número:", self.num)
+        self.compl    = QLineEdit(); f2.addRow("Complemento:", self.compl)
+        self.bairro   = QLineEdit(); f2.addRow("Bairro:", self.bairro)
+        self.uf       = QLineEdit(); f2.addRow("UF:", self.uf)
+        self.cod_mun  = QLineEdit(); f2.addRow("Cód. Município:", self.cod_mun)
+        self.cep      = QLineEdit(); f2.addRow("CEP:", self.cep)
+        self.form_layout.addRow(grp2)
 
-        # Exploração Agrícola
-        grp_exp = QGroupBox("Exploração Agrícola")
-        grp_exp.setContentsMargins(10, 10, 10, 10)
-        form_exp = QFormLayout(grp_exp)
+        # Grupo Exploração
+        grp3 = QGroupBox("Exploração Agrícola")
+        f3 = QFormLayout(grp3)
         self.tipo_exploracao = QComboBox()
         self.tipo_exploracao.addItems([
-            "1 - Exploração individual", "2 - Condomínio", "3 - Imóvel arrendado",
-            "4 - Parceria", "5 - Comodato", "6 - Outros"
+            "1 - Exploração individual","2 - Condomínio","3 - Imóvel arrendado",
+            "4 - Parceria","5 - Comodato","6 - Outros"
         ])
-        form_exp.addRow("Tipo de Exploração:", self.tipo_exploracao)
-        self.participacao = QLineEdit("100.00"); form_exp.addRow("Participação (%):", self.participacao)
-        hl3 = QHBoxLayout(); hl3.setContentsMargins(0, 0, 0, 0)
-        self.area_total = QLineEdit(); self.area_total.setPlaceholderText("Total (ha)"); hl3.addWidget(self.area_total)
-        self.area_utilizada = QLineEdit(); self.area_utilizada.setPlaceholderText("Utilizada (ha)"); hl3.addWidget(self.area_utilizada)
-        form_exp.addRow("Área (ha):", hl3)
-        self.form_layout.addRow(grp_exp)
-
-        # --- não há mais dt_dash nem gráfico aqui ---
+        f3.addRow("Tipo:", self.tipo_exploracao)
+        self.participacao = QLineEdit("100.00"); f3.addRow("Participação (%):", self.participacao)
+        self.form_layout.addRow(grp3)
 
     def _load_data(self):
         if not self.imovel_id:
             return
-
-        row = self.db.fetch_one(
-            """
-            SELECT cod_imovel, nome_imovel, cad_itr, caepf, insc_estadual,
-                   endereco, num, compl, bairro, uf, cod_mun, cep,
-                   tipo_exploracao, participacao, area_total, area_utilizada
-            FROM imovel_rural
-            WHERE id = ?
-            """,
-            (self.imovel_id,)
-        )
-        if not row:
-            return
-
-        (cod, nome, itr, caepf, ie,
-         ender, num, compl, bairro, uf, cod_mun, cep,
-         tipo, part, at, au) = row
-
+        row = self.db.fetch_one("""
+            SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
+                   nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
+                   tipo_exploracao,participacao
+            FROM imovel_rural WHERE id=?
+        """, (self.imovel_id,))
+        if not row: return
+        (cod,pais,moeda,cad,caepf,ie,nome,end,num,comp,bar,uf,mun,cep,tipo,part) = row
         self.cod_imovel.setText(cod)
-        self.nome_imovel.setText(nome)
-        self.cad_itr.setText(itr or "")
+        self.pais.setCurrentText(pais)
+        self.moeda.setCurrentText(moeda)
+        self.cad_itr.setText(cad or "")
         self.caepf.setText(caepf or "")
         self.insc_estadual.setText(ie or "")
-
-        self.endereco.setText(ender)
+        self.nome_imovel.setText(nome)
+        self.endereco.setText(end)
         self.num.setText(num or "")
-        self.compl.setText(compl or "")
-        self.bairro.setText(bairro)
+        self.compl.setText(comp or "")
+        self.bairro.setText(bar)
         self.uf.setText(uf)
-        self.cod_mun.setText(cod_mun)
+        self.cod_mun.setText(mun)
         self.cep.setText(cep)
-
-        self.tipo_exploracao.setCurrentIndex(tipo - 1)
+        self.tipo_exploracao.setCurrentIndex(tipo-1)
         self.participacao.setText(f"{part:.2f}")
-        self.area_total.setText(str(at or ""))
-        self.area_utilizada.setText(str(au or ""))
 
     def salvar(self):
         campos = [
-            self.cod_imovel.text(), self.nome_imovel.text(),
-            self.endereco.text(), self.bairro.text(),
-            self.uf.text(), self.cod_mun.text(), self.cep.text()
+            self.cod_imovel.text().strip(),
+            self.pais.currentText(),
+            self.moeda.currentText(),
+            self.nome_imovel.text().strip(),
+            self.endereco.text().strip(),
+            self.bairro.text().strip(),
+            self.uf.text().strip(),
+            self.cod_mun.text().strip(),
+            self.cep.text().strip()
         ]
         if not all(campos):
-            QMessageBox.warning(self, "Campos Obrigatórios", "Preencha todos os campos obrigatórios!")
+            QMessageBox.warning(self, "Obrigatório", "Preencha todos os campos obrigatórios!")
             return
+
+        data = (
+            self.cod_imovel.text().strip(),
+            self.pais.currentText(),
+            self.moeda.currentText(),
+            self.cad_itr.text().strip() or None,
+            self.caepf.text().strip() or None,
+            self.insc_estadual.text().strip() or None,
+            self.nome_imovel.text().strip(),
+            self.endereco.text().strip(),
+            self.num.text().strip() or None,
+            self.compl.text().strip() or None,
+            self.bairro.text().strip(),
+            self.uf.text().strip(),
+            self.cod_mun.text().strip(),
+            self.cep.text().strip(),
+            self.tipo_exploracao.currentIndex()+1,
+            float(self.participacao.text())
+        )
+
         try:
-            data = (
-                self.cod_imovel.text(), self.nome_imovel.text(), self.cad_itr.text(),
-                self.caepf.text(), self.insc_estadual.text(),
-                self.endereco.text(), self.num.text(), self.compl.text(),
-                self.bairro.text(), self.uf.text(), self.cod_mun.text(),
-                self.cep.text(), self.tipo_exploracao.currentIndex()+1,
-                float(self.participacao.text()),
-                float(self.area_total.text()) if self.area_total.text() else None,
-                float(self.area_utilizada.text()) if self.area_utilizada.text() else None
-            )
             if self.imovel_id:
-                self.db.execute_query("""
+                sql = """
                     UPDATE imovel_rural SET
-                        cod_imovel=?, nome_imovel=?, cad_itr=?, caepf=?, insc_estadual=?,
-                        endereco=?, num=?, compl=?, bairro=?, uf=?, cod_mun=?, cep=?,
-                        tipo_exploracao=?, participacao=?, area_total=?, area_utilizada=?
+                      cod_imovel=?,pais=?,moeda=?,cad_itr=?,caepf=?,insc_estadual=?,
+                      nome_imovel=?,endereco=?,num=?,compl=?,bairro=?,uf=?,cod_mun=?,cep=?,
+                      tipo_exploracao=?,participacao=?
                     WHERE id=?
-                """, data + (self.imovel_id,))
-                msg = "Imóvel atualizado com sucesso!"
+                """
+                self.db.execute_query(sql, data + (self.imovel_id,))
+                msg = "Atualizado com sucesso!"
             else:
-                self.db.execute_query("""
+                sql = """
                     INSERT INTO imovel_rural (
-                        cod_imovel, nome_imovel, cad_itr, caepf, insc_estadual,
-                        endereco, num, compl, bairro, uf, cod_mun, cep,
-                        tipo_exploracao, participacao, area_total, area_utilizada
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, data)
-                msg = "Imóvel cadastrado com sucesso!"
+                      cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
+                      nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
+                      tipo_exploracao,participacao
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """
+                self.db.execute_query(sql, data)
+                msg = "Cadastrado com sucesso!"
             QMessageBox.information(self, "Sucesso", msg)
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao salvar imóvel: {e}")
-
-
+            QMessageBox.critical(self, "Erro", str(e))
 
 # --- DIALOG CADASTRO CONTA BANCÁRIA ---
 class CadastroContaDialog(CadastroBaseDialog):
@@ -567,6 +588,9 @@ class CadastroContaDialog(CadastroBaseDialog):
         f1 = QFormLayout(grp1)
         self.cod_conta = QLineEdit(); self.cod_conta.setPlaceholderText("Código único da conta")
         f1.addRow("Código da Conta:", self.cod_conta)
+        self.pais_cta = QComboBox()
+        self.pais_cta.addItems(["BR","US","…"])
+        f1.addRow("País da Conta:", self.pais_cta)
         self.nome_banco = QLineEdit(); f1.addRow("Nome do Banco:", self.nome_banco)
         self.banco = QLineEdit(); f1.addRow("Código do Banco:", self.banco)
         self.form_layout.addRow(grp1)
@@ -580,102 +604,94 @@ class CadastroContaDialog(CadastroBaseDialog):
         self.form_layout.addRow(grp2)
 
     def _load_data(self):
-        if not self.conta_id: return
-        row = self.db.fetch_one("SELECT * FROM conta_bancaria WHERE id=?", (self.conta_id,))
-        if not row: return
-        (_, cod, pais, banco, nome, agencia, num, saldo, _) = row
+        if not self.conta_id:
+            return
+
+        row = self.db.fetch_one(
+            "SELECT cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial "
+            "FROM conta_bancaria WHERE id = ?",
+            (self.conta_id,)
+        )
+        if not row:
+            return
+
+        cod, pais, banco, nome, agencia, num_conta, saldo = row
         self.cod_conta.setText(cod)
+        self.pais_cta.setCurrentText(pais)
         self.banco.setText(banco or "")
-        self.nome_banco.setText(nome)
-        self.agencia.setText(agencia)
-        self.num_conta.setText(num)
-        self.saldo_inicial.setText(str(saldo))
+        self.nome_banco.setText(nome or "")
+        self.agencia.setText(agencia or "")
+        self.num_conta.setText(num_conta or "")
+        # formata o CurrencyLineEdit
+        self.saldo_inicial.setText(f"{saldo:.2f}")
 
     def salvar(self):
-        import re, os, json, requests
-        from PySide6.QtWidgets import QMessageBox
+        # 1) coleta e valida campos obrigatórios
+        cod_conta    = self.cod_conta.text().strip()
+        nome_banco   = self.nome_banco.text().strip()
+        banco        = self.banco.text().strip()
+        agencia      = self.agencia.text().strip()
+        num_conta    = self.num_conta.text().strip()
+        saldo_raw    = self.saldo_inicial.text().strip()
 
-        # 1) limpa e valida formato
-        raw = self.cpf_cnpj.text()
-        cpf_cnpj = re.sub(r'[^\d]', '', raw)
-        tipo_idx = self.tipo.currentIndex()
-        if tipo_idx in (0,1) and not self.cpf_cnpj.hasAcceptableInput():
-            QMessageBox.warning(self, "CPF/CNPJ Inválido", "Preencha corretamente CPF ou CNPJ.")
-            return
-        if not self.nome.text().strip():
-            QMessageBox.warning(self, "Nome Inválido", "O nome não pode ficar vazio.")
-            return
-
-        # 2) prepara cache JSON
-        cache_folder = 'banco_de_dados'
-        cache_file = os.path.join(cache_folder, 'receita_cache.json')
-        os.makedirs(cache_folder, exist_ok=True)
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r', encoding='utf-8') as f:
-                cache = json.load(f)
-        else:
-            cache = {}
-
-        # 3) busca no cache ou na API
-        tipo = 'cpf' if tipo_idx == 0 else 'cnpj'
-        key = f"{tipo}:{cpf_cnpj}"
-        if key in cache:
-            info = cache[key]
-        else:
-            url = API_URL_CPF if tipo == 'cpf' else API_URL_CNPJ
-            try:
-                res = requests.get(url + cpf_cnpj, timeout=10)
-                res.raise_for_status()
-                info = res.json()
-            except Exception as e:
-                QMessageBox.critical(self, "Erro de Validação",
-                                     f"Não foi possível validar {tipo}:\n{e}")
-                return
-            cache[key] = info
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(cache, f, ensure_ascii=False, indent=2)
-
-        # 4) confere status da API
-        if info.get('status') != 'OK':
-            QMessageBox.warning(self, "Não Encontrado",
-                                f"{tipo.upper()} não localizado na base da Receita Federal.")
-            return
-
-        # 5) opcional: preenche nome
-        nome_api = info.get('nome') or info.get('fantasia')
-        if nome_api:
-            self.nome.setText(nome_api)
-
-        # 6) evita duplicata no SQLite
-        exists = self.db.fetch_one(
-            "SELECT id FROM participante WHERE cpf_cnpj = ?",
-            (cpf_cnpj,)
-        )
-        if exists and not self.participante_id:
-            QMessageBox.information(
-                self, "Já Cadastrado",
-                f"Participante já existe com o ID {exists[0]}."
+        if not (cod_conta and nome_banco and agencia and num_conta):
+            QMessageBox.warning(
+                self, "Campos Obrigatórios",
+                "Preencha Código da Conta, Nome do Banco, Agência e Número da Conta."
             )
             return
 
-        # 7) persiste no SQLite
-        data = (cpf_cnpj, self.nome.text().strip(), tipo_idx + 1)
+        # 2) função auxiliar para extrair valor numérico do CurrencyLineEdit
+        def parse_currency(text: str) -> float:
+            digits = re.sub(r"[^\d]", "", text)
+            if not digits:
+                return 0.0
+            inteiro  = int(digits) // 100
+            centavos = int(digits) % 100
+            return inteiro + centavos / 100.0
+
+        saldo_inicial = parse_currency(saldo_raw)
+
+        # 3) prepara dados para salvar
+        data = (
+            cod_conta,
+            "BR",           # país (fixo) — ajuste se quiser expor como campo
+            banco,
+            nome_banco,
+            agencia,
+            num_conta,
+            saldo_inicial
+        )
+
+        # 4) insere ou atualiza no banco
         try:
-            if self.participante_id:
-                self.db.execute_query(
-                    "UPDATE participante SET cpf_cnpj=?, nome=?, tipo_contraparte=? WHERE id=?",
-                    data + (self.participante_id,)
-                )
+            if self.conta_id:
+                sql = """
+                    UPDATE conta_bancaria
+                    SET cod_conta = ?, pais_cta = ?, banco = ?, nome_banco = ?,
+                        agencia = ?, num_conta = ?, saldo_inicial = ?
+                    WHERE id = ?
+                """
+                self.db.execute_query(sql, data + (self.conta_id,))
+                msg = "Conta bancária atualizada com sucesso!"
             else:
-                self.db.execute_query(
-                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                    data
-                )
-            QMessageBox.information(self, "Sucesso", "Participante salvo com sucesso!")
+                sql = """
+                    INSERT INTO conta_bancaria
+                    (cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """
+                self.db.execute_query(sql, data)
+                msg = "Conta bancária cadastrada com sucesso!"
+
+            QMessageBox.information(self, "Sucesso", msg)
             self.accept()
+
         except Exception as e:
-            QMessageBox.critical(self, "Erro ao Salvar",
-                                 f"Não foi possível salvar participante:\n{e}")
+            QMessageBox.critical(
+                self, "Erro ao Salvar",
+                f"Não foi possível salvar a conta bancária:\n{e}"
+            )
+
 
 
 # --- DIALOG CADASTRO PARTICIPANTE COM MÁSCARA DINÂMICA ---
@@ -845,6 +861,106 @@ class CadastroParticipanteDialog(QDialog):
             QMessageBox.critical(self, "Erro ao Salvar",
                                  f"Não foi possível salvar participante:\n{e}")
 
+class ParametrosDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Parâmetros do Contribuinte")
+        self.setMinimumSize(400, 500)
+        self.settings = QSettings("PrimeOnHub", "AgroApp")
+        layout = QFormLayout(self)
+
+        # Versão do leiaute
+        self.version = QLineEdit(self.settings.value("param/version", "0013"))
+        layout.addRow("Versão do Leiaute:", self.version)
+
+        # Indicador de Movimentação
+        self.ind_mov = QComboBox()
+        self.ind_mov.addItems(["0 - Sem Movimento", "1 - Com Movimento"])
+        iv = self.settings.value("param/ind_mov", "0")
+        self.ind_mov.setCurrentText(f"{iv} - " + ("Sem Movimento" if iv=="0" else "Com Movimento"))
+        layout.addRow("Ind. de Movimentação:", self.ind_mov)
+
+        # Indicador de Recepção
+        self.ind_rec = QComboBox()
+        self.ind_rec.addItems(["0 - Original", "1 - Retificadora"])
+        ir = self.settings.value("param/ind_rec", "0")
+        self.ind_rec.setCurrentText(f"{ir} - " + ("Original" if ir=="0" else "Retificadora"))
+        layout.addRow("Ind. de Recepção:", self.ind_rec)
+
+        # Tipo de Contribuinte
+        self.tipo = QComboBox()
+        self.tipo.addItems(["Pessoa Jurídica", "Pessoa Física"])
+        self.tipo.setCurrentText(self.settings.value("param/tipo", "Pessoa Jurídica"))
+        self.tipo.currentIndexChanged.connect(self._ajustar_mask)
+        layout.addRow("Tipo:", self.tipo)
+
+        # CNPJ/CPF
+        self.ident = QLineEdit(self.settings.value("param/ident", ""))
+        layout.addRow("CNPJ/CPF:", self.ident)
+        self._ajustar_mask()
+
+        # Nome / Razão Social
+        self.nome = QLineEdit(self.settings.value("param/nome", ""))
+        layout.addRow("Nome / Razão Social:", self.nome)
+
+        # Endereço
+        self.logradouro  = QLineEdit(self.settings.value("param/logradouro", ""))
+        self.numero      = QLineEdit(self.settings.value("param/numero", ""))
+        self.complemento = QLineEdit(self.settings.value("param/complemento", ""))
+        self.bairro      = QLineEdit(self.settings.value("param/bairro", ""))
+        layout.addRow("Logradouro:", self.logradouro)
+        layout.addRow("Número:", self.numero)
+        layout.addRow("Complemento:", self.complemento)
+        layout.addRow("Bairro:", self.bairro)
+
+        # Localização
+        self.uf     = QLineEdit(self.settings.value("param/uf", ""))
+        self.cod_mun= QLineEdit(self.settings.value("param/cod_mun", ""))
+        self.cep    = QLineEdit(self.settings.value("param/cep", ""))
+        layout.addRow("UF:", self.uf)
+        layout.addRow("Cód. Município:", self.cod_mun)
+        layout.addRow("CEP:", self.cep)
+
+        # Contato
+        self.telefone = QLineEdit(self.settings.value("param/telefone", ""))
+        self.email    = QLineEdit(self.settings.value("param/email", ""))
+        layout.addRow("Telefone:", self.telefone)
+        layout.addRow("Email:", self.email)
+
+        # Botões
+        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.salvar)
+        btns.rejected.connect(self.reject)
+        layout.addRow(btns)
+
+    def _ajustar_mask(self):
+        if self.tipo.currentText() == "Pessoa Jurídica":
+            self.ident.setInputMask("00.000.000/0000-00;_")
+        else:
+            self.ident.setInputMask("000.000.000-00;_")
+
+    def salvar(self):
+        s = self.settings
+        s.setValue("param/version",    self.version.text())
+        s.setValue("param/ind_mov",    self.ind_mov.currentText().split(" - ")[0])
+        s.setValue("param/ind_rec",    self.ind_rec.currentText().split(" - ")[0])
+        s.setValue("param/tipo",       self.tipo.currentText())
+        s.setValue("param/ident",      self.ident.text())
+        s.setValue("param/nome",       self.nome.text())
+        s.setValue("param/logradouro", self.logradouro.text())
+        s.setValue("param/numero",     self.numero.text())
+        s.setValue("param/complemento",self.complemento.text())
+        s.setValue("param/bairro",     self.bairro.text())
+        s.setValue("param/uf",         self.uf.text())
+        s.setValue("param/cod_mun",    self.cod_mun.text())
+        s.setValue("param/cep",        self.cep.text())
+        s.setValue("param/telefone",   self.telefone.text())
+        s.setValue("param/email",      self.email.text())
+        s.sync()
+        QMessageBox.information(self, "Sucesso", "Parâmetros salvos com sucesso!")
+        self.accept()
+
+
 # --- DIALOG DE RELATÓRIO POR PERÍODO ---
 class RelatorioPeriodoDialog(QDialog):
     def __init__(self, tipo, parent=None):
@@ -876,7 +992,7 @@ class DashboardWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        self.settings = QSettings("PrimeOnHub", "AgroApp")
+        self.settings = QSettings("Automatize Tech", "AgroApp")
         self.layout = QVBoxLayout(self)
         self._build_filter_ui()
         self._build_cards_ui()
@@ -1220,45 +1336,111 @@ class GerenciamentoContasWidget(QWidget):
         super().__init__(parent)
         self.db = Database()
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setContentsMargins(10,10,10,10)
         self._build_ui()
         self.carregar_contas()
 
     def _build_ui(self):
-        tl = QHBoxLayout(); tl.setContentsMargins(0,0,10,10)
-        self.btn_novo = QPushButton("Nova Conta"); self.btn_novo.clicked.connect(self.nova_conta)
-        self.btn_novo.setIcon(QIcon.fromTheme("document-new")); tl.addWidget(self.btn_novo)
-        self.btn_editar = QPushButton("Editar"); self.btn_editar.setEnabled(False)
+        tl = QHBoxLayout()
+        tl.setContentsMargins(0,0,10,10)
+
+        self.btn_novo = QPushButton("Nova Conta")
+        self.btn_novo.setIcon(QIcon.fromTheme("document-new"))
+        self.btn_novo.clicked.connect(self.nova_conta)
+        tl.addWidget(self.btn_novo)
+
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setEnabled(False)
+        self.btn_editar.setIcon(QIcon.fromTheme("document-edit"))
         self.btn_editar.clicked.connect(self.editar_conta)
-        self.btn_editar.setIcon(QIcon.fromTheme("document-edit")); tl.addWidget(self.btn_editar)
-        self.btn_excluir = QPushButton("Excluir"); self.btn_excluir.setEnabled(False)
+        tl.addWidget(self.btn_editar)
+
+        self.btn_excluir = QPushButton("Excluir")
+        self.btn_excluir.setEnabled(False)
+        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete"))
         self.btn_excluir.clicked.connect(self.excluir_conta)
-        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete")); tl.addWidget(self.btn_excluir)
+        tl.addWidget(self.btn_excluir)
+
+        self.btn_importar = QPushButton("Importar")
+        self.btn_importar.setIcon(QIcon.fromTheme("document-import"))
+        self.btn_importar.clicked.connect(self.importar_contas)
+        tl.addWidget(self.btn_importar)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
+        # **tabela de contas**
         self.tabela = QTableWidget(0,5)
         self.tabela.setHorizontalHeaderLabels(["Código","Banco","Agência","Conta","Saldo Inicial"])
-        # ─── ESTILIZAÇÃO GERAL DE TABELA ───
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
-    
         hdr = self.tabela.horizontalHeader()
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)
-    
-        self.tabela.setStyleSheet("""
-            QTableWidget::item { padding: 8px; }
-            QHeaderView::section { padding: 8px; font-weight: bold; }
-        """)
-    
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabela.cellClicked.connect(self._select_row)
+
+        # **ESSENCIAL**: adiciona a tabela ao layout
         self.layout.addWidget(self.tabela)
+
+    def importar_contas(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar Contas", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith('.txt'):
+                self._import_contas_txt(path)
+            else:
+                self._import_contas_excel(path)
+            self.carregar_contas()
+        except Exception:
+            QMessageBox.warning(
+                self, "Importação Falhou",
+                "Arquivo não segue o layout esperado e não foi importado."
+            )
+
+
+    def _import_contas_txt(self, path):
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split("|")
+                if len(parts) != 7:
+                    raise ValueError("Layout de TXT inválido")
+                cod, pais_cta, banco, nome_banco, agencia, num_conta, saldo = parts
+                self.db.execute_query(
+                    """
+                    INSERT OR REPLACE INTO conta_bancaria (
+                        cod_conta, pais_cta, banco, nome_banco,
+                        agencia, num_conta, saldo_inicial
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (cod, pais_cta, banco, nome_banco, agencia, num_conta, float(saldo))
+                )
+
+    def _import_contas_excel(self, path):
+        df = pd.read_excel(path, dtype=str)
+        required = ['cod_conta','pais_cta','banco','nome_banco','agencia','num_conta','saldo_inicial']
+        if not all(col in df.columns for col in required):
+            raise ValueError("Layout de Excel inválido")
+        df.fillna('', inplace=True)
+        for row in df.itertuples(index=False):
+            self.db.execute_query(
+                """
+                INSERT OR REPLACE INTO conta_bancaria (
+                    cod_conta, pais_cta, banco, nome_banco,
+                    agencia, num_conta, saldo_inicial
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.cod_conta, row.pais_cta, row.banco, row.nome_banco,
+                    row.agencia, row.num_conta, float(row.saldo_inicial)
+                )
+            )
 
     def carregar_contas(self):
         rows = self.db.fetch_all("SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria ORDER BY nome_banco")
@@ -1285,16 +1467,24 @@ class GerenciamentoContasWidget(QWidget):
             self.carregar_contas()
 
     def excluir_conta(self):
-        id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
-        cod = self.tabela.item(self.selected_row,1).text()
-        ans = QMessageBox.question(self,"Confirmar Exclusão",f"Excluir conta '{cod}'?",QMessageBox.Yes|QMessageBox.No)
-        if ans==QMessageBox.Yes:
+        indices = self.tabela.selectionModel().selectedRows()
+        if not indices:
+            return
+        codigos = [self.tabela.item(idx.row(), 1).text() for idx in indices]
+        resp = QMessageBox.question(
+            self, "Confirmar Exclusão",
+            f"Excluir contas: {', '.join(codigos)}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
+            return
+        for idx in indices:
+            id_ = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
             try:
                 self.db.execute_query("DELETE FROM conta_bancaria WHERE id=?", (id_,))
-                QMessageBox.information(self,"Sucesso","Conta excluída!")
-                self.carregar_contas()
             except Exception as e:
-                QMessageBox.critical(self,"Erro",f"Erro ao excluir: {e}")
+                QMessageBox.critical(self, "Erro", f"Erro ao excluir conta ID {id_}: {e}")
+        self.carregar_contas()
 
 # --- WIDGET GERENCIAMENTO IMÓVEIS ---
 class GerenciamentoImoveisWidget(QWidget):
@@ -1302,53 +1492,152 @@ class GerenciamentoImoveisWidget(QWidget):
         super().__init__(parent)
         self.db = Database()
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(10,10,10,10)
+        self.layout.setContentsMargins(10, 10, 10, 10)
+
+        # monta a UI
         self._build_ui()
+        # carrega dados iniciais
         self.carregar_imoveis()
 
     def _build_ui(self):
-        tl = QHBoxLayout(); tl.setContentsMargins(0,0,10,10)
+        tl = QHBoxLayout()
+        tl.setContentsMargins(0, 0, 10, 10)
+
+        # Botões CRUD
         self.btn_novo = QPushButton("Novo Imóvel")
         self.btn_novo.clicked.connect(self.novo_imovel)
-        self.btn_novo.setIcon(QIcon.fromTheme("document-new")); tl.addWidget(self.btn_novo)
-        self.btn_editar = QPushButton("Editar"); self.btn_editar.setEnabled(False)
+        tl.addWidget(self.btn_novo)
+
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setEnabled(False)
         self.btn_editar.clicked.connect(self.editar_imovel)
-        self.btn_editar.setIcon(QIcon.fromTheme("document-edit")); tl.addWidget(self.btn_editar)
-        self.btn_excluir = QPushButton("Excluir"); self.btn_excluir.setEnabled(False)
+        tl.addWidget(self.btn_editar)
+
+        self.btn_excluir = QPushButton("Excluir")
+        self.btn_excluir.setEnabled(False)
         self.btn_excluir.clicked.connect(self.excluir_imovel)
-        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete")); tl.addWidget(self.btn_excluir)
+        tl.addWidget(self.btn_excluir)
+
+        self.btn_importar = QPushButton("Importar")
+        self.btn_importar.clicked.connect(self.importar_imoveis)
+        tl.addWidget(self.btn_importar)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
-        self.tabela = QTableWidget(0,6)
+        # Tabela
+        self.tabela = QTableWidget(0, 6)
         self.tabela.setHorizontalHeaderLabels([
-            "Código","Nome","UF","Área Total","Área Utilizada","% Part."
+            "Código", "Nome", "UF", "Área Total", "Área Utilizada", "% Part."
         ])
+        self.tabela.verticalHeader().setVisible(False)
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
-        self.tabela.verticalHeader().setVisible(False)
         hdr = self.tabela.horizontalHeader()
-        hdr.setHighlightSections(False)
-        hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)
-        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tabela.cellClicked.connect(self._select_row)
+        self.tabela.cellClicked.connect(self._on_select)
         self.layout.addWidget(self.tabela)
+
+    def importar_imoveis(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar Imóveis", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith('.txt'):
+                self._import_imoveis_txt(path)
+            else:
+                self._import_imoveis_excel(path)
+            self.carregar_imoveis()
+        except Exception as e:
+            QMessageBox.warning(self, "Importação Falhou", str(e))
+
+    def _import_imoveis_txt(self, path: str):
+        with open(path, encoding='utf-8') as f:
+            for lineno, line in enumerate(f, 1):
+                parts = line.strip().split("|")
+                if len(parts) != 18:
+                    raise ValueError(
+                        f"Linha {lineno}: esperado 18 campos, encontrou {len(parts)}"
+                    )
+                (
+                    cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                    nome_imovel, endereco, num, compl, bairro, uf,
+                    cod_mun, cep, tipo_exploracao, participacao,
+                    area_total, area_utilizada
+                ) = parts
+                self.db.execute_query(
+                    """
+                    INSERT OR REPLACE INTO imovel_rural (
+                        cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                        nome_imovel, endereco, num, compl, bairro, uf,
+                        cod_mun, cep, tipo_exploracao, participacao,
+                        area_total, area_utilizada
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    [
+                        cod_imovel, pais, moeda,
+                        cad_itr or None, caepf or None, insc_estadual or None,
+                        nome_imovel, endereco,
+                        num or None, compl or None, bairro, uf,
+                        cod_mun, cep,
+                        int(tipo_exploracao), float(participacao),
+                        float(area_total), float(area_utilizada)
+                    ]
+                )
+
+    def _import_imoveis_excel(self, path: str):
+        df = pd.read_excel(path, dtype=str)
+        required = [
+            'cod_imovel','pais','moeda','cad_itr','caepf','insc_estadual',
+            'nome_imovel','endereco','num','compl','bairro','uf',
+            'cod_mun','cep','tipo_exploracao','participacao',
+            'area_total','area_utilizada'
+        ]
+        if not all(col in df.columns for col in required):
+            raise ValueError("Layout de Excel inválido")
+        df.fillna('', inplace=True)
+        for row in df.itertuples(index=False):
+            self.db.execute_query(
+                """
+                INSERT OR REPLACE INTO imovel_rural (
+                    cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                    nome_imovel, endereco, num, compl, bairro, uf,
+                    cod_mun, cep, tipo_exploracao, participacao,
+                    area_total, area_utilizada
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    row.cod_imovel, row.pais, row.moeda,
+                    row.cad_itr or None, row.caepf or None, row.insc_estadual or None,
+                    row.nome_imovel, row.endereco,
+                    row.num or None, row.compl or None, row.bairro, row.uf,
+                    row.cod_mun, row.cep,
+                    int(row.tipo_exploracao), float(row.participacao),
+                    float(row.area_total), float(row.area_utilizada)
+                )
+            )
 
     def carregar_imoveis(self):
         rows = self.db.fetch_all(
-            "SELECT id,cod_imovel,nome_imovel,uf,area_total,area_utilizada,participacao "
+            "SELECT id, cod_imovel, nome_imovel, uf, area_total, area_utilizada, participacao "
             "FROM imovel_rural ORDER BY nome_imovel"
         )
         self.tabela.setRowCount(len(rows))
-        for r,(id_,cod,nome,uf,at,au,part) in enumerate(rows):
-            vals = [cod,nome,uf,f"{at or 0:.2f} ha",f"{au or 0:.2f} ha",f"{part:.2f}%"]
-            for c,val in enumerate(vals):
-                itm = QTableWidgetItem(val)
+        for r, (id_, cod, nome, uf, at, au, part) in enumerate(rows):
+            vals = [cod, nome, uf, f"{at or 0:.2f} ha", f"{au or 0:.2f} ha", f"{part:.2f}%"]
+            for c, v in enumerate(vals):
+                itm = QTableWidgetItem(v)
                 itm.setTextAlignment(Qt.AlignCenter)
-                self.tabela.setItem(r,c,itm)
-            self.tabela.item(r,0).setData(Qt.UserRole,id_)
+                self.tabela.setItem(r, c, itm)
+            # grava o ID no item para que o editar saiba qual registro carregar
+            self.tabela.item(r, 0).setData(Qt.UserRole, id_)
+
+    def _on_select(self, row, _):
+        self.selected_row = row
+        self.btn_editar.setEnabled(True)
+        self.btn_excluir.setEnabled(True)
 
     def _select_row(self,row,_):
         self.selected_row = row
@@ -1367,12 +1656,25 @@ class GerenciamentoImoveisWidget(QWidget):
             self.carregar_imoveis()
 
     def excluir_imovel(self):
-        id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
-        nome = self.tabela.item(self.selected_row,1).text()
-        ans = QMessageBox.question(self,"Confirmar Exclusão",f"Excluir imóvel '{nome}'?",QMessageBox.Yes|QMessageBox.No)
-        if ans==QMessageBox.Yes:
-            self.db.execute_query("DELETE FROM imovel_rural WHERE id=?",(id_,))
-            self.carregar_imoveis()
+        indices = self.tabela.selectionModel().selectedRows()
+        if not indices:
+            return
+        nomes = [self.tabela.item(idx.row(), 1).text() for idx in indices]
+        resp = QMessageBox.question(
+            self, "Confirmar Exclusão",
+            f"Excluir imóveis: {', '.join(nomes)}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
+            return
+        for idx in indices:
+            id_ = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
+            try:
+                self.db.execute_query("DELETE FROM imovel_rural WHERE id=?", (id_,))
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Erro ao excluir imóvel ID {id_}: {e}")
+        self.carregar_imoveis()
+
             
 # --- WIDGET GERENCIAMENTO PARTICIPANTES ---
 class GerenciamentoParticipantesWidget(QWidget):
@@ -1385,40 +1687,100 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.carregar_participantes()
 
     def _build_ui(self):
-        tl = QHBoxLayout(); tl.setContentsMargins(0,0,10,10)
-        self.btn_novo = QPushButton("Novo Participante"); self.btn_novo.clicked.connect(self.novo_participante)
-        self.btn_novo.setIcon(QIcon.fromTheme("document-new")); tl.addWidget(self.btn_novo)
-        self.btn_editar = QPushButton("Editar"); self.btn_editar.setEnabled(False)
+        tl = QHBoxLayout()
+        tl.setContentsMargins(0,0,10,10)
+
+        self.btn_novo = QPushButton("Novo Participante")
+        self.btn_novo.setIcon(QIcon.fromTheme("document-new"))
+        self.btn_novo.clicked.connect(self.novo_participante)
+        tl.addWidget(self.btn_novo)
+
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setEnabled(False)
+        self.btn_editar.setIcon(QIcon.fromTheme("document-edit"))
         self.btn_editar.clicked.connect(self.editar_participante)
-        self.btn_editar.setIcon(QIcon.fromTheme("document-edit")); tl.addWidget(self.btn_editar)
-        self.btn_excluir = QPushButton("Excluir"); self.btn_excluir.setEnabled(False)
+        tl.addWidget(self.btn_editar)
+
+        self.btn_excluir = QPushButton("Excluir")
+        self.btn_excluir.setEnabled(False)
+        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete"))
         self.btn_excluir.clicked.connect(self.excluir_participante)
-        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete")); tl.addWidget(self.btn_excluir)
+        tl.addWidget(self.btn_excluir)
+
+        self.btn_importar = QPushButton("Importar")
+        self.btn_importar.setIcon(QIcon.fromTheme("document-import"))
+        self.btn_importar.clicked.connect(self.importar_participantes)
+        tl.addWidget(self.btn_importar)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
+        # **tabela de participantes**
         self.tabela = QTableWidget(0,4)
         self.tabela.setHorizontalHeaderLabels(["CPF/CNPJ","Nome","Tipo","Cadastro"])
-        # ─── ESTILIZAÇÃO GERAL DE TABELA ───
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
-
         hdr = self.tabela.horizontalHeader()
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)
-
-        self.tabela.setStyleSheet("""
-            QTableWidget::item { padding: 8px; }
-            QHeaderView::section { padding: 8px; font-weight: bold; }
-        """)
-        # ────────────────────────────────────
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabela.cellClicked.connect(self._select_row)
+
+        # **NUNCA ESQUECER** esta linha, senão não aparece nada!
         self.layout.addWidget(self.tabela)
+
+    def importar_participantes(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar Participantes", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith('.txt'):
+                self._import_participantes_txt(path)
+            else:
+                self._import_participantes_excel(path)
+            self.carregar_participantes()
+        except Exception:
+            QMessageBox.warning(
+                self, "Importação Falhou",
+                "Arquivo não segue o layout esperado e não foi importado."
+            )
+
+    def _import_participantes_txt(self, path):
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split("|")
+                if len(parts) != 3:
+                    raise ValueError("Layout de TXT inválido")
+                cpf_cnpj, nome, tipo = parts
+                self.db.execute_query(
+                    """
+                    INSERT OR REPLACE INTO participante (
+                        cpf_cnpj, nome, tipo_contraparte
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (cpf_cnpj.strip(), nome.strip(), int(tipo))
+                )
+
+    def _import_participantes_excel(self, path):
+        df = pd.read_excel(path, dtype=str)
+        required = ['cpf_cnpj','nome','tipo_contraparte']
+        if not all(col in df.columns for col in required):
+            raise ValueError("Layout de Excel inválido")
+        df.fillna('', inplace=True)
+        for row in df.itertuples(index=False):
+            self.db.execute_query(
+                """
+                INSERT OR REPLACE INTO participante (
+                    cpf_cnpj, nome, tipo_contraparte
+                ) VALUES (?, ?, ?)
+                """,
+                (row.cpf_cnpj.strip(), row.nome.strip(), int(row.tipo_contraparte))
+            )
 
     def carregar_participantes(self):
         rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
@@ -1446,17 +1808,24 @@ class GerenciamentoParticipantesWidget(QWidget):
             self.carregar_participantes()
 
     def excluir_participante(self):
-        id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
-        nome = self.tabela.item(self.selected_row,1).text()
-        ans = QMessageBox.question(self,"Confirmar Exclusão",f"Excluir participante '{nome}'?",QMessageBox.Yes|QMessageBox.No)
-        if ans==QMessageBox.Yes:
+        indices = self.tabela.selectionModel().selectedRows()
+        if not indices:
+            return
+        nomes = [self.tabela.item(idx.row(), 1).text() for idx in indices]
+        resp = QMessageBox.question(
+            self, "Confirmar Exclusão",
+            f"Excluir participantes: {', '.join(nomes)}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
+            return
+        for idx in indices:
+            id_ = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
             try:
                 self.db.execute_query("DELETE FROM participante WHERE id=?", (id_,))
-                QMessageBox.information(self,"Sucesso","Participante excluído!")
-                self.carregar_participantes()
             except Exception as e:
-                QMessageBox.critical(self,"Erro",f"Erro ao excluir: {e}")
-
+                QMessageBox.critical(self, "Erro", f"Erro ao excluir participante ID {id_}: {e}")
+        self.carregar_participantes()
 
 # --- WIDGET CADASTROS COM ABAS ---
 class CadastrosWidget(QTabWidget):
@@ -1504,7 +1873,7 @@ class MainWindow(QMainWindow):
         l_l = QVBoxLayout(w_l)
         l_l.setContentsMargins(10, 10, 10, 10)
 
-        # Filtros e botões
+        # filtros e botões de lançamento
         self.lanc_filter_layout = QHBoxLayout()
         self.lanc_filter_layout.addWidget(QLabel("De:"))
         self.dt_ini = QDateEdit(QDate.currentDate().addMonths(-1))
@@ -1514,17 +1883,27 @@ class MainWindow(QMainWindow):
         self.dt_fim = QDateEdit(QDate.currentDate())
         self.dt_fim.setCalendarPopup(True)
         self.lanc_filter_layout.addWidget(self.dt_fim)
+
         btn_filtrar = QPushButton("Filtrar")
         btn_filtrar.clicked.connect(self.carregar_lancamentos)
         self.lanc_filter_layout.addWidget(btn_filtrar)
+
         self.btn_edit_lanc = QPushButton("Editar Lançamento")
         self.btn_edit_lanc.setEnabled(False)
         self.btn_edit_lanc.clicked.connect(self.editar_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_edit_lanc)
+
         self.btn_del_lanc = QPushButton("Excluir Lançamento")
         self.btn_del_lanc.setEnabled(False)
         self.btn_del_lanc.clicked.connect(self.excluir_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_del_lanc)
+
+        # novo botão Importar Lançamentos
+        self.btn_import_lanc = QPushButton("Importar Lançamentos")
+        self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
+        self.btn_import_lanc.clicked.connect(self.importar_lancamentos)
+        self.lanc_filter_layout.addWidget(self.btn_import_lanc)
+
         l_l.addLayout(self.lanc_filter_layout)
 
         # Tabela de lançamentos
@@ -1618,6 +1997,11 @@ class MainWindow(QMainWindow):
         ]:
             act = QAction(txt, self); act.triggered.connect(fn); m2.addAction(act)
 
+        # MainWindow._create_menu (em vez de somente Imóvel/Conta/Participante, adicione:)
+        param = QAction("Parâmetros", self)
+        param.triggered.connect(self.abrir_parametros)
+        m2.addAction(param)
+
         m3 = mb.addMenu("&Relatórios")
         bal = QAction("Balancete", self); bal.triggered.connect(self.abrir_balancete)
         m3.addAction(bal)
@@ -1629,16 +2013,37 @@ class MainWindow(QMainWindow):
         sb = QAction("Sobre o Sistema", self); sb.triggered.connect(self.mostrar_sobre)
         m4.addAction(sb)
 
+    def abrir_parametros(self):
+        dlg = ParametrosDialog(self)
+        dlg.exec()
+
     def _create_toolbar(self):
         tb = QToolBar("Barra de Ferramentas", self)
         tb.setIconSize(QSize(32,32))
         self.addToolBar(Qt.LeftToolBarArea, tb)
         tb.addAction(QAction(QIcon("icons/add.png"), "Novo Lançamento", self, triggered=self.novo_lancamento))
-        tb.addAction(QAction(QIcon("icons/farm.png"), "Cad. Imóvel", self, triggered=lambda: self.tabs.setCurrentIndex(1)))
-        tb.addAction(QAction(QIcon("icons/bank.png"), "Cad. Conta", self, triggered=lambda: self.tabs.setCurrentIndex(2)))
-        tb.addAction(QAction(QIcon("icons/users.png"), "Cad. Participante", self, triggered=lambda: self.tabs.setCurrentIndex(3)))
-        tb.addAction(QAction(QIcon("icons/report.png"), "Relatórios", self, triggered=lambda: self.tabs.setCurrentIndex(4)))
-        tb.addAction(QAction(QIcon("icons/txt.png"), "Gerar TXT LCDPR", self, triggered=self.gerar_txt))
+        tb.addAction(QAction(QIcon("icons/farm.png"), "Cad. Imóvel",     self, triggered=lambda: self.tabs.setCurrentIndex(1)))
+        tb.addAction(QAction(QIcon("icons/bank.png"), "Cad. Conta",      self, triggered=lambda: self.tabs.setCurrentIndex(2)))
+        tb.addAction(QAction(QIcon("icons/users.png"),"Cad. Participante",self, triggered=lambda: self.tabs.setCurrentIndex(3)))
+        tb.addAction(QAction(QIcon("icons/report.png"),"Relatórios",     self, triggered=lambda: self.tabs.setCurrentIndex(4)))
+        # Substitui o antigo "Gerar TXT LCDPR"
+        tb.addAction(QAction(QIcon("icons/txt.png"), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
+
+    def arquivo_lcdpr(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Arquivo LCDPR")
+        dlg.setMinimumSize(300, 150)
+        layout = QVBoxLayout(dlg)
+
+        btn_export = QPushButton("Exportar arquivo LCDPR")
+        btn_import = QPushButton("Importar arquivo LCDPR")
+        layout.addWidget(btn_export)
+        layout.addWidget(btn_import)
+
+        btn_export.clicked.connect(lambda: self.show_export_dialog(dlg))
+        btn_import.clicked.connect(lambda: (dlg.accept(), self.importar_arquivo_lcdpr()))
+
+        dlg.exec()
 
     def carregar_lancamentos(self):
         d1 = self.dt_ini.date().toString("yyyy-MM-dd")
@@ -1690,19 +2095,24 @@ class MainWindow(QMainWindow):
             self.dashboard.load_data()
 
     def excluir_lancamento(self):
-        row = self.tab_lanc.currentRow()
-        lanc_id = int(self.tab_lanc.item(row,0).text())
-        ans = QMessageBox.question(self, "Confirmar Exclusão",
-                                   f"Excluir lançamento ID {lanc_id}?",
-                                   QMessageBox.Yes | QMessageBox.No)
-        if ans == QMessageBox.Yes:
+        indices = self.tab_lanc.selectionModel().selectedRows()
+        if not indices:
+            return
+        ids = [int(self.tab_lanc.item(idx.row(), 0).text()) for idx in indices]
+        resp = QMessageBox.question(
+            self, "Confirmar Exclusão",
+            f"Excluir lançamentos IDs: {', '.join(map(str, ids))}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if resp != QMessageBox.Yes:
+            return
+        for id_ in ids:
             try:
-                self.db.execute_query("DELETE FROM lancamento WHERE id=?", (lanc_id,))
-                QMessageBox.information(self, "Sucesso", "Lançamento excluído!")
-                self.carregar_lancamentos()
-                self.dashboard.load_data()
+                self.db.execute_query("DELETE FROM lancamento WHERE id=?", (id_,))
             except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao excluir: {e}")
+                QMessageBox.critical(self, "Erro", f"Erro ao excluir lançamento ID {id_}: {e}")
+        self.carregar_lancamentos()
+        self.dashboard.load_data()
 
     def carregar_planejamento(self):
         q = """
@@ -1751,34 +2161,348 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na exportação: {e}")
 
-    def gerar_txt(self):
+    def gerar_txt(self, path: str = None):
+        if path is None:
+            last, _ = load_last_txt_path(), None
+            path, _ = QFileDialog.getSaveFileName(self,"Salvar LCDPR",last,"TXT (*.txt)")
+            if not path: return
+
+        settings = QSettings("PrimeOnHub","AgroApp")
+        ver   = settings.value("param/version","0013")
+        iden  = settings.value("param/ident","")
+        nome  = settings.value("param/nome","")
+        mov   = settings.value("param/ind_mov","0")
+        rec   = settings.value("param/ind_rec","0")
+        dt1   = self.dt_ini.date().toString("ddMMyyyy")
+        dt2   = self.dt_fim.date().toString("ddMMyyyy")
+
         try:
-            with open("LCDPR.txt","w",encoding='utf-8') as f:
-                f.write("|0000|LCDPR|001|0001|\n")
-                for im in self.db.fetch_all("SELECT * FROM imovel_rural"):
-                    f.write("|0040|"+ "|".join([
-                        im[1],im[2],im[3] or "",im[4] or "",im[5] or "",im[6],
-                        im[7],im[8] or "",im[9] or "",im[10],im[11],im[12],
-                        im[13],str(im[14]),f"{im[15]:.2f}"
-                    ])+"|\n")
-                for ct in self.db.fetch_all("SELECT * FROM conta_bancaria"):
-                    f.write("|0050|"+ "|".join([
-                        ct[1],ct[2],ct[3] or "",ct[4],ct[5],str(ct[6])
-                    ])+"|\n")
-                for p in self.db.fetch_all("SELECT * FROM participante"):
-                    f.write("|0100|"+ "|".join([
-                        p[1],p[2],str(p[3])
-                    ])+"|\n")
-                for l in self.db.fetch_all("SELECT * FROM lancamento"):
-                    f.write("|Q100|"+ "|".join([
-                        l[1],str(l[2]),str(l[3]),l[4] or "",str(l[5]),str(l[6]),
-                        l[7] or "",str(l[8]),f"{l[9]:.2f}",f"{l[10]:.2f}",
-                        f"{l[11]:.2f}",l[12]
-                    ])+"|\n")
-                f.write("|9999|1|\n")
-            QMessageBox.information(self,"TXT","Arquivo LCDPR.txt gerado!")
+            with open(path,'w',encoding='utf-8') as f:
+                f.write(f"0000|LCDPR|{ver}|{iden}|{nome}|{mov}|{rec}||{dt1}|{dt2}\n")
+                f.write("0010|1\n")
+                log   = settings.value("param/logradouro","")
+                num   = settings.value("param/numero","")
+                comp  = settings.value("param/complemento","")
+                bai   = settings.value("param/bairro","")
+                uf    = settings.value("param/uf","")
+                mun   = settings.value("param/cod_mun","")
+                cep   = settings.value("param/cep","")
+                tel   = settings.value("param/telefone","")
+                em    = settings.value("param/email","")
+                f.write(f"0030|{log}|{num}|{comp}|{bai}|{uf}|{mun}|{cep}|{tel}|{em}\n")
+
+                # 0040
+                for im in self.db.fetch_all(
+                    "SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,"
+                    "nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,"
+                    "tipo_exploracao,participacao FROM imovel_rural"
+                ):
+                    f.write("0040|" + "|".join(str(x or "") for x in im) + "|\n")
+
+                # 0045
+                for cod, tipo, perc in self.db.fetch_all(
+                    "SELECT cod_imovel,tipo_exploracao,participacao FROM imovel_rural"
+                ):
+                    f.write(f"0045|{cod}|{tipo}|{iden}|{nome}|{perc:.2f}|\n")
+
+                # 0050,0100,Q100 e 9999 (inalterados)…
+            save_last_txt_path(path)
+            QMessageBox.information(self,"Sucesso",f"Arquivo {os.path.basename(path)} gerado!")
         except Exception as e:
-            QMessageBox.critical(self,"Erro",f"Erro ao gerar TXT: {e}")
+            QMessageBox.critical(self,"Erro ao gerar TXT",str(e))
+
+    def importar_arquivo_lcdpr(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar arquivo LCDPR", "", "TXT (*.txt);;Todos os arquivos (*)"
+        )
+        if not path:
+            return
+
+        # Campos esperados para o registro 0040
+        expected_fields = [
+            "cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual",
+            "nome_imovel","endereco","num","compl","bairro","uf",
+            "cod_mun","cep","tipo_exploracao","participacao",
+            "area_total","area_utilizada"
+        ]
+        warnings = []
+
+        try:
+            with open(path, 'rb') as f:
+                for lineno, raw in enumerate(f, start=1):
+                    # decodifica UTF-8 ou Latin‑1
+                    try:
+                        linha = raw.decode('utf-8')
+                    except UnicodeDecodeError:
+                        linha = raw.decode('latin-1')
+
+                    parts = linha.rstrip('\r\n').split("|")
+                    # remove pipe vazio inicial
+                    if parts and parts[0] == "":
+                        parts = parts[1:]
+                    if len(parts) < 2:
+                        continue
+
+                    reg, campos = parts[0], parts[1:]
+
+                    # === 0040: Imóveis rurais ===
+                    if reg == "0040":
+                        if len(campos) < 18:
+                            nome_im = campos[6].strip() if len(campos) > 6 else "<sem nome>"
+                            falt = [
+                                expected_fields[i]
+                                for i in range(18)
+                                if i >= len(campos) or not campos[i].strip()
+                            ]
+                            warnings.append(f"L{lineno}: imóvel '{nome_im}' faltando: {', '.join(falt)}")
+                            campos += [""] * (18 - len(campos))
+
+                        (
+                            cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                            nome_imovel, endereco, num, compl, bairro, uf,
+                            cod_mun, cep, tipo_exploracao, participacao,
+                            area_total, area_utilizada
+                        ) = campos[:18]
+
+                        self.db.execute_query(
+                            """
+                            INSERT OR REPLACE INTO imovel_rural (
+                              cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
+                              nome_imovel,endereco,num,compl,bairro,uf,
+                              cod_mun,cep,tipo_exploracao,participacao,
+                              area_total,area_utilizada
+                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """,
+                            [
+                                cod_imovel or None, pais or None, moeda or None,
+                                cad_itr or None, caepf or None, insc_estadual or None,
+                                nome_imovel or None, endereco or None,
+                                num or None, compl or None, bairro or None,
+                                uf or None, cod_mun or None, cep or None,
+                                int(tipo_exploracao) if tipo_exploracao.isdigit() else None,
+                                float(participacao) if participacao else None,
+                                float(area_total) if area_total else None,
+                                float(area_utilizada) if area_utilizada else None,
+                            ]
+                        )
+
+                    # === 0050: Contas bancárias ===
+                    elif reg == "0050" and len(campos) >= 7:
+                        # campos: cod_cta, pais_cta, banco, nome_banco, agencia, num_conta, saldo
+                        cod_cta, pais_cta, banco, nome_banco, agencia, num_conta, saldo = campos[:7]
+                        # converte saldo, permitindo vírgula decimal
+                        try:
+                            saldo_val = float(saldo.strip().replace(',', '.'))
+                        except ValueError:
+                            saldo_val = 0.0
+
+                        self.db.execute_query(
+                            """
+                            INSERT OR REPLACE INTO conta_bancaria (
+                                cod_conta, pais_cta, banco, nome_banco,
+                                agencia, num_conta, saldo_inicial
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            [
+                                cod_cta.strip(),
+                                pais_cta.strip(),
+                                banco.strip() or None,
+                                nome_banco.strip() or None,
+                                agencia.strip() or None,
+                                num_conta.strip() or None,
+                                saldo_val
+                            ]
+                        )
+
+
+                    # === 0100: Participantes ===
+                    elif reg == "0100" and len(campos) >= 3:
+                        cpf_cnpj, nome_p, tp = campos[:3]
+                        digits = re.sub(r'\D', '', cpf_cnpj)
+                        tipo_pc = 1 if len(digits) == 11 else 2
+                        self.db.execute_query(
+                            """
+                            INSERT OR REPLACE INTO participante (
+                              cpf_cnpj,nome,tipo_contraparte
+                            ) VALUES (?,?,?)
+                            """,
+                            [cpf_cnpj.strip(), nome_p.strip(), tipo_pc]
+                        )
+
+                    # === Q100: Lançamentos contábeis ===
+                    elif reg == "Q100" and len(campos) >= 12:
+                        # garante pelo menos 13 posições
+                        while len(campos) < 13:
+                            campos.append('')
+                    
+                        (
+                            data_str, cod_im, cod_ct, num_doc, tipo_doc,
+                            hist, id_parc, tipo_lanc,
+                            val_ent, val_sai, sal_f, nat, cat
+                        ) = campos[:13]
+                    
+                        # PARTÍCIPANTE: busca ou cria pelo CPF/CNPJ
+                        part = self.db.fetch_one(
+                            "SELECT id FROM participante WHERE cpf_cnpj = ?",
+                            (id_parc.strip(),)
+                        )
+                        if not part:
+                            tipo_pc = 1 if len(re.sub(r'\D', '', id_parc)) == 11 else 2
+                            self.db.execute_query(
+                                """
+                                INSERT OR IGNORE INTO participante
+                                  (cpf_cnpj, nome, tipo_contraparte)
+                                VALUES (?, ?, ?)
+                                """,
+                                [id_parc.strip(), "<sem nome>", tipo_pc]
+                            )
+                            part = self.db.fetch_one(
+                                "SELECT id FROM participante WHERE cpf_cnpj = ?",
+                                (id_parc.strip(),)
+                            )
+                    
+                        # IMÓVEL
+                        im = self.db.fetch_one(
+                            "SELECT id FROM imovel_rural WHERE cod_imovel = ?",
+                            (cod_im.strip(),)
+                        )
+                        # CONTA
+                        ct = self.db.fetch_one(
+                            "SELECT id FROM conta_bancaria WHERE cod_conta = ?",
+                            (cod_ct.strip(),)
+                        )
+                        if not ct:
+                            # cria conta genérica se não existir
+                            self.db.execute_query(
+                                """
+                                INSERT OR IGNORE INTO conta_bancaria
+                                  (cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial)
+                                VALUES (?, 'BR', ?, ?, '', '', 0.0)
+                                """,
+                                [cod_ct.strip(), cod_ct.strip(), cod_ct.strip()]
+                            )
+                            ct = self.db.fetch_one(
+                                "SELECT id FROM conta_bancaria WHERE cod_conta = ?",
+                                (cod_ct.strip(),)
+                            )
+                    
+                        # só insere se existir imóvel, conta e participante
+                        if im and ct and part:
+                            # valores numéricos
+                            ent = float(val_ent.strip().replace(',', '.')) if val_ent.strip() else 0.0
+                            sai = float(val_sai.strip().replace(',', '.')) if val_sai.strip() else 0.0
+                            # saldo absoluto
+                            sal = abs(float(sal_f.strip().replace(',', '.'))) if sal_f.strip() else ent - sai
+                            nat = nat.strip() or ('P' if (ent - sai) >= 0 else 'N')
+                    
+                            self.db.execute_query(
+                                """
+                                INSERT INTO lancamento (
+                                    data, cod_imovel, cod_conta, num_doc, tipo_doc,
+                                    historico, id_participante, tipo_lanc,
+                                    valor_entrada, valor_saida,
+                                    saldo_final, natureza_saldo, categoria
+                                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                """,
+                                [
+                                    data_str.strip(),
+                                    im[0],
+                                    ct[0],
+                                    num_doc.strip() or None,
+                                    int(tipo_doc),
+                                    hist.strip(),
+                                    part[0],
+                                    int(tipo_lanc),
+                                    ent,
+                                    sai,
+                                    sal,
+                                    nat,
+                                    cat.strip() or None
+                                ]
+                            )
+                    
+
+            # mostra avisos, se houver
+            if warnings:
+                QMessageBox.warning(
+                    self, "Importação concluída com avisos",
+                    "\n".join(warnings),
+                    QMessageBox.Ok
+                )
+
+            # atualiza todas as abas e o painel
+            self.cadw.widget(0).carregar_imoveis()
+            self.cadw.widget(1).carregar_contas()
+            self.cadw.widget(2).carregar_participantes()
+            self.carregar_lancamentos()
+            self.dashboard.load_data()
+
+            QMessageBox.information(self, "Importação", "Arquivo LCDPR importado com sucesso!")
+
+        except Exception as e:
+            QMessageBox.warning(self, "Importação Falhou", str(e))
+
+
+    def show_export_dialog(self, parent_dialog):
+        parent_dialog.hide()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Exportar Arquivo LCDPR")
+        dlg.setMinimumSize(400, 120)
+        layout = QVBoxLayout(dlg)
+
+        # Linha de caminho + botão "..."
+        hl = QHBoxLayout()
+        path_edit = QLineEdit(load_last_txt_path())
+        path_edit.setPlaceholderText("Cole o caminho ou clique em ...")
+        browse = QPushButton("...")
+        hl.addWidget(path_edit)
+        hl.addWidget(browse)
+        layout.addLayout(hl)
+
+        # Botões Voltar / Cancelar / Salvar
+        bl = QHBoxLayout()
+        voltar    = QPushButton("Voltar")
+        cancelar  = QPushButton("Cancelar")
+        salvar    = QPushButton("Salvar")
+        bl.addWidget(voltar)
+        bl.addWidget(cancelar)
+        bl.addStretch()
+        bl.addWidget(salvar)
+        layout.addLayout(bl)
+
+        # Conexões
+        browse.clicked.connect(lambda: self._browse_save_path(path_edit))
+        voltar.clicked.connect(lambda: (dlg.close(), parent_dialog.show()))
+        cancelar.clicked.connect(dlg.close)
+        salvar.clicked.connect(lambda: self._do_export_and_close(dlg, parent_dialog, path_edit.text()))
+
+        dlg.exec()
+
+    def _browse_save_path(self, path_edit: QLineEdit):
+        # usa o último caminho salvo como pasta inicial
+        last = load_last_txt_path()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Salvar Arquivo LCDPR", last, "Arquivo TXT (*.txt)"
+        )
+        if path:
+            path_edit.setText(path)
+
+    def _do_export_and_close(self, dlg_export: QDialog, dlg_menu: QDialog, path: str):
+        if not path.strip():
+            QMessageBox.warning(self, "Aviso", "Informe um caminho válido para salvar.")
+            return
+        # reutiliza sua função de geração de TXT, mas passando o caminho
+        try:
+            self.gerar_txt(path)
+            save_last_txt_path(path)
+            QMessageBox.information(self, "Sucesso", "Arquivo LCDPR salvo com sucesso!")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro ao salvar", str(e))
+        finally:
+            dlg_export.close()
+            # fecha o menu principal de Arquivo LCDPR
+            dlg_menu.accept()
 
     def abrir_balancete(self):
         dlg = RelatorioPeriodoDialog("Balancete", self)
@@ -1806,6 +2530,135 @@ class MainWindow(QMainWindow):
             "- Geração do LCDPR"
         )
 
+    def importar_lancamentos(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar Lançamentos", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith('.txt'):
+                self._import_lancamentos_txt(path)
+            else:
+                self._import_lancamentos_excel(path)
+            self.carregar_lancamentos()
+            self.dashboard.load_data()
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Importação Falhou",
+                f"Arquivo não segue o layout esperado:\n{e}"
+            )
+
+    def _import_lancamentos_txt(self, path):
+        with open(path, encoding='utf-8') as f:
+            for lineno, line in enumerate(f, 1):
+                parts = line.strip().split("|")
+                if len(parts) != 11:
+                    raise ValueError(f"Linha {lineno}: esperado 11 colunas, encontrou {len(parts)}")
+                (
+                    data_str, cod_imovel, cod_conta, num_doc, tipo_doc,
+                    historico, id_participante, tipo_lanc,
+                    valor_entrada, valor_saida, categoria
+                ) = parts
+
+                im = self.db.fetch_one(
+                    "SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,)
+                )
+                if not im:
+                    raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
+
+                ct = self.db.fetch_one(
+                    "SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,)
+                )
+                if not ct:
+                    raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
+
+                id_imovel, id_conta = im[0], ct[0]
+                ent, sai = float(valor_entrada), float(valor_saida)
+                last = self.db.fetch_one(
+                    "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                    "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                    (id_conta,)
+                )
+                saldo_ant = last[0] if last and last[0] is not None else 0.0
+                saldo_f = saldo_ant + ent - sai
+                nat = 'P' if saldo_f >= 0 else 'N'
+
+                self.db.execute_query(
+                    """
+                    INSERT INTO lancamento (
+                        data, cod_imovel, cod_conta, num_doc, tipo_doc,
+                        historico, id_participante, tipo_lanc,
+                        valor_entrada, valor_saida,
+                        saldo_final, natureza_saldo, categoria
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        data_str, id_imovel, id_conta,
+                        num_doc or None, int(tipo_doc), historico,
+                        int(id_participante), int(tipo_lanc),
+                        ent, sai,
+                        abs(saldo_f), nat, categoria
+                    )
+                )
+
+    def _import_lancamentos_excel(self, path):
+        df = pd.read_excel(path, dtype=str)
+        # campos que obrigatoriamente devem existir
+        required = [
+            'data','cod_imovel','cod_conta','num_doc','tipo_doc',
+            'historico','id_participante','tipo_lanc',
+            'valor_entrada','valor_saida','categoria'
+        ]
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"Colunas faltando no Excel: {', '.join(missing)}")
+        df.fillna('', inplace=True)
+
+        for lineno, row in enumerate(df.itertuples(index=False), start=2):  # start=2 se tiver cabeçalho
+            # mapeia códigos
+            im = self.db.fetch_one(
+                "SELECT id FROM imovel_rural WHERE cod_imovel=?", (row.cod_imovel,)
+            )
+            if not im:
+                raise ValueError(f"Linha {lineno}: imóvel '{row.cod_imovel}' não encontrado")
+            ct = self.db.fetch_one(
+                "SELECT id FROM conta_bancaria WHERE cod_conta=?", (row.cod_conta,)
+            )
+            if not ct:
+                raise ValueError(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada")
+
+            id_imovel, id_conta = im[0], ct[0]
+            ent, sai = float(row.valor_entrada), float(row.valor_saida)
+
+            # calcula saldo...
+            last = self.db.fetch_one(
+                "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                (id_conta,)
+            )
+            saldo_ant = last[0] if last and last[0] is not None else 0.0
+            saldo_f = saldo_ant + ent - sai
+            nat = 'P' if saldo_f >= 0 else 'N'
+
+            # insere no banco
+            self.db.execute_query(
+                """
+                INSERT INTO lancamento (
+                    data, cod_imovel, cod_conta, num_doc, tipo_doc,
+                    historico, id_participante, tipo_lanc,
+                    valor_entrada, valor_saida,
+                    saldo_final, natureza_saldo, categoria
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.data, id_imovel, id_conta,
+                    row.num_doc or None, int(row.tipo_doc), row.historico,
+                    int(row.id_participante), int(row.tipo_lanc),
+                    ent, sai,
+                    abs(saldo_f), nat, row.categoria
+                )
+            )
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
