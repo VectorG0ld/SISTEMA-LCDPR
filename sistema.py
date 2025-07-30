@@ -13,7 +13,8 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QDateEdit, QComboBox, QLabel, QTextEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
-    QStatusBar, QToolBar, QFileDialog
+    QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
+    QWidgetAction
 )
 from PySide6.QtCore import Qt, QDate, QSize, QSettings
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
@@ -363,6 +364,17 @@ QStatusBar {
 }
 """
 
+class NumericItem(QTableWidgetItem):
+    def __init__(self, value, text=None):
+        # text é o que aparece na tabela; value é um número puro, usado para ordenar
+        super().__init__(text or str(value))
+        self._value = value
+
+    def __lt__(self, other):
+        if isinstance(other, NumericItem):
+            return self._value < other._value
+        return super().__lt__(other)
+    
 class CurrencyLineEdit(QLineEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -717,19 +729,18 @@ class CadastroParticipanteDialog(QDialog):
         grp.setLayout(form_layout)
         layout.addWidget(grp)
 
-        # Tipo
+        # Dentro de __init__, substitua esta parte:
         self.tipo = QComboBox()
-        self.tipo.addItems(["Pessoa Física", "Pessoa Jurídica", "Órgão Público", "Outros"])
+        self.tipo.addItems(["Pessoa Jurídica", "Pessoa Física", "Órgão Público", "Outros"])
         self.tipo.currentIndexChanged.connect(self._ajustar_mask)
         form_layout.addRow("Tipo:", self.tipo)
-
-        # CPF/CNPJ
+        
         self.cpf_cnpj = QLineEdit()
         self.cpf_cnpj.setPlaceholderText("Digite CPF ou CNPJ")
         self.cpf_cnpj.editingFinished.connect(self._on_cpf_cnpj)
         form_layout.addRow("CPF/CNPJ:", self.cpf_cnpj)
-        # forçar aplicação da máscara conforme o índice atual do combo
-        self._ajustar_mask(self.tipo.currentIndex())
+        # chamada inicial
+        self._ajustar_mask( self.tipo.currentIndex() )
 
         # Nome
         self.nome = QLineEdit()
@@ -761,10 +772,10 @@ class CadastroParticipanteDialog(QDialog):
 
     def _ajustar_mask(self, idx):
         cur = self.cpf_cnpj.cursorPosition()
-        if idx == 0:
-            self.cpf_cnpj.setInputMask("000.000.000-00;_")
-        elif idx == 1:
+        if idx == 0:   # Pessoa Jurídica agora é índice 0
             self.cpf_cnpj.setInputMask("00.000.000/0000-00;_")
+        elif idx == 1: # Pessoa Física agora é índice 1
+            self.cpf_cnpj.setInputMask("000.000.000-00;_")
         else:
             self.cpf_cnpj.setInputMask("")
         self.cpf_cnpj.setCursorPosition(cur)
@@ -887,17 +898,10 @@ class ParametrosDialog(QDialog):
         self.ind_rec.setCurrentText(f"{ir} - " + ("Original" if ir=="0" else "Retificadora"))
         layout.addRow("Ind. de Recepção:", self.ind_rec)
 
-        # Tipo de Contribuinte
-        self.tipo = QComboBox()
-        self.tipo.addItems(["Pessoa Jurídica", "Pessoa Física"])
-        self.tipo.setCurrentText(self.settings.value("param/tipo", "Pessoa Jurídica"))
-        self.tipo.currentIndexChanged.connect(self._ajustar_mask)
-        layout.addRow("Tipo:", self.tipo)
-
-        # CNPJ/CPF
+        # ——— CNPJ/CPF (agora só CPF) ———
         self.ident = QLineEdit(self.settings.value("param/ident", ""))
-        layout.addRow("CNPJ/CPF:", self.ident)
-        self._ajustar_mask()
+        self.ident.setInputMask("000.000.000-00;_")
+        layout.addRow("CPF:", self.ident)
 
         # Nome / Razão Social
         self.nome = QLineEdit(self.settings.value("param/nome", ""))
@@ -968,11 +972,9 @@ class RelatorioPeriodoDialog(QDialog):
         self.setWindowTitle(tipo)
         self.setMinimumSize(300, 150)
         layout = QFormLayout(self)
-        self.dt_ini = QDateEdit(QDate.currentDate().addMonths(-1))
-        self.dt_ini.setCalendarPopup(True)
-        layout.addRow("Data inicial:", self.dt_ini)
         self.dt_fim = QDateEdit(QDate.currentDate())
         self.dt_fim.setCalendarPopup(True)
+        self.dt_fim.setDisplayFormat("dd/MM/yyyy")
         layout.addRow("Data final:", self.dt_fim)
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept)
@@ -982,8 +984,8 @@ class RelatorioPeriodoDialog(QDialog):
     @property
     def periodo(self):
         return (
-            self.dt_ini.date().toString("yyyy-MM-dd"),
-            self.dt_fim.date().toString("yyyy-MM-dd")
+            self.dt_ini.date().toString("dd/MM/yyyy"),
+            self.dt_fim.date().toString("dd/MM/yyyy")
         )
 
 
@@ -1003,11 +1005,15 @@ class DashboardWidget(QWidget):
         hl = QHBoxLayout()
         hl.addWidget(QLabel("De:"))
         ini = self.settings.value("dashFilterIni", QDate.currentDate().addMonths(-1), type=QDate)
-        self.dt_dash_ini = QDateEdit(ini); self.dt_dash_ini.setCalendarPopup(True)
+        self.dt_dash_ini = QDateEdit(ini)
+        self.dt_dash_ini.setCalendarPopup(True)
+        self.dt_dash_ini.setDisplayFormat("dd/MM/yyyy")
         hl.addWidget(self.dt_dash_ini)
         hl.addWidget(QLabel("Até:"))
         fim = self.settings.value("dashFilterFim", QDate.currentDate(), type=QDate)
-        self.dt_dash_fim = QDateEdit(fim); self.dt_dash_fim.setCalendarPopup(True)
+        self.dt_dash_fim = QDateEdit(fim)
+        self.dt_dash_fim.setCalendarPopup(True)
+        self.dt_dash_fim.setDisplayFormat("dd/MM/yyyy")
         hl.addWidget(self.dt_dash_fim)
         btn = QPushButton("Aplicar filtro"); btn.clicked.connect(self.on_dash_filter_changed)
         hl.addWidget(btn)
@@ -1054,11 +1060,12 @@ class DashboardWidget(QWidget):
         self.load_data()
 
     def load_data(self):
-        d1 = self.dt_dash_ini.date().toString("yyyy-MM-dd")
-        d2 = self.dt_dash_fim.date().toString("yyyy-MM-dd")
+        d1 = self.dt_dash_ini.date().toString("dd/MM/yyyy")
+        d2 = self.dt_dash_fim.date().toString("dd/MM/yyyy")
         # Saldo total
         saldo = self.db.fetch_one("SELECT SUM(saldo_atual) FROM saldo_contas")[0] or 0
-        self.saldo_card.findChild(QLabel, "value").setText(f"R$ {saldo:,.2f}")
+        s = f"{saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        self.saldo_card.findChild(QLabel, "value").setText(f"R$ {s}")
         # Receitas e Despesas no intervalo
         rec = self.db.fetch_one(
             "SELECT SUM(valor_entrada) FROM lancamento WHERE data BETWEEN ? AND ?", (d1, d2)
@@ -1066,8 +1073,10 @@ class DashboardWidget(QWidget):
         desp = self.db.fetch_one(
             "SELECT SUM(valor_saida)   FROM lancamento WHERE data BETWEEN ? AND ?", (d1, d2)
         )[0] or 0
-        self.receita_card.findChild(QLabel, "value").setText(f"R$ {rec:,.2f}")
-        self.despesa_card.findChild(QLabel, "value").setText(f"R$ {desp:,.2f}")
+        r = f"{rec:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        self.receita_card.findChild(QLabel, "value").setText(f"R$ {r}")
+        d = f"{desp:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        self.despesa_card.findChild(QLabel, "value").setText(f"R$ {d}")
         # Gráfico de pizza com %
         self.series.clear()
         s1 = self.series.append("Receitas", rec)
@@ -1097,6 +1106,9 @@ class LancamentoDialog(QDialog):
         self.data = QDateEdit(QDate.currentDate())
         self.data.setCalendarPopup(True)
         form.addRow("Data:", self.data)
+        self.data = QDateEdit(QDate.currentDate())
+        self.data.setCalendarPopup(True)
+        self.data.setDisplayFormat("dd/MM/yyyy")
         # Imóvel
         self.imovel = QComboBox()
         self.imovel.addItem("Selecione...", None)
@@ -1122,7 +1134,7 @@ class LancamentoDialog(QDialog):
         hl.addWidget(self.num_doc)
         hl.addWidget(QLabel("Tipo:"))
         self.tipo_doc = QComboBox()
-        self.tipo_doc.addItems(["Nota Fiscal", "Recibo", "Boleto", "Outros"])
+        self.tipo_doc.addItems(["Nota Fiscal", "Recibo", "Boleto", "Fatura", "Folha", "Outros"])
         hl.addWidget(self.tipo_doc)
         form.addRow("Documento:", hl)
         # Histórico
@@ -1141,14 +1153,6 @@ class LancamentoDialog(QDialog):
         self.valor_saida   = CurrencyLineEdit()
         hl2.addWidget(self.valor_saida)
         form.addRow("Valor:", hl2)
-        # Categoria
-        self.categoria = QComboBox()
-        self.categoria.addItems([
-            "Sementes","Adubos","Defensivos","Combustível",
-            "Manutenção","Mão de Obra","Venda de Produtos",
-            "Serviços","Outros"
-        ])
-        form.addRow("Categoria:", self.categoria)
 
         self.layout.addLayout(form)
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -1159,117 +1163,135 @@ class LancamentoDialog(QDialog):
     def _load_data(self):
         if not self.lanc_id:
             return
+    
         row = self.db.fetch_one(
             "SELECT data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, "
-            "id_participante, tipo_lanc, valor_entrada, valor_saida, natureza_saldo, categoria "
-            "FROM lancamento WHERE id=?", (self.lanc_id,)
+            "id_participante, tipo_lanc, valor_entrada, valor_saida, natureza_saldo "
+            "FROM lancamento WHERE id = ?",
+            (self.lanc_id,)
         )
         if not row:
             return
-        (data, imovel, conta, num_doc, tipo_doc, hist,
-         part, tipo_lanc, ent, sai, nat, cat) = row
-        self.data.setDate(QDate.fromString(data, "yyyy-MM-dd"))
-        self.imovel.setCurrentIndex(self.imovel.findData(imovel))
-        self.conta.setCurrentIndex(self.conta.findData(conta))
+    
+        (
+            data, imovel_id, conta_id, num_doc, tipo_doc,
+            historico, part_id, tipo_lanc, ent, sai, nat
+        ) = row
+    
+        # data
+        self.data.setDate(QDate.fromString(data, "dd/MM/yyyy"))
+    
+        # imóvel
+        idx_im = self.imovel.findData(imovel_id)
+        if idx_im >= 0:
+            self.imovel.setCurrentIndex(idx_im)
+    
+        # conta
+        idx_ct = self.conta.findData(conta_id)
+        if idx_ct >= 0:
+            self.conta.setCurrentIndex(idx_ct)
+    
+        # documento
         self.num_doc.setText(num_doc or "")
-        self.tipo_doc.setCurrentIndex(tipo_doc-1)
-        self.historico.setText(hist)
-        self.participante.setCurrentIndex(self.participante.findData(part))
-        self.tipo_lanc.setCurrentIndex(tipo_lanc-1)
+        self.tipo_doc.setCurrentIndex(tipo_doc - 1)
+    
+        # histórico e participante
+        self.historico.setText(historico)
+        idx_pr = self.participante.findData(part_id)
+        if idx_pr >= 0:
+            self.participante.setCurrentIndex(idx_pr)
+    
+        # tipo de lançamento
+        self.tipo_lanc.setCurrentIndex(tipo_lanc - 1)
+    
+        # valores
         self.valor_entrada.setText(f"{ent:.2f}")
         self.valor_saida.setText(f"{sai:.2f}")
-        self.categoria.setCurrentText(cat)
-
+    
+    
     def salvar(self):
-        # Campos obrigatórios
-        if not (self.imovel.currentData() and self.conta.currentData() and self.historico.text().strip()):
-            QMessageBox.warning(self, "Campos Obrigatórios", "Preencha todos os campos obrigatórios!")
-            return
-
-        num = self.num_doc.text().strip()
-        part = self.participante.currentData()
-
-        # Verifica duplicata: mesmo número de documento + mesmo participante
-        if num:
-            sql = """
-                SELECT id FROM lancamento
-                WHERE num_doc = ? AND id_participante = ?
-            """
-            params = [num, part]
-            if self.lanc_id:
-                sql += " AND id != ?"
-                params.append(self.lanc_id)
-            existente = self.db.fetch_one(sql, params)
-            if existente:
-                QMessageBox.warning(
-                    self, "Lançamento Duplicado",
-                    f"Já existe um lançamento (ID {existente[0]})\n"
-                    f"com nota nº {num} para este participante."
-                )
+        try:
+            # Campos obrigatórios
+            if not (self.imovel.currentData() and self.conta.currentData() and self.historico.text().strip()):
+                QMessageBox.warning(self, "Campos Obrigatórios", "Preencha todos os campos obrigatórios!")
                 return
 
-        # Conversão de valores
-        # função utilitária para extrair número do CurrencyLineEdit
-        def parse_currency(text: str) -> float:
-            digits = re.sub(r'[^\d]', '', text)
-            if not digits:
-                return 0.0
-            # últimos dois dígitos são centavos
-            inteiro = int(digits) // 100
-            centavos = int(digits) % 100
-            return inteiro + centavos / 100.0
+            num = self.num_doc.text().strip()
+            part = self.participante.currentData()
 
-        # agora converte usando a função
-        ent = parse_currency(self.valor_entrada.text())
-        sai = parse_currency(self.valor_saida.text())
+            # Verifica duplicata: mesmo número de documento + mesmo participante
+            if num:
+                sql = """
+                    SELECT id FROM lancamento
+                    WHERE num_doc = ? AND id_participante = ?
+                """
+                params = [num, part]
+                if self.lanc_id:
+                    sql += " AND id != ?"
+                    params.append(self.lanc_id)
+                existente = self.db.fetch_one(sql, params)
+                if existente:
+                    QMessageBox.warning(
+                        self, "Lançamento Duplicado",
+                        f"Já existe um lançamento (ID {existente[0]})\n"
+                        f"com nota nº {num} para este participante."
+                    )
+                    return
 
-        # Calcula saldo anterior e saldo final
-        row = self.db.fetch_one(
-            "SELECT saldo_final FROM lancamento WHERE cod_conta = ? ORDER BY id DESC LIMIT 1",
-            (self.conta.currentData(),)
-        )
-        saldo_ant = row[0] if row else 0.0
-        saldo_f = saldo_ant + ent - sai
-        nat = 'P' if saldo_f >= 0 else 'N'
+            # Conversão de valores
+            def parse_currency(text: str) -> float:
+                digits = re.sub(r'[^\d]', '', text)
+                if not digits:
+                    return 0.0
+                inteiro = int(digits) // 100
+                centavos = int(digits) % 100
+                return inteiro + centavos / 100.0
 
-        # Parâmetros para INSERT/UPDATE
-        params = [
-            self.data.date().toString("yyyy-MM-dd"),
-            self.imovel.currentData(),
-            self.conta.currentData(),
-            num or None,
-            self.tipo_doc.currentIndex() + 1,
-            self.historico.text().strip(),
-            part,
-            self.tipo_lanc.currentIndex() + 1,
-            ent,
-            sai,
-            abs(saldo_f),
-            nat,
-            self.categoria.currentText()
-        ]
+            ent = parse_currency(self.valor_entrada.text())
+            sai = parse_currency(self.valor_saida.text())
 
-        try:
+            # Calcula saldo anterior e saldo final
+            row = self.db.fetch_one(
+                "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                "FROM lancamento WHERE cod_conta = ? ORDER BY id DESC LIMIT 1",
+                (self.conta.currentData(),)
+            )
+            saldo_ant = row[0] if row and row[0] is not None else 0.0
+            saldo_f = saldo_ant + ent - sai
+            nat = 'P' if saldo_f >= 0 else 'N'
+
+            # Parâmetros para INSERT/UPDATE (sem categoria)
+            params = [
+                self.data.date().toString("dd/MM/yyyy"),
+                self.imovel.currentData(),
+                self.conta.currentData(),
+                num or None,
+                self.tipo_doc.currentIndex() + 1,
+                self.historico.text().strip(),
+                part,
+                self.tipo_lanc.currentIndex() + 1,
+                ent,
+                sai,
+                abs(saldo_f),
+                nat
+            ]
+
             if self.lanc_id:
-                # UPDATE existente
                 sql = """
                     UPDATE lancamento SET
-                        data = ?, cod_imovel = ?, cod_conta = ?, num_doc = ?,
-                        tipo_doc = ?, historico = ?, id_participante = ?,
-                        tipo_lanc = ?, valor_entrada = ?, valor_saida = ?,
-                        saldo_final = ?, natureza_saldo = ?, categoria = ?
+                        data = ?, cod_imovel = ?, cod_conta = ?, num_doc = ?, tipo_doc = ?,
+                        historico = ?, id_participante = ?, tipo_lanc = ?,
+                        valor_entrada = ?, valor_saida = ?, saldo_final = ?, natureza_saldo = ?
                     WHERE id = ?
                 """
                 self.db.execute_query(sql, params + [self.lanc_id])
             else:
-                # INSERT novo
                 sql = """
                     INSERT INTO lancamento (
-                        data, cod_imovel, cod_conta, num_doc,
-                        tipo_doc, historico, id_participante,
-                        tipo_lanc, valor_entrada, valor_saida,
-                        saldo_final, natureza_saldo, categoria
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        data, cod_imovel, cod_conta, num_doc, tipo_doc,
+                        historico, id_participante, tipo_lanc,
+                        valor_entrada, valor_saida, saldo_final, natureza_saldo
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 """
                 self.db.execute_query(sql, params)
 
@@ -1278,6 +1300,7 @@ class LancamentoDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao salvar lançamento: {e}")
+
 
     def carregar_imoveis(self):
         termo = f"%{self.pesquisa.text()}%"
@@ -1335,9 +1358,11 @@ class GerenciamentoContasWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
+        self._sort_state = {}             # ➊ guarda estado de ordenação
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10,10,10,10)
         self._build_ui()
+        self._load_column_filter()        # ➋ restaura visibilidade
         self.carregar_contas()
 
     def _build_ui(self):
@@ -1366,6 +1391,31 @@ class GerenciamentoContasWidget(QWidget):
         self.btn_importar.clicked.connect(self.importar_contas)
         tl.addWidget(self.btn_importar)
 
+        # barra de pesquisa
+        self.search_contas = QLineEdit()
+        self.search_contas.setPlaceholderText("Pesquisar contas…")
+        self.search_contas.textChanged.connect(self._filter_contas)
+        tl.addWidget(self.search_contas)
+
+        tl.addStretch()
+        self.layout.addLayout(tl)
+
+        # ➌ botão de filtro:
+        self.btn_filter = QToolButton()
+        self.btn_filter.setText("⚙️")
+        self.btn_filter.setAutoRaise(True)
+        self.btn_filter.setPopupMode(QToolButton.InstantPopup)
+        self._filter_menu = QMenu(self)
+        for col, label in enumerate(["Código","Banco","Agência","Conta","Saldo Inicial"]):
+            wa = QWidgetAction(self._filter_menu)
+            chk = QCheckBox(label)
+            chk.setChecked(True)
+            chk.toggled.connect(lambda vis, c=col: self.tabela.setColumnHidden(c, not vis))
+            wa.setDefaultWidget(chk)
+            self._filter_menu.addAction(wa)
+        self.btn_filter.setMenu(self._filter_menu)
+        tl.addWidget(self.btn_filter)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
@@ -1385,6 +1435,17 @@ class GerenciamentoContasWidget(QWidget):
 
         # **ESSENCIAL**: adiciona a tabela ao layout
         self.layout.addWidget(self.tabela)
+
+    def _filter_contas(self, text: str):
+        text = text.lower()
+        for row in range(self.tabela.rowCount()):
+            hide = True
+            for col in range(self.tabela.columnCount()):
+                item = self.tabela.item(row, col)
+                if item and text in item.text().lower():
+                    hide = False
+                    break
+            self.tabela.setRowHidden(row, hide)
 
     def importar_contas(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1443,12 +1504,55 @@ class GerenciamentoContasWidget(QWidget):
             )
 
     def carregar_contas(self):
-        rows = self.db.fetch_all("SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria ORDER BY nome_banco")
+        rows = self.db.fetch_all("SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria")
         self.tabela.setRowCount(len(rows))
         for r,(id_,cod,banco,ag,cont,saldo) in enumerate(rows):
-            for c,val in enumerate([cod,banco,ag,cont,f"R$ {saldo:,.2f}"]):
-                self.tabela.setItem(r,c, QTableWidgetItem(val))
+            # Código e texto
+            self.tabela.setItem(r, 0, QTableWidgetItem(cod))
+            self.tabela.setItem(r, 1, QTableWidgetItem(banco))
+            self.tabela.setItem(r, 2, QTableWidgetItem(ag))
+            self.tabela.setItem(r, 3, QTableWidgetItem(cont))
+            # Saldo: NumericItem para ordenação numérica
+            num = float(saldo)
+            br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            item = NumericItem(num, f"R$ {br}")
+            item.setTextAlignment(Qt.AlignCenter)
+            self.tabela.setItem(r, 4, item)
+            # guarda ID se precisar
             self.tabela.item(r,0).setData(Qt.UserRole, id_)
+
+    def _toggle_sort(self, index:int):
+        state = self._sort_state.get(index, 0)
+        if state == 0:
+            self.tabela.sortItems(index, Qt.AscendingOrder)
+            new = 1
+        elif state == 1:
+            self.tabela.sortItems(index, Qt.DescendingOrder)
+            new = 2
+        else:
+            # volta à ordem “natural”
+            self.carregar_contas()
+            new = 0
+        self._sort_state = {index: new}
+
+    def _save_column_filter(self):
+        path = os.path.join(CACHE_FOLDER, "contas_filter.json")
+        vis = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
+        with open(path, "w") as f:
+            json.dump(vis, f)
+
+    def _load_column_filter(self):
+        path = os.path.join(CACHE_FOLDER, "contas_filter.json")
+        if not os.path.exists(path):
+            return
+        vis = json.load(open(path))
+        for c, shown in enumerate(vis):
+            self.tabela.setColumnHidden(c, not shown)
+        # sincroniza checkboxes do menu
+        for action in self._filter_menu.actions():
+            chk = action.defaultWidget()
+            idx = ["Código","Banco","Agência","Conta","Saldo Inicial"].index(chk.text())
+            chk.setChecked(not self.tabela.isColumnHidden(idx))
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -1522,6 +1626,12 @@ class GerenciamentoImoveisWidget(QWidget):
         self.btn_importar.clicked.connect(self.importar_imoveis)
         tl.addWidget(self.btn_importar)
 
+        # barra de pesquisa
+        self.search_imoveis = QLineEdit()
+        self.search_imoveis.setPlaceholderText("Pesquisar imóveis…")
+        self.search_imoveis.textChanged.connect(self._filter_imoveis)
+        tl.addWidget(self.search_imoveis)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
@@ -1537,6 +1647,17 @@ class GerenciamentoImoveisWidget(QWidget):
         hdr.setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.cellClicked.connect(self._on_select)
         self.layout.addWidget(self.tabela)
+
+    def _filter_imoveis(self, text: str):
+        text = text.lower()
+        for row in range(self.tabela.rowCount()):
+            hide = True
+            for col in range(self.tabela.columnCount()):
+                item = self.tabela.item(row, col)
+                if item and text in item.text().lower():
+                    hide = False
+                    break
+            self.tabela.setRowHidden(row, hide)
 
     def importar_imoveis(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1712,6 +1833,12 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.btn_importar.clicked.connect(self.importar_participantes)
         tl.addWidget(self.btn_importar)
 
+        # barra de pesquisa
+        self.search_part = QLineEdit()
+        self.search_part.setPlaceholderText("Pesquisar participantes…")
+        self.search_part.textChanged.connect(self._filter_participantes)
+        tl.addWidget(self.search_part)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
@@ -1731,6 +1858,17 @@ class GerenciamentoParticipantesWidget(QWidget):
 
         # **NUNCA ESQUECER** esta linha, senão não aparece nada!
         self.layout.addWidget(self.tabela)
+
+    def _filter_participantes(self, text: str):
+        text = text.lower()
+        for row in range(self.tabela.rowCount()):
+            hide = True
+            for col in range(self.tabela.columnCount()):
+                item = self.tabela.item(row, col)
+                if item and text in item.text().lower():
+                    hide = False
+                    break
+            self.tabela.setRowHidden(row, hide)
 
     def importar_participantes(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1783,13 +1921,24 @@ class GerenciamentoParticipantesWidget(QWidget):
             )
 
     def carregar_participantes(self):
-        rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
+        rows = self.db.fetch_all(
+            "SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC"
+        )
         self.tabela.setRowCount(len(rows))
-        tipos = {1:"PF",2:"PJ",3:"Órgão Público",4:"Outros"}
-        for r,(id_,cpf,nome,tipo,data) in enumerate(rows):
-            for c,val in enumerate([cpf,nome,tipos.get(tipo,str(tipo)),data]):
-                self.tabela.setItem(r,c, QTableWidgetItem(val))
-            self.tabela.item(r,0).setData(Qt.UserRole,id_)
+        tipos = {1:"PJ",2:"PF",3:"Órgão Público",4:"Outros"}
+
+        for r, (id_, cpf, nome, tipo, data_str) in enumerate(rows):
+            # formata data de YYYY‑MM‑DD para DD‑MM‑YYYY
+            formatted_date = QDate.fromString(data_str, "yyyy-MM-dd").toString("dd/MM/yyyy")
+            vals = [
+                cpf,
+                nome,
+                tipos.get(tipo, str(tipo)),
+                formatted_date
+            ]
+            for c, v in enumerate(vals):
+                self.tabela.setItem(r, c, QTableWidgetItem(v))
+            self.tabela.item(r, 0).setData(Qt.UserRole, id_)
 
     def _select_row(self,row,_):
         self.selected_row = row
@@ -1847,11 +1996,17 @@ class CadastrosWidget(QTabWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.db = Database()
         self.setWindowTitle("Sistema AgroContábil - LCDPR")
         self.setGeometry(100,100,1200,800)
         self.setStyleSheet(STYLE_SHEET)
-        self.db = Database()
+
+        # define this before _setup_ui()
+        self._lanc_labels = ["ID", "Data", "Imóvel", "Histórico",
+                             "Tipo", "Entrada", "Saída", "Saldo"]
+        # 2) Só aí monte toda a UI
         self._setup_ui()
+        self._lanc_sort_state = {}
 
     def _setup_ui(self):
         # Ícone e menus
@@ -1872,41 +2027,74 @@ class MainWindow(QMainWindow):
         w_l = QWidget()
         l_l = QVBoxLayout(w_l)
         l_l.setContentsMargins(10, 10, 10, 10)
-
-        # filtros e botões de lançamento
+        
+        # filtros, botões e pesquisa
         self.lanc_filter_layout = QHBoxLayout()
+        
+        # intervalo “De” / “Até”
         self.lanc_filter_layout.addWidget(QLabel("De:"))
         self.dt_ini = QDateEdit(QDate.currentDate().addMonths(-1))
         self.dt_ini.setCalendarPopup(True)
+        self.dt_ini.setDisplayFormat("dd/MM/yyyy")
         self.lanc_filter_layout.addWidget(self.dt_ini)
+        
         self.lanc_filter_layout.addWidget(QLabel("Até:"))
         self.dt_fim = QDateEdit(QDate.currentDate())
         self.dt_fim.setCalendarPopup(True)
+        self.dt_fim.setDisplayFormat("dd/MM/yyyy")
         self.lanc_filter_layout.addWidget(self.dt_fim)
-
+        
+        # botões
         btn_filtrar = QPushButton("Filtrar")
         btn_filtrar.clicked.connect(self.carregar_lancamentos)
         self.lanc_filter_layout.addWidget(btn_filtrar)
-
+        
         self.btn_edit_lanc = QPushButton("Editar Lançamento")
         self.btn_edit_lanc.setEnabled(False)
         self.btn_edit_lanc.clicked.connect(self.editar_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_edit_lanc)
-
+        
         self.btn_del_lanc = QPushButton("Excluir Lançamento")
         self.btn_del_lanc.setEnabled(False)
         self.btn_del_lanc.clicked.connect(self.excluir_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_del_lanc)
-
-        # novo botão Importar Lançamentos
+        
         self.btn_import_lanc = QPushButton("Importar Lançamentos")
         self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
         self.btn_import_lanc.clicked.connect(self.importar_lancamentos)
         self.lanc_filter_layout.addWidget(self.btn_import_lanc)
+        
+        # campo de pesquisa
+        self.search_lanc = QLineEdit()
+        self.search_lanc.setPlaceholderText("Pesquisar…")
+        self.search_lanc.textChanged.connect(self._filter_lancamentos)
+        self.lanc_filter_layout.addWidget(self.search_lanc)
+
+        # botão de filtro de colunas usando o emoji diretamente
+        self.btn_filter = QToolButton()
+        self.btn_filter.setText("⚙️")                 # coloca o emoji como texto
+        self.btn_filter.setAutoRaise(True)             # estilo flat
+        self.btn_filter.setPopupMode(QToolButton.InstantPopup)
+        self.lanc_filter_layout.addWidget(self.btn_filter)
+
+        # dentro de _setup_ui(), logo após criar self.btn_filter:
+
+        self._lanc_filter_menu = QMenu(self)
+        for col, lbl in enumerate(self._lanc_labels):
+            wa = QWidgetAction(self._lanc_filter_menu)
+            chk = QCheckBox(lbl)
+            chk.setChecked(True)
+            # conecta direto: se Checked => mostra, senão => oculta
+            chk.toggled.connect(lambda vis, c=col: self._toggle_lanc_column(c, vis))
+            wa.setDefaultWidget(chk)
+            self._lanc_filter_menu.addAction(wa)
+        
+        self.btn_filter.setMenu(self._lanc_filter_menu)
+        self.btn_filter.setPopupMode(QToolButton.InstantPopup)
 
         l_l.addLayout(self.lanc_filter_layout)
 
-        # Tabela de lançamentos
+        # Tabela de lançamentos (cria antes de usar)
         self.tab_lanc = QTableWidget(0, 8)
         self.tab_lanc.setHorizontalHeaderLabels([
             "ID", "Data", "Imóvel", "Histórico",
@@ -1920,7 +2108,19 @@ class MainWindow(QMainWindow):
         ))
         l_l.addWidget(self.tab_lanc)
 
-        # Estilo “mais bonito” para lançamentos
+        # carrega visibilidade de colunas salva
+        config_file = os.path.join(CACHE_FOLDER, 'lanc_columns.json')
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                vis = json.load(f)
+            for i, label in enumerate(self.tab_lanc.horizontalHeaderLabels()):
+                self.tab_lanc.setColumnHidden(i, not vis.get(label, True))
+
+        # conecta duplo‑clique do header para ordenação cíclica
+        header = self.tab_lanc.horizontalHeader()
+        header.sectionDoubleClicked.connect(self.toggle_sort_lanc)
+
+        # Estilo “mais bonito”
         self.tab_lanc.setAlternatingRowColors(True)
         self.tab_lanc.setShowGrid(False)
         self.tab_lanc.verticalHeader().setVisible(False)
@@ -1932,7 +2132,7 @@ class MainWindow(QMainWindow):
             QTableWidget::item { padding: 8px; }
             QHeaderView::section { padding: 8px; font-weight: bold; }
         """)
-            
+        
         self.tabs.addTab(w_l, "Lançamentos")
 
         # --- Aba Cadastros ---
@@ -1976,6 +2176,100 @@ class MainWindow(QMainWindow):
         # Carrega dados iniciais
         self.carregar_lancamentos()
         self.carregar_planejamento()
+        # depois de carregar os lançamentos:
+        self._load_lanc_filter_settings()
+
+    def _toggle_lanc_column(self, col: int, visible: bool):
+        """Esconde/exibe a coluna e salva o estado em disco."""
+        self.tab_lanc.setColumnHidden(col, not visible)
+        self._save_lanc_filter_settings()
+
+    def _save_lanc_filter_settings(self):
+        """Grava um JSON com True/False para cada coluna."""
+        os.makedirs(CACHE_FOLDER, exist_ok=True)
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        vis = [not self.tab_lanc.isColumnHidden(c)
+               for c in range(self.tab_lanc.columnCount())]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(vis, f)
+
+    def _load_lanc_filter_settings(self):
+        """Carrega o JSON e aplica ao mostrar a janela."""
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                vis = json.load(f)
+        except:
+            return
+    
+        # first, hide/show columns based on the saved vis list
+        for c, shown in enumerate(vis):
+            self.tab_lanc.setColumnHidden(c, not shown)
+    
+        # now sync all the checkboxes in the menu
+        for wa in self._lanc_filter_menu.actions():
+            # only QWidgetActions hold our QCheckBox
+            if isinstance(wa, QWidgetAction):
+                chk = wa.defaultWidget()
+                if isinstance(chk, QCheckBox):
+                    label = chk.text()
+                    try:
+                        idx = self._lanc_labels.index(label)
+                    except ValueError:
+                        # unknown label: skip
+                        continue
+                    # set the checkbox to reflect the column’s visibility
+                    chk.setChecked(not self.tab_lanc.isColumnHidden(idx))
+
+    def toggle_sort_lanc(self, index: int):
+        # state: 0 = sem ordenação, 1 = asc, 2 = desc
+        state = self._lanc_sort_state.get(index, 0)
+        if state == 0:
+            self.tab_lanc.sortItems(index, Qt.AscendingOrder)
+            new = 1
+        elif state == 1:
+            self.tab_lanc.sortItems(index, Qt.DescendingOrder)
+            new = 2
+        else:
+            self.carregar_lancamentos()
+            new = 0
+        # só lembre o estado desta coluna
+        self._lanc_sort_state = {index: new}
+
+    def show_lanc_filter_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Filtro de Colunas")
+        layout = QVBoxLayout(dlg)
+    
+        # obtém os rótulos de cada coluna
+        labels = [
+            self.tab_lanc.horizontalHeaderItem(col).text()
+            for col in range(self.tab_lanc.columnCount())
+        ]
+    
+        # cria um checkbox para cada coluna
+        for col, label in enumerate(labels):
+            chk = QCheckBox(label)
+            chk.setChecked(not self.tab_lanc.isColumnHidden(col))
+            chk.stateChanged.connect(
+                lambda state, c=col: self.tab_lanc.setColumnHidden(c, state != Qt.Checked)
+            )
+            layout.addWidget(chk)
+    
+        dlg.exec()
+    
+    
+    def _filter_lancamentos(self, text: str):
+        text = text.lower()
+        for row in range(self.tab_lanc.rowCount()):
+            hide = True
+            for col in range(self.tab_lanc.columnCount()):
+                item = self.tab_lanc.item(row, col)
+                if item and text in item.text().lower():
+                    hide = False
+                    break
+            self.tab_lanc.setRowHidden(row, hide)
+
 
     def _create_menu(self):
         mb = self.menuBar()
@@ -2045,47 +2339,57 @@ class MainWindow(QMainWindow):
 
         dlg.exec()
 
+
     def carregar_lancamentos(self):
-        d1 = self.dt_ini.date().toString("yyyy-MM-dd")
-        d2 = self.dt_fim.date().toString("yyyy-MM-dd")
+        d1 = self.dt_ini.date().toString("dd/MM/yyyy")
+        d2 = self.dt_fim.date().toString("dd/MM/yyyy")
         q = f"""
         SELECT l.id, l.data, i.nome_imovel, l.historico,
-               CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END,
+               CASE l.tipo_lanc WHEN 1 THEN 'Receita'
+                                 WHEN 2 THEN 'Despesa'
+                                 ELSE 'Adiantamento' END,
                l.valor_entrada, l.valor_saida,
                (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) as saldo
         FROM lancamento l
-        JOIN imovel_rural i ON l.cod_imovel=i.id
+        JOIN imovel_rural i ON l.cod_imovel = i.id
         WHERE l.data BETWEEN '{d1}' AND '{d2}'
         ORDER BY l.data DESC
         """
         rows = self.db.fetch_all(q)
         self.tab_lanc.setRowCount(len(rows))
+    
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
-                # formata coluna de data como dd/MM/yyyy
-                if c == 1:
-                    date = QDate.fromString(val, "yyyy-MM-dd")
-                    texto = date.toString("dd/MM/yyyy")
-                    item = QTableWidgetItem(texto)
-                # formata valores monetários
+                # ID column: integer sort
+                if c == 0:
+                    item = NumericItem(int(val))
+                # date column: plain text
+                elif c == 1:
+                    date = QDate.fromString(val, "dd/MM/yyyy")
+                    item = QTableWidgetItem(date.toString("dd/MM/yyyy"))
+                # monetary columns: numeric sort + formatted text
                 elif c in (5, 6, 7):
-                    texto = f"R$ {float(val):,.2f}"
-                    item = QTableWidgetItem(texto)
+                    num = float(val)
+                    br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    item = NumericItem(num, f"R$ {br}")
+                # all others: plain text
                 else:
                     item = QTableWidgetItem(str(val))
     
+                # center text
                 item.setTextAlignment(Qt.AlignCenter)
-                # cores
+    
+                # apply colors
                 if c == 5:
                     item.setForeground(QColor("#27ae60"))
                 elif c == 6:
                     item.setForeground(QColor("#e74c3c"))
                 elif c == 7:
-                    cor = "#27ae60" if float(val) >= 0 else "#e74c3c"
-                    item.setForeground(QColor(cor))
+                    color = "#27ae60" if float(val) >= 0 else "#e74c3c"
+                    item.setForeground(QColor(color))
     
                 self.tab_lanc.setItem(r, c, item)
-    
+        
     def editar_lancamento(self):
         row = self.tab_lanc.currentRow()
         lanc_id = int(self.tab_lanc.item(row,0).text())
@@ -2264,6 +2568,12 @@ class MainWindow(QMainWindow):
                             area_total, area_utilizada
                         ) = campos[:18]
 
+                        # ajusta participacao (ex: arquivo traz 10000 → 100%)
+                        try:
+                            participacao_val = float(participacao) / 100.0
+                        except (ValueError, TypeError):
+                            participacao_val = None
+
                         self.db.execute_query(
                             """
                             INSERT OR REPLACE INTO imovel_rural (
@@ -2280,20 +2590,31 @@ class MainWindow(QMainWindow):
                                 num or None, compl or None, bairro or None,
                                 uf or None, cod_mun or None, cep or None,
                                 int(tipo_exploracao) if tipo_exploracao.isdigit() else None,
-                                float(participacao) if participacao else None,
+                                participacao_val,
                                 float(area_total) if area_total else None,
                                 float(area_utilizada) if area_utilizada else None,
                             ]
                         )
 
                     # === 0050: Contas bancárias ===
-                    elif reg == "0050" and len(campos) >= 7:
-                        # campos: cod_cta, pais_cta, banco, nome_banco, agencia, num_conta, saldo
-                        cod_cta, pais_cta, banco, nome_banco, agencia, num_conta, saldo = campos[:7]
-                        # converte saldo, permitindo vírgula decimal
-                        try:
-                            saldo_val = float(saldo.strip().replace(',', '.'))
-                        except ValueError:
+                    elif reg == "0050":
+                        # aceita 6 ou 7 campos; se 6, saldo inicia em zero
+                        if len(campos) < 6:
+                            continue
+                        cod_cta = campos[0].strip()
+                        pais_cta = campos[1].strip()
+                        banco_cod = campos[2].strip()
+                        nome_banco = campos[3].strip()
+                        agencia = campos[4].strip()
+                        num_conta = campos[5].strip()
+                        # saldo pode estar em campo 6
+                        if len(campos) >= 7:
+                            raw_saldo = campos[6].strip()
+                            try:
+                                saldo_val = float(raw_saldo.replace(',', '.'))
+                            except ValueError:
+                                saldo_val = 0.0
+                        else:
                             saldo_val = 0.0
 
                         self.db.execute_query(
@@ -2304,125 +2625,36 @@ class MainWindow(QMainWindow):
                             ) VALUES (?, ?, ?, ?, ?, ?, ?)
                             """,
                             [
-                                cod_cta.strip(),
-                                pais_cta.strip(),
-                                banco.strip() or None,
-                                nome_banco.strip() or None,
-                                agencia.strip() or None,
-                                num_conta.strip() or None,
+                                cod_cta or None,
+                                pais_cta or None,
+                                banco_cod or None,
+                                nome_banco or None,
+                                agencia or None,
+                                num_conta or None,
                                 saldo_val
                             ]
                         )
 
-
                     # === 0100: Participantes ===
                     elif reg == "0100" and len(campos) >= 3:
-                        cpf_cnpj, nome_p, tp = campos[:3]
-                        digits = re.sub(r'\D', '', cpf_cnpj)
-                        tipo_pc = 1 if len(digits) == 11 else 2
+                        cpf_cnpj = campos[0].strip()
+                        nome_p = campos[1].strip()
+                        tipo = campos[2].strip()
+                        try:
+                            tipo_pc = int(tipo)
+                        except ValueError:
+                            tipo_pc = 1 if len(re.sub(r'\D', '', cpf_cnpj)) == 11 else 2
+
                         self.db.execute_query(
                             """
                             INSERT OR REPLACE INTO participante (
-                              cpf_cnpj,nome,tipo_contraparte
-                            ) VALUES (?,?,?)
+                                cpf_cnpj, nome, tipo_contraparte
+                            ) VALUES (?, ?, ?)
                             """,
-                            [cpf_cnpj.strip(), nome_p.strip(), tipo_pc]
+                            [cpf_cnpj or None, nome_p or None, tipo_pc]
                         )
 
-                    # === Q100: Lançamentos contábeis ===
-                    elif reg == "Q100" and len(campos) >= 12:
-                        # garante pelo menos 13 posições
-                        while len(campos) < 13:
-                            campos.append('')
-                    
-                        (
-                            data_str, cod_im, cod_ct, num_doc, tipo_doc,
-                            hist, id_parc, tipo_lanc,
-                            val_ent, val_sai, sal_f, nat, cat
-                        ) = campos[:13]
-                    
-                        # PARTÍCIPANTE: busca ou cria pelo CPF/CNPJ
-                        part = self.db.fetch_one(
-                            "SELECT id FROM participante WHERE cpf_cnpj = ?",
-                            (id_parc.strip(),)
-                        )
-                        if not part:
-                            tipo_pc = 1 if len(re.sub(r'\D', '', id_parc)) == 11 else 2
-                            self.db.execute_query(
-                                """
-                                INSERT OR IGNORE INTO participante
-                                  (cpf_cnpj, nome, tipo_contraparte)
-                                VALUES (?, ?, ?)
-                                """,
-                                [id_parc.strip(), "<sem nome>", tipo_pc]
-                            )
-                            part = self.db.fetch_one(
-                                "SELECT id FROM participante WHERE cpf_cnpj = ?",
-                                (id_parc.strip(),)
-                            )
-                    
-                        # IMÓVEL
-                        im = self.db.fetch_one(
-                            "SELECT id FROM imovel_rural WHERE cod_imovel = ?",
-                            (cod_im.strip(),)
-                        )
-                        # CONTA
-                        ct = self.db.fetch_one(
-                            "SELECT id FROM conta_bancaria WHERE cod_conta = ?",
-                            (cod_ct.strip(),)
-                        )
-                        if not ct:
-                            # cria conta genérica se não existir
-                            self.db.execute_query(
-                                """
-                                INSERT OR IGNORE INTO conta_bancaria
-                                  (cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial)
-                                VALUES (?, 'BR', ?, ?, '', '', 0.0)
-                                """,
-                                [cod_ct.strip(), cod_ct.strip(), cod_ct.strip()]
-                            )
-                            ct = self.db.fetch_one(
-                                "SELECT id FROM conta_bancaria WHERE cod_conta = ?",
-                                (cod_ct.strip(),)
-                            )
-                    
-                        # só insere se existir imóvel, conta e participante
-                        if im and ct and part:
-                            # valores numéricos
-                            ent = float(val_ent.strip().replace(',', '.')) if val_ent.strip() else 0.0
-                            sai = float(val_sai.strip().replace(',', '.')) if val_sai.strip() else 0.0
-                            # saldo absoluto
-                            sal = abs(float(sal_f.strip().replace(',', '.'))) if sal_f.strip() else ent - sai
-                            nat = nat.strip() or ('P' if (ent - sai) >= 0 else 'N')
-                    
-                            self.db.execute_query(
-                                """
-                                INSERT INTO lancamento (
-                                    data, cod_imovel, cod_conta, num_doc, tipo_doc,
-                                    historico, id_participante, tipo_lanc,
-                                    valor_entrada, valor_saida,
-                                    saldo_final, natureza_saldo, categoria
-                                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                                """,
-                                [
-                                    data_str.strip(),
-                                    im[0],
-                                    ct[0],
-                                    num_doc.strip() or None,
-                                    int(tipo_doc),
-                                    hist.strip(),
-                                    part[0],
-                                    int(tipo_lanc),
-                                    ent,
-                                    sai,
-                                    sal,
-                                    nat,
-                                    cat.strip() or None
-                                ]
-                            )
-                    
-
-            # mostra avisos, se houver
+            # exibe avisos, se houver
             if warnings:
                 QMessageBox.warning(
                     self, "Importação concluída com avisos",
@@ -2553,28 +2785,52 @@ class MainWindow(QMainWindow):
         with open(path, encoding='utf-8') as f:
             for lineno, line in enumerate(f, 1):
                 parts = line.strip().split("|")
-                if len(parts) != 11:
-                    raise ValueError(f"Linha {lineno}: esperado 11 colunas, encontrou {len(parts)}")
-                (
-                    data_str, cod_imovel, cod_conta, num_doc, tipo_doc,
-                    historico, id_participante, tipo_lanc,
-                    valor_entrada, valor_saida, categoria
-                ) = parts
 
-                im = self.db.fetch_one(
-                    "SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,)
-                )
+                # Layout A: 11 campos, data ISO
+                if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}", parts[0]):
+                    (
+                        data_str, cod_imovel, cod_conta, num_doc, raw_tipo_doc,
+                        historico, id_participante, tipo_lanc,
+                        raw_ent, raw_sai, _
+                    ) = parts
+                    tipo_doc = int(raw_tipo_doc)
+                    ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
+                    sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
+
+                # Layout B: 12 campos, data BR, e valor no campo 10 → despesa
+                elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}", parts[0]):
+                    (
+                        data_br, cod_imovel, cod_conta, num_doc, _,
+                        historico, id_participante, tipo_lanc,
+                        _, raw_val, _, _
+                    ) = parts
+                    d, m, y = data_br.split("-")
+                    data_str = f"{y}-{m}-{d}"
+                    tipo_doc = 4  # Fatura/Despesa default
+                    ent = 0.0
+                    # trata 57000 → 570.00 como despesa
+                    sai = float(raw_val) / 100.0 if raw_val.isdigit() else 0.0
+
+                else:
+                    raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+
+                # sobrescreve tipo_doc por palavras-chave
+                desc = historico.upper()
+                if "TALAO" in desc:
+                    tipo_doc = 4
+                elif any(k in desc for k in ("FOLHA","IRPJ","INSS","FGTS")):
+                    tipo_doc = 4
+
+                # busca IDs
+                im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,))
                 if not im:
                     raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
-
-                ct = self.db.fetch_one(
-                    "SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,)
-                )
+                ct = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,))
                 if not ct:
                     raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
-
                 id_imovel, id_conta = im[0], ct[0]
-                ent, sai = float(valor_entrada), float(valor_saida)
+
+                # calcula saldo final
                 last = self.db.fetch_one(
                     "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
                     "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
@@ -2584,6 +2840,7 @@ class MainWindow(QMainWindow):
                 saldo_f = saldo_ant + ent - sai
                 nat = 'P' if saldo_f >= 0 else 'N'
 
+                # insere sem categoria
                 self.db.execute_query(
                     """
                     INSERT INTO lancamento (
@@ -2591,16 +2848,24 @@ class MainWindow(QMainWindow):
                         historico, id_participante, tipo_lanc,
                         valor_entrada, valor_saida,
                         saldo_final, natureza_saldo, categoria
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL)
                     """,
-                    (
-                        data_str, id_imovel, id_conta,
-                        num_doc or None, int(tipo_doc), historico,
-                        int(id_participante), int(tipo_lanc),
-                        ent, sai,
-                        abs(saldo_f), nat, categoria
-                    )
+                    [
+                        data_str,
+                        id_imovel,
+                        id_conta,
+                        num_doc or None,
+                        tipo_doc,
+                        historico,
+                        int(id_participante),
+                        int(tipo_lanc),
+                        ent,
+                        sai,
+                        abs(saldo_f),
+                        nat
+                    ]
                 )
+
 
     def _import_lancamentos_excel(self, path):
         df = pd.read_excel(path, dtype=str)
