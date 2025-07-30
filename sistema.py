@@ -403,7 +403,7 @@ class CadastroBaseDialog(QDialog):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumSize(600, 500)
+        self.setMinimumSize(900, 800)
         self.db = Database()
 
         # Layout principal
@@ -1358,82 +1358,88 @@ class GerenciamentoContasWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        self._sort_state = {}             # ➊ guarda estado de ordenação
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10,10,10,10)
+
+        # cabeçalhos e estado de ordenação
+        self._contas_labels = ["Código","Banco","Agência","Conta","Saldo Inicial"]
+        self._contas_sort_state = {}
+
         self._build_ui()
-        self._load_column_filter()        # ➋ restaura visibilidade
+        self._load_column_filter()
         self.carregar_contas()
 
-    def _build_ui(self):
-        tl = QHBoxLayout()
-        tl.setContentsMargins(0,0,10,10)
 
+    def _build_ui(self):
+        # ===== Top bar: botões + pesquisa + filtro =====
+        tl = QHBoxLayout()
+        tl.setContentsMargins(0, 0, 10, 10)
+
+        # Botões CRUD
         self.btn_novo = QPushButton("Nova Conta")
-        self.btn_novo.setIcon(QIcon.fromTheme("document-new"))
         self.btn_novo.clicked.connect(self.nova_conta)
         tl.addWidget(self.btn_novo)
 
         self.btn_editar = QPushButton("Editar")
         self.btn_editar.setEnabled(False)
-        self.btn_editar.setIcon(QIcon.fromTheme("document-edit"))
         self.btn_editar.clicked.connect(self.editar_conta)
         tl.addWidget(self.btn_editar)
 
         self.btn_excluir = QPushButton("Excluir")
         self.btn_excluir.setEnabled(False)
-        self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete"))
         self.btn_excluir.clicked.connect(self.excluir_conta)
         tl.addWidget(self.btn_excluir)
 
         self.btn_importar = QPushButton("Importar")
-        self.btn_importar.setIcon(QIcon.fromTheme("document-import"))
         self.btn_importar.clicked.connect(self.importar_contas)
         tl.addWidget(self.btn_importar)
 
-        # barra de pesquisa
+        # Barra de pesquisa
         self.search_contas = QLineEdit()
         self.search_contas.setPlaceholderText("Pesquisar contas…")
         self.search_contas.textChanged.connect(self._filter_contas)
         tl.addWidget(self.search_contas)
 
-        tl.addStretch()
-        self.layout.addLayout(tl)
-
-        # ➌ botão de filtro:
-        self.btn_filter = QToolButton()
-        self.btn_filter.setText("⚙️")
-        self.btn_filter.setAutoRaise(True)
-        self.btn_filter.setPopupMode(QToolButton.InstantPopup)
+        # Botão de filtro de colunas (⚙️) no cantinho
+        btn_filter = QToolButton()
+        btn_filter.setText("⚙️")
+        btn_filter.setAutoRaise(True)
+        btn_filter.setPopupMode(QToolButton.InstantPopup)
         self._filter_menu = QMenu(self)
-        for col, label in enumerate(["Código","Banco","Agência","Conta","Saldo Inicial"]):
+        for col, lbl in enumerate(self._contas_labels):
             wa = QWidgetAction(self._filter_menu)
-            chk = QCheckBox(label)
+            chk = QCheckBox(lbl)
             chk.setChecked(True)
-            chk.toggled.connect(lambda vis, c=col: self.tabela.setColumnHidden(c, not vis))
+            chk.toggled.connect(lambda vis, c=col: self._toggle_column(c, vis))
             wa.setDefaultWidget(chk)
             self._filter_menu.addAction(wa)
-        self.btn_filter.setMenu(self._filter_menu)
-        tl.addWidget(self.btn_filter)
+        btn_filter.setMenu(self._filter_menu)
+        tl.addWidget(btn_filter)
 
         tl.addStretch()
         self.layout.addLayout(tl)
 
-        # **tabela de contas**
-        self.tabela = QTableWidget(0,5)
-        self.tabela.setHorizontalHeaderLabels(["Código","Banco","Agência","Conta","Saldo Inicial"])
+        # ===== Tabela de Contas =====
+        self.tabela = QTableWidget(0, len(self._contas_labels))
+        self.tabela.setHorizontalHeaderLabels(self._contas_labels)
+        # evita edição direta
+        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        # seleção de linha inteira
+        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabela.setSelectionMode(QTableWidget.SingleSelection)
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
+
         hdr = self.tabela.horizontalHeader()
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)
-        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        # ordenação cíclica
+        hdr.sectionDoubleClicked.connect(self._toggle_sort)
+        # clique ativa botões
         self.tabela.cellClicked.connect(self._select_row)
 
-        # **ESSENCIAL**: adiciona a tabela ao layout
         self.layout.addWidget(self.tabela)
 
     def _filter_contas(self, text: str):
@@ -1503,26 +1509,9 @@ class GerenciamentoContasWidget(QWidget):
                 )
             )
 
-    def carregar_contas(self):
-        rows = self.db.fetch_all("SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria")
-        self.tabela.setRowCount(len(rows))
-        for r,(id_,cod,banco,ag,cont,saldo) in enumerate(rows):
-            # Código e texto
-            self.tabela.setItem(r, 0, QTableWidgetItem(cod))
-            self.tabela.setItem(r, 1, QTableWidgetItem(banco))
-            self.tabela.setItem(r, 2, QTableWidgetItem(ag))
-            self.tabela.setItem(r, 3, QTableWidgetItem(cont))
-            # Saldo: NumericItem para ordenação numérica
-            num = float(saldo)
-            br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            item = NumericItem(num, f"R$ {br}")
-            item.setTextAlignment(Qt.AlignCenter)
-            self.tabela.setItem(r, 4, item)
-            # guarda ID se precisar
-            self.tabela.item(r,0).setData(Qt.UserRole, id_)
-
-    def _toggle_sort(self, index:int):
-        state = self._sort_state.get(index, 0)
+    def _toggle_sort(self, index: int):
+        """Cicla entre sem ordenação, asc e desc."""
+        state = self._contas_sort_state.get(index, 0)
         if state == 0:
             self.tabela.sortItems(index, Qt.AscendingOrder)
             new = 1
@@ -1530,29 +1519,66 @@ class GerenciamentoContasWidget(QWidget):
             self.tabela.sortItems(index, Qt.DescendingOrder)
             new = 2
         else:
-            # volta à ordem “natural”
+            # volta à ordem original
             self.carregar_contas()
             new = 0
-        self._sort_state = {index: new}
+        self._contas_sort_state = {index: new}
+
+    def _toggle_column(self, col: int, visible: bool):
+        """Exibe/oculta coluna e salva no JSON."""
+        self.tabela.setColumnHidden(col, not visible)
+        self._save_column_filter()
 
     def _save_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, "contas_filter.json")
-        vis = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
-        with open(path, "w") as f:
-            json.dump(vis, f)
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            cfg = json.load(open(path, "r", encoding="utf-8"))
+        except:
+            cfg = {}
+        # salve um dicionário com duas chaves: "lanc" e "contas"
+        cfg["contas"] = [
+            not self.tabela.isColumnHidden(c)
+            for c in range(self.tabela.columnCount())
+        ]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
 
     def _load_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, "contas_filter.json")
-        if not os.path.exists(path):
+        """Aplica o JSON salvo (mesmo arquivo de lanc) à tabela de contas."""
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            cfg = json.load(open(path, "r", encoding="utf-8"))
+            vis = cfg.get("contas", [])
+        except:
             return
-        vis = json.load(open(path))
         for c, shown in enumerate(vis):
             self.tabela.setColumnHidden(c, not shown)
-        # sincroniza checkboxes do menu
+        # sincroniza o menu de checkboxes
         for action in self._filter_menu.actions():
             chk = action.defaultWidget()
-            idx = ["Código","Banco","Agência","Conta","Saldo Inicial"].index(chk.text())
-            chk.setChecked(not self.tabela.isColumnHidden(idx))
+            if isinstance(chk, QCheckBox):
+                lbl = chk.text()
+                idx = self._contas_labels.index(lbl)
+                chk.setChecked(not self.tabela.isColumnHidden(idx))
+
+    def carregar_contas(self):
+        rows = self.db.fetch_all(
+            "SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria ORDER BY nome_banco"
+        )
+        self.tabela.setRowCount(len(rows))
+        for r, (id_, cod, banco, ag, cont, saldo) in enumerate(rows):
+            br = f"{saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            vals = [cod, banco, ag, cont, f"R$ {br}"]
+            for c, v in enumerate(vals):
+                itm = QTableWidgetItem(v)
+                itm.setTextAlignment(Qt.AlignCenter)
+                self.tabela.setItem(r, c, itm)
+            # grava o ID no UserRole da primeira coluna
+            self.tabela.item(r, 0).setData(Qt.UserRole, id_)
+
+        # limpa seleção e botoes
+        self.btn_editar.setEnabled(False)
+        self.btn_excluir.setEnabled(False)
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -1565,29 +1591,21 @@ class GerenciamentoContasWidget(QWidget):
             self.carregar_contas()
 
     def editar_conta(self):
-        id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
+        id_ = self.tabela.item(self.selected_row, 0).data(Qt.UserRole)
         dlg = CadastroContaDialog(self, id_)
         if dlg.exec():
             self.carregar_contas()
 
     def excluir_conta(self):
-        indices = self.tabela.selectionModel().selectedRows()
-        if not indices:
+        rows = self.tabela.selectionModel().selectedRows()
+        if not rows:
             return
-        codigos = [self.tabela.item(idx.row(), 1).text() for idx in indices]
-        resp = QMessageBox.question(
-            self, "Confirmar Exclusão",
-            f"Excluir contas: {', '.join(codigos)}?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if resp != QMessageBox.Yes:
+        cods = [self.tabela.item(r.row(),1).text() for r in rows]
+        if QMessageBox.question(self, "Excluir", f"Excluir contas: {', '.join(cods)}?") != QMessageBox.Yes:
             return
-        for idx in indices:
-            id_ = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
-            try:
-                self.db.execute_query("DELETE FROM conta_bancaria WHERE id=?", (id_,))
-            except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao excluir conta ID {id_}: {e}")
+        for r in rows:
+            cid = self.tabela.item(r.row(),0).data(Qt.UserRole)
+            self.db.execute_query("DELETE FROM conta_bancaria WHERE id=?", (cid,))
         self.carregar_contas()
 
 # --- WIDGET GERENCIAMENTO IMÓVEIS ---
@@ -1598,8 +1616,16 @@ class GerenciamentoImoveisWidget(QWidget):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10, 10, 10, 10)
 
-        # monta a UI
+        # cabeçalhos e estado de ordenação
+        self._imoveis_labels = ["Código", "Nome", "UF", "Área Total", "Área Utilizada", "% Part."]
+        self._imoveis_sort_state = {}
+
+        # monta a UI (cria self.tabela e self._imoveis_filter_menu)
         self._build_ui()
+
+        # agora a tabela existe, carregue o filtro salvo
+        self._load_imoveis_column_filter()
+
         # carrega dados iniciais
         self.carregar_imoveis()
 
@@ -1632,21 +1658,95 @@ class GerenciamentoImoveisWidget(QWidget):
         self.search_imoveis.textChanged.connect(self._filter_imoveis)
         tl.addWidget(self.search_imoveis)
 
+        # botão de filtro de colunas
+        btn_filter = QToolButton()
+        btn_filter.setText("⚙️")
+        btn_filter.setAutoRaise(True)
+        btn_filter.setPopupMode(QToolButton.InstantPopup)
+        self._imoveis_filter_menu = QMenu(self)
+        for col, lbl in enumerate(self._imoveis_labels):
+            wa = QWidgetAction(self._imoveis_filter_menu)
+            chk = QCheckBox(lbl)
+            chk.setChecked(True)
+            chk.toggled.connect(lambda vis, c=col: self._toggle_imoveis_column(c, vis))
+            wa.setDefaultWidget(chk)
+            self._imoveis_filter_menu.addAction(wa)
+        btn_filter.setMenu(self._imoveis_filter_menu)
+        tl.addWidget(btn_filter)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
         # Tabela
-        self.tabela = QTableWidget(0, 6)
-        self.tabela.setHorizontalHeaderLabels([
-            "Código", "Nome", "UF", "Área Total", "Área Utilizada", "% Part."
-        ])
-        self.tabela.verticalHeader().setVisible(False)
+        self.tabela = QTableWidget(0, len(self._imoveis_labels))
+        self.tabela.setHorizontalHeaderLabels(self._imoveis_labels)
+        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabela.setSelectionMode(QTableWidget.SingleSelection)
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
+        self.tabela.verticalHeader().setVisible(False)
         hdr = self.tabela.horizontalHeader()
+        hdr.setHighlightSections(False)
+        hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)
-        self.tabela.cellClicked.connect(self._on_select)
+        hdr.sectionDoubleClicked.connect(self._toggle_sort_imoveis)
+        self.tabela.cellClicked.connect(self._select_row)
         self.layout.addWidget(self.tabela)
+
+    def _toggle_sort_imoveis(self, index: int):
+        state = self._imoveis_sort_state.get(index, 0)
+        if state == 0:
+            self.tabela.sortItems(index, Qt.AscendingOrder); new = 1
+        elif state == 1:
+            self.tabela.sortItems(index, Qt.DescendingOrder); new = 2
+        else:
+            self.carregar_imoveis(); new = 0
+        self._imoveis_sort_state = {index: new}
+
+    def _toggle_imoveis_column(self, col: int, visible: bool):
+        """Esconde/exibe a coluna e salva apenas a seção 'imoveis' no lanc_filter.json."""
+        self.tabela.setColumnHidden(col, not visible)
+        self._save_imoveis_column_filter()
+
+    def _save_imoveis_column_filter(self):
+        """Atualiza só o tópico 'imoveis' em lanc_filter.json, preservando as outras seções."""
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        # carrega tudo (ou cria vazio)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+        # gera lista de visibilidade
+        vis = [not self.tabela.isColumnHidden(c)
+               for c in range(self.tabela.columnCount())]
+        # atualiza só o tópico imoveis
+        cfg["imoveis"] = vis
+        # salva de volta
+        os.makedirs(CACHE_FOLDER, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+    def _load_imoveis_column_filter(self):
+        """Lê o tópico 'imoveis' de lanc_filter.json e aplica à tabela."""
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            vis = cfg.get("imoveis", [])
+        except Exception:
+            return
+        # aplica visibilidade
+        for c, shown in enumerate(vis):
+            self.tabela.setColumnHidden(c, not shown)
+        # sincroniza o menu de checkboxes
+        for wa in self._imoveis_filter_menu.actions():
+            chk = wa.defaultWidget()
+            if isinstance(chk, QCheckBox):
+                idx = self._imoveis_labels.index(chk.text())
+                chk.setChecked(not self.tabela.isColumnHidden(idx))
+
 
     def _filter_imoveis(self, text: str):
         text = text.lower()
@@ -1804,13 +1904,23 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.db = Database()
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10,10,10,10)
+
+        # cabeçalhos e estado de ordenação
+        self._participantes_labels = ["CPF/CNPJ","Nome","Tipo","Cadastro"]
+        self._participantes_sort_state = {}
+
+        # monta UI (inclui self.tabela e self._part_filter_menu)
         self._build_ui()
+        # aplica filtro salvo
+        self._load_participantes_column_filter()
+        # carrega dados
         self.carregar_participantes()
 
     def _build_ui(self):
         tl = QHBoxLayout()
         tl.setContentsMargins(0,0,10,10)
 
+        # CRUD + pesquisa
         self.btn_novo = QPushButton("Novo Participante")
         self.btn_novo.setIcon(QIcon.fromTheme("document-new"))
         self.btn_novo.clicked.connect(self.novo_participante)
@@ -1833,31 +1943,98 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.btn_importar.clicked.connect(self.importar_participantes)
         tl.addWidget(self.btn_importar)
 
-        # barra de pesquisa
         self.search_part = QLineEdit()
         self.search_part.setPlaceholderText("Pesquisar participantes…")
         self.search_part.textChanged.connect(self._filter_participantes)
         tl.addWidget(self.search_part)
 
+        # botão de filtro de colunas
+        btn_filter = QToolButton()
+        btn_filter.setText("⚙️")
+        btn_filter.setAutoRaise(True)
+        btn_filter.setPopupMode(QToolButton.InstantPopup)
+        self._part_filter_menu = QMenu(self)
+        for col, lbl in enumerate(self._participantes_labels):
+            wa = QWidgetAction(self._part_filter_menu)
+            chk = QCheckBox(lbl)
+            chk.setChecked(True)
+            chk.toggled.connect(lambda vis, c=col: self._toggle_participantes_column(c, vis))
+            wa.setDefaultWidget(chk)
+            self._part_filter_menu.addAction(wa)
+        btn_filter.setMenu(self._part_filter_menu)
+        tl.addWidget(btn_filter)
+
         tl.addStretch()
         self.layout.addLayout(tl)
 
-        # **tabela de participantes**
-        self.tabela = QTableWidget(0,4)
-        self.tabela.setHorizontalHeaderLabels(["CPF/CNPJ","Nome","Tipo","Cadastro"])
+        # tabela
+        self.tabela = QTableWidget(0, len(self._participantes_labels))
+        self.tabela.setHorizontalHeaderLabels(self._participantes_labels)
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
-        hdr = self.tabela.horizontalHeader()
-        hdr.setHighlightSections(False)
-        hdr.setDefaultAlignment(Qt.AlignCenter)
-        hdr.setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabela.cellClicked.connect(self._select_row)
 
-        # **NUNCA ESQUECER** esta linha, senão não aparece nada!
+        hdr = self.tabela.horizontalHeader()
+        hdr.setHighlightSections(False)
+        hdr.setDefaultAlignment(Qt.AlignCenter)
+        hdr.setSectionResizeMode(QHeaderView.Stretch)
+        # duplo‑clique para ordenação cíclica
+        hdr.sectionDoubleClicked.connect(self._toggle_sort_participantes)
+
         self.layout.addWidget(self.tabela)
+
+    def _toggle_sort_participantes(self, index: int):
+        """Cicla entre sem ordenação, asc e desc."""
+        state = self._participantes_sort_state.get(index, 0)
+        if state == 0:
+            self.tabela.sortItems(index, Qt.AscendingOrder)
+            new = 1
+        elif state == 1:
+            self.tabela.sortItems(index, Qt.DescendingOrder)
+            new = 2
+        else:
+            self.carregar_participantes()
+            new = 0
+        self._participantes_sort_state = {index: new}
+
+    def _toggle_participantes_column(self, col: int, visible: bool):
+        """Esconde/exibe coluna e salva só 'participantes' no lanc_filter.json."""
+        self.tabela.setColumnHidden(col, not visible)
+        self._save_participantes_column_filter()
+
+    def _save_participantes_column_filter(self):
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except:
+            cfg = {}
+        vis = [not self.tabela.isColumnHidden(c)
+               for c in range(self.tabela.columnCount())]
+        cfg["participantes"] = vis
+        os.makedirs(CACHE_FOLDER, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+    def _load_participantes_column_filter(self):
+        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            vis = cfg.get("participantes", [])
+        except:
+            return
+        for c, shown in enumerate(vis):
+            self.tabela.setColumnHidden(c, not shown)
+        # sincroniza checkboxes
+        for wa in self._part_filter_menu.actions():
+            chk = wa.defaultWidget()
+            if isinstance(chk, QCheckBox):
+                idx = self._participantes_labels.index(chk.text())
+                chk.setChecked(not self.tabela.isColumnHidden(idx))
 
     def _filter_participantes(self, text: str):
         text = text.lower()
@@ -1887,6 +2064,7 @@ class GerenciamentoParticipantesWidget(QWidget):
                 self, "Importação Falhou",
                 "Arquivo não segue o layout esperado e não foi importado."
             )
+
 
     def _import_participantes_txt(self, path):
         with open(path, encoding='utf-8') as f:
@@ -1922,25 +2100,25 @@ class GerenciamentoParticipantesWidget(QWidget):
 
     def carregar_participantes(self):
         rows = self.db.fetch_all(
-            "SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC"
+            "SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro "
+            "FROM participante ORDER BY data_cadastro DESC"
         )
         self.tabela.setRowCount(len(rows))
         tipos = {1:"PJ",2:"PF",3:"Órgão Público",4:"Outros"}
 
         for r, (id_, cpf, nome, tipo, data_str) in enumerate(rows):
-            # formata data de YYYY‑MM‑DD para DD‑MM‑YYYY
             formatted_date = QDate.fromString(data_str, "yyyy-MM-dd").toString("dd/MM/yyyy")
-            vals = [
-                cpf,
-                nome,
-                tipos.get(tipo, str(tipo)),
-                formatted_date
-            ]
+            vals = [cpf, nome, tipos.get(tipo, str(tipo)), formatted_date]
             for c, v in enumerate(vals):
-                self.tabela.setItem(r, c, QTableWidgetItem(v))
+                item = QTableWidgetItem(v)
+                item.setTextAlignment(Qt.AlignCenter)
+                self.tabela.setItem(r, c, item)
             self.tabela.item(r, 0).setData(Qt.UserRole, id_)
 
-    def _select_row(self,row,_):
+        self.btn_editar.setEnabled(False)
+        self.btn_excluir.setEnabled(False)
+
+    def _select_row(self, row, _):
         self.selected_row = row
         self.btn_editar.setEnabled(True)
         self.btn_excluir.setEnabled(True)
@@ -1952,7 +2130,7 @@ class GerenciamentoParticipantesWidget(QWidget):
 
     def editar_participante(self):
         id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
-        dlg = CadastroParticipanteDialog(self,id_)
+        dlg = CadastroParticipanteDialog(self, id_)
         if dlg.exec():
             self.carregar_participantes()
 
@@ -1969,11 +2147,11 @@ class GerenciamentoParticipantesWidget(QWidget):
         if resp != QMessageBox.Yes:
             return
         for idx in indices:
-            id_ = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
+            pid = self.tabela.item(idx.row(), 0).data(Qt.UserRole)
             try:
-                self.db.execute_query("DELETE FROM participante WHERE id=?", (id_,))
+                self.db.execute_query("DELETE FROM participante WHERE id=?", (pid,))
             except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Erro ao excluir participante ID {id_}: {e}")
+                QMessageBox.critical(self, "Erro", f"Erro ao excluir participante ID {pid}: {e}")
         self.carregar_participantes()
 
 # --- WIDGET CADASTROS COM ABAS ---
