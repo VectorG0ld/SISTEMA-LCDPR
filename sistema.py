@@ -35,12 +35,12 @@ def valida_cpf(cpf: str) -> bool:
 
 # —————— Cache e consulta Receita ——————
 CACHE_FOLDER = 'banco_de_dados'
-CACHE_FILE   = os.path.join(CACHE_FOLDER, 'receita_cache.json')
+CACHE_FILE   = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'receita_cache.json')
 API_URL_CNPJ = 'https://www.receitaws.com.br/v1/cnpj/'
 API_URL_CPF  = 'https://www.receitaws.com.br/v1/cpf/'
 
 # —————— Configuração para salvar último caminho do TXT LCDPR ——————
-TXT_PREF_FILE = os.path.join(CACHE_FOLDER, 'lcdpr_txt_path.json')
+TXT_PREF_FILE = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lcdpr_txt_path.json')
 
 def load_last_txt_path() -> str:
     os.makedirs(CACHE_FOLDER, exist_ok=True)
@@ -88,16 +88,34 @@ def consulta_receita(cpf_cnpj: str, tipo: str = 'cnpj') -> dict:
     save_cache(cache)
     return data
 
-# --- CONSTANTES E ESTILO GLOBAL ---
-DB_FILENAME = 'lcdpr.db'
 APP_ICON    = 'agro_icon.png'
 
-# --- CLASSE DE ACESSO AOS DADOS ---
+# 1) Pasta base do seu projeto (onde está esse script)
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 2) Caminho completo até a pasta que você descreveu
+DB_DIR = os.path.join(
+    PROJECT_DIR,
+    'banco_de_dados',
+    'Cleuber Marcos',
+    'data'
+)
+
+# 3) Caminho final do arquivo .db
+DB_FILENAME = os.path.join(DB_DIR, 'lcdpr.db')
+
+# 4) Garante que a hierarquia exista
+os.makedirs(DB_DIR, exist_ok=True)
+
 class Database:
     def __init__(self, filename: str = DB_FILENAME):
-        # abre/cria o arquivo e gera self.conn
-        self.conn = sqlite3.connect(filename)
-        # garante que todas as tabelas e views existam
+        try:
+            self.conn = sqlite3.connect(filename)
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(
+                f"Não foi possível abrir/criar o banco em '{filename}':\n  {e}"
+            )
+
         self._create_tables()
         self._create_views()
 
@@ -127,7 +145,6 @@ class Database:
             area_utilizada REAL,
             data_cadastro DATE DEFAULT CURRENT_DATE
         );
-
         -- Contas bancárias
         CREATE TABLE IF NOT EXISTS conta_bancaria (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,7 +157,6 @@ class Database:
             saldo_inicial REAL DEFAULT 0,
             data_abertura DATE DEFAULT CURRENT_DATE
         );
-
         -- Participantes
         CREATE TABLE IF NOT EXISTS participante (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,7 +165,6 @@ class Database:
             tipo_contraparte INTEGER NOT NULL,
             data_cadastro DATE DEFAULT CURRENT_DATE
         );
-
         -- Culturas
         CREATE TABLE IF NOT EXISTS cultura (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -158,7 +173,6 @@ class Database:
             ciclo TEXT,
             unidade_medida TEXT
         );
-
         -- Áreas de produção
         CREATE TABLE IF NOT EXISTS area_producao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,7 +185,6 @@ class Database:
             FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id),
             FOREIGN KEY(cultura_id) REFERENCES cultura(id)
         );
-
         -- Estoques
         CREATE TABLE IF NOT EXISTS estoque (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,7 +198,6 @@ class Database:
             imovel_id INTEGER,
             FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id)
         );
-
         -- Lançamentos contábeis
         CREATE TABLE IF NOT EXISTS lancamento (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1542,7 +1554,7 @@ class GerenciamentoContasWidget(QWidget):
         self._save_column_filter()
 
     def _save_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             cfg = json.load(open(path, "r", encoding="utf-8"))
         except:
@@ -1557,7 +1569,7 @@ class GerenciamentoContasWidget(QWidget):
 
     def _load_column_filter(self):
         """Aplica o JSON salvo (mesmo arquivo de lanc) à tabela de contas."""
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             cfg = json.load(open(path, "r", encoding="utf-8"))
             vis = cfg.get("contas", [])
@@ -1723,7 +1735,7 @@ class GerenciamentoImoveisWidget(QWidget):
 
     def _save_imoveis_column_filter(self):
         """Atualiza só o tópico 'imoveis' em lanc_filter.json, preservando as outras seções."""
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         # carrega tudo (ou cria vazio)
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -1742,7 +1754,7 @@ class GerenciamentoImoveisWidget(QWidget):
 
     def _load_imoveis_column_filter(self):
         """Lê o tópico 'imoveis' de lanc_filter.json e aplica à tabela."""
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -2017,7 +2029,7 @@ class GerenciamentoParticipantesWidget(QWidget):
         self._save_participantes_column_filter()
 
     def _save_participantes_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -2031,7 +2043,7 @@ class GerenciamentoParticipantesWidget(QWidget):
             json.dump(cfg, f, ensure_ascii=False, indent=2)
 
     def _load_participantes_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -2298,7 +2310,7 @@ class MainWindow(QMainWindow):
         l_l.addWidget(self.tab_lanc)
 
         # carrega visibilidade de colunas salva
-        config_file = os.path.join(CACHE_FOLDER, 'lanc_columns.json')
+        config_file = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lanc_columns.json')
         if os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
                 vis = json.load(f)
@@ -2376,7 +2388,7 @@ class MainWindow(QMainWindow):
     def _save_lanc_filter_settings(self):
         """Grava um JSON com o estado de todas as seções (contas, participantes, imoveis, lançamentos)."""
         os.makedirs(CACHE_FOLDER, exist_ok=True)
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         # carrega tudo que já existe
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -2394,7 +2406,7 @@ class MainWindow(QMainWindow):
 
     def _load_lanc_filter_settings(self):
         """Carrega o JSON e aplica apenas o tópico de lançamentos."""
-        path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
+        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
