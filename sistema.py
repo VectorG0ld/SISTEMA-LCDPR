@@ -400,92 +400,78 @@ class CurrencyLineEdit(QLineEdit):
 
 # --- DIALOG BASE PARA CADASTROS ---
 class CadastroBaseDialog(QDialog):
-    def __init__(self, title: str, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(title)
-        self.setMinimumSize(900, 800)
         self.db = Database()
-
         # Layout principal
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
-
-        # Cabeçalho
-        self._add_header(title)
-
-        # Formulário com alinhamentos e espaçamentos ajustados
+        # Cabeçalho e formulário serão adicionados nas subclasses
         self.form_layout = QFormLayout()
-        self.form_layout.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
-        self.form_layout.setLabelAlignment(Qt.AlignRight)
-        self.form_layout.setHorizontalSpacing(20)
-        self.form_layout.setVerticalSpacing(10)
         self.layout.addLayout(self.form_layout)
-
-        # Botões Salvar / Cancelar
         self._add_buttons()
-
-    def _add_header(self, text: str):
-        lbl = QLabel(text)
-        lbl.setFont(QFont('', 16, QFont.Bold))
-        lbl.setStyleSheet("color: #ffffff; margin-bottom: 15px;")
-        self.layout.addWidget(lbl)
 
     def _add_buttons(self):
         btn_layout = QHBoxLayout()
         btn_layout.setContentsMargins(0, 20, 0, 0)
         btn_layout.addStretch()
-
         self.btn_salvar = QPushButton("Salvar")
         self.btn_salvar.setObjectName("success")
         self.btn_salvar.clicked.connect(self.salvar)
         btn_layout.addWidget(self.btn_salvar)
-
         btn_cancelar = QPushButton("Cancelar")
         btn_cancelar.setObjectName("danger")
         btn_cancelar.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancelar)
-
         self.layout.addLayout(btn_layout)
 
     def salvar(self):
-        raise NotImplementedError
+        raise NotImplementedError("Cada diálogo deve implementar seu próprio salvar()")
 
 # --- DIALOG CÓDIGO DE IMÓVEL ---
 class CadastroImovelDialog(CadastroBaseDialog):
     def __init__(self, parent=None, imovel_id=None):
-        super().__init__("Cadastro de Imóvel Rural", parent)
+        super().__init__(parent)
         self.imovel_id = imovel_id
+        self.configure_window()
         self._build_ui()
         self._load_data()
 
-    def _build_ui(self):
-        # Grupo Identificação
-        grp = QGroupBox("Identificação do Imóvel")
-        f = QFormLayout(grp)
-        self.cod_imovel      = QLineEdit(); f.addRow("Código:", self.cod_imovel)
-        self.pais            = QComboBox(); self.pais.addItems(["BR","AR","US","…"])
-        f.addRow("País:", self.pais)
-        self.moeda           = QComboBox(); self.moeda.addItems(["BRL","USD","EUR","…"])
-        f.addRow("Moeda:", self.moeda)
-        self.nome_imovel     = QLineEdit(); f.addRow("Nome:", self.nome_imovel)
-        self.cad_itr         = QLineEdit(); f.addRow("CAD ITR:", self.cad_itr)
-        self.caepf           = QLineEdit(); f.addRow("CAEPF:", self.caepf)
-        self.insc_estadual   = QLineEdit(); f.addRow("Inscrição Est.:", self.insc_estadual)
-        self.form_layout.addRow(grp)
+    def configure_window(self):
+        self.setWindowTitle("Cadastro de Imóvel Rural")
+        self.setMinimumSize(900, 780)
 
-        # Grupo Localização
+    def _build_ui(self):
+        header = QLabel("Cadastro de Imóvel Rural")
+        header.setFont(QFont('', 14, QFont.Bold))
+        header.setStyleSheet("color: #ffffff; margin-bottom: 8px;")
+        self.layout.insertWidget(0, header)
+
+        # Identificação
+        grp1 = QGroupBox("Identificação do Imóvel")
+        f1 = QFormLayout(grp1)
+        self.cod_imovel = QLineEdit(); f1.addRow("Código:", self.cod_imovel)
+        self.pais = QComboBox(); self.pais.addItems(["BR","AR","US","…"]); f1.addRow("País:", self.pais)
+        self.moeda = QComboBox(); self.moeda.addItems(["BRL","USD","EUR","…"]); f1.addRow("Moeda:", self.moeda)
+        self.nome_imovel = QLineEdit(); f1.addRow("Nome:", self.nome_imovel)
+        self.cad_itr = QLineEdit(); f1.addRow("CAD ITR:", self.cad_itr)
+        self.caepf = QLineEdit(); f1.addRow("CAEPF:", self.caepf)
+        self.insc_estadual = QLineEdit(); f1.addRow("Inscrição Est.:", self.insc_estadual)
+        self.form_layout.addRow(grp1)
+
+        # Localização
         grp2 = QGroupBox("Localização")
         f2 = QFormLayout(grp2)
         self.endereco = QLineEdit(); f2.addRow("Endereço:", self.endereco)
-        self.num      = QLineEdit(); f2.addRow("Número:", self.num)
-        self.compl    = QLineEdit(); f2.addRow("Complemento:", self.compl)
-        self.bairro   = QLineEdit(); f2.addRow("Bairro:", self.bairro)
-        self.uf       = QLineEdit(); f2.addRow("UF:", self.uf)
-        self.cod_mun  = QLineEdit(); f2.addRow("Cód. Município:", self.cod_mun)
-        self.cep      = QLineEdit(); f2.addRow("CEP:", self.cep)
+        self.num = QLineEdit(); f2.addRow("Número:", self.num)
+        self.compl = QLineEdit(); f2.addRow("Complemento:", self.compl)
+        self.bairro = QLineEdit(); f2.addRow("Bairro:", self.bairro)
+        self.uf = QLineEdit(); f2.addRow("UF:", self.uf)
+        self.cod_mun = QLineEdit(); f2.addRow("Cód. Município:", self.cod_mun)
+        self.cep = QLineEdit(); f2.addRow("CEP:", self.cep)
         self.form_layout.addRow(grp2)
 
-        # Grupo Exploração
+        # Exploração
         grp3 = QGroupBox("Exploração Agrícola")
         f3 = QFormLayout(grp3)
         self.tipo_exploracao = QComboBox()
@@ -497,17 +483,41 @@ class CadastroImovelDialog(CadastroBaseDialog):
         self.participacao = QLineEdit("100.00"); f3.addRow("Participação (%):", self.participacao)
         self.form_layout.addRow(grp3)
 
+        for w in [self.cod_imovel, self.pais, self.moeda, self.nome_imovel,
+                  self.cad_itr, self.caepf, self.insc_estadual, self.endereco,
+                  self.num, self.compl, self.bairro, self.uf, self.cod_mun,
+                  self.cep, self.tipo_exploracao, self.participacao]:
+            w.setFixedHeight(25)
+
+        grp4 = QGroupBox("Áreas do Imóvel (ha)")
+        f4 = QFormLayout(grp4)
+        self.area_total = QLineEdit()
+        f4.addRow("Área Total:", self.area_total)
+        self.area_utilizada = QLineEdit()
+        f4.addRow("Área Utilizada:", self.area_utilizada)
+        self.form_layout.addRow(grp4)
+
+        for w in [self.area_total, self.area_utilizada]:
+            w.setFixedHeight(25)
+
     def _load_data(self):
         if not self.imovel_id:
             return
         row = self.db.fetch_one("""
-            SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
-                   nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
-                   tipo_exploracao,participacao
+            SELECT cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                   nome_imovel, endereco, num, compl, bairro, uf, cod_mun, cep,
+                   tipo_exploracao, participacao,
+                   area_total, area_utilizada
             FROM imovel_rural WHERE id=?
         """, (self.imovel_id,))
-        if not row: return
-        (cod,pais,moeda,cad,caepf,ie,nome,end,num,comp,bar,uf,mun,cep,tipo,part) = row
+
+        if not row:
+            return
+
+        (cod, pais, moeda, cad, caepf, ie,
+         nome, end, num, comp, bar, uf, mun, cep,
+         tipo, part, at, au) = row
+
         self.cod_imovel.setText(cod)
         self.pais.setCurrentText(pais)
         self.moeda.setCurrentText(moeda)
@@ -524,6 +534,8 @@ class CadastroImovelDialog(CadastroBaseDialog):
         self.cep.setText(cep)
         self.tipo_exploracao.setCurrentIndex(tipo-1)
         self.participacao.setText(f"{part:.2f}")
+        self.area_total.setText(f"{at or 0:.2f}")
+        self.area_utilizada.setText(f"{au or 0:.2f}")
 
     def salvar(self):
         campos = [
@@ -557,7 +569,9 @@ class CadastroImovelDialog(CadastroBaseDialog):
             self.cod_mun.text().strip(),
             self.cep.text().strip(),
             self.tipo_exploracao.currentIndex()+1,
-            float(self.participacao.text())
+            float(self.participacao.text()),
+            float(self.area_total.text() or 0),
+            float(self.area_utilizada.text() or 0),
         )
 
         try:
@@ -566,7 +580,7 @@ class CadastroImovelDialog(CadastroBaseDialog):
                     UPDATE imovel_rural SET
                       cod_imovel=?,pais=?,moeda=?,cad_itr=?,caepf=?,insc_estadual=?,
                       nome_imovel=?,endereco=?,num=?,compl=?,bairro=?,uf=?,cod_mun=?,cep=?,
-                      tipo_exploracao=?,participacao=?
+                      tipo_exploracao=?,participacao=?, area_total=?, area_utilizada=?
                     WHERE id=?
                 """
                 self.db.execute_query(sql, data + (self.imovel_id,))
@@ -576,7 +590,7 @@ class CadastroImovelDialog(CadastroBaseDialog):
                     INSERT INTO imovel_rural (
                       cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
                       nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
-                      tipo_exploracao,participacao
+                      tipo_exploracao,participacao, area_total, area_utilizada
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """
                 self.db.execute_query(sql, data)
@@ -589,30 +603,35 @@ class CadastroImovelDialog(CadastroBaseDialog):
 # --- DIALOG CADASTRO CONTA BANCÁRIA ---
 class CadastroContaDialog(CadastroBaseDialog):
     def __init__(self, parent=None, conta_id=None):
-        super().__init__("Cadastro de Conta Bancária", parent)
+        super().__init__(parent)
         self.conta_id = conta_id
+        self.configure_window()
         self._build_ui()
         self._load_data()
 
+    def configure_window(self):
+        self.setWindowTitle("Cadastro de Conta Bancária")
+        self.setMinimumSize(800, 450)
+
     def _build_ui(self):
+        header = QLabel("Cadastro de Conta Bancária")
+        header.setFont(QFont('', 16, QFont.Bold))
+        header.setStyleSheet("margin-bottom:15px;")
+        self.layout.insertWidget(0, header)
+
         grp1 = QGroupBox("Identificação da Conta")
-        grp1.setContentsMargins(10, 10, 10, 10)
         f1 = QFormLayout(grp1)
-        self.cod_conta = QLineEdit(); self.cod_conta.setPlaceholderText("Código único da conta")
-        f1.addRow("Código da Conta:", self.cod_conta)
-        self.pais_cta = QComboBox()
-        self.pais_cta.addItems(["BR","US","…"])
-        f1.addRow("País da Conta:", self.pais_cta)
+        self.cod_conta = QLineEdit(); self.cod_conta.setPlaceholderText("Código único"); f1.addRow("Código da Conta:", self.cod_conta)
+        self.pais_cta = QComboBox(); self.pais_cta.addItems(["BR","US","…"]); f1.addRow("País:", self.pais_cta)
         self.nome_banco = QLineEdit(); f1.addRow("Nome do Banco:", self.nome_banco)
         self.banco = QLineEdit(); f1.addRow("Código do Banco:", self.banco)
         self.form_layout.addRow(grp1)
+
         grp2 = QGroupBox("Dados Bancários")
-        grp2.setContentsMargins(10, 10, 10, 10)
         f2 = QFormLayout(grp2)
         self.agencia = QLineEdit(); f2.addRow("Agência:", self.agencia)
         self.num_conta = QLineEdit(); f2.addRow("Número da Conta:", self.num_conta)
-        self.saldo_inicial = CurrencyLineEdit()
-        f2.addRow("Saldo Inicial:", self.saldo_inicial)
+        self.saldo_inicial = CurrencyLineEdit(); f2.addRow("Saldo Inicial:", self.saldo_inicial)
         self.form_layout.addRow(grp2)
 
     def _load_data(self):
@@ -1092,13 +1111,16 @@ class LancamentoDialog(QDialog):
     def __init__(self, parent=None, lanc_id=None):
         super().__init__(parent)
         self.lanc_id = lanc_id
-        self.setWindowTitle("Lançamento Contábil")
-        self.setMinimumSize(700, 500)
+        self.configure_window()
         self.db = Database()
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 15, 15, 15)
         self._build_ui()
         self._load_data()
+
+    def configure_window(self):
+        self.setWindowTitle("Lançamento Contábil")
+        self.setMinimumSize(700, 400)
 
     def _build_ui(self):
         form = QFormLayout()
@@ -2180,8 +2202,12 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLE_SHEET)
 
         # define this before _setup_ui()
-        self._lanc_labels = ["ID", "Data", "Imóvel", "Histórico",
-                             "Tipo", "Entrada", "Saída", "Saldo"]
+        self._lanc_labels = [
+            "ID", "Data", "Imóvel",
+            "Documento", "Participante",
+            "Histórico", "Tipo",
+            "Entrada", "Saída", "Saldo"
+        ]
         # 2) Só aí monte toda a UI
         self._setup_ui()
         self._lanc_sort_state = {}
@@ -2273,11 +2299,8 @@ class MainWindow(QMainWindow):
         l_l.addLayout(self.lanc_filter_layout)
 
         # Tabela de lançamentos (cria antes de usar)
-        self.tab_lanc = QTableWidget(0, 8)
-        self.tab_lanc.setHorizontalHeaderLabels([
-            "ID", "Data", "Imóvel", "Histórico",
-            "Tipo", "Entrada", "Saída", "Saldo"
-        ])
+        self.tab_lanc = QTableWidget(0, len(self._lanc_labels))
+        self.tab_lanc.setHorizontalHeaderLabels(self._lanc_labels)
         self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows)
         self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tab_lanc.cellClicked.connect(lambda r, _: (
@@ -2363,22 +2386,49 @@ class MainWindow(QMainWindow):
         self._save_lanc_filter_settings()
 
     def _save_lanc_filter_settings(self):
-        """Grava um JSON com True/False para cada coluna."""
+        """Grava um JSON com o estado de todas as seções (contas, participantes, imoveis, lançamentos)."""
         os.makedirs(CACHE_FOLDER, exist_ok=True)
         path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
-        vis = [not self.tab_lanc.isColumnHidden(c)
-               for c in range(self.tab_lanc.columnCount())]
+        # carrega tudo que já existe
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+        # atualiza só o tópico de lançamentos
+        cfg["lancamentos"] = [
+            not self.tab_lanc.isColumnHidden(c)
+            for c in range(self.tab_lanc.columnCount())
+        ]
+        # salva de volta mantendo os outros tópicos intactos
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(vis, f)
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
 
     def _load_lanc_filter_settings(self):
-        """Carrega o JSON e aplica ao mostrar a janela."""
+        """Carrega o JSON e aplica apenas o tópico de lançamentos."""
         path = os.path.join(CACHE_FOLDER, "lanc_filter.json")
         try:
             with open(path, "r", encoding="utf-8") as f:
-                vis = json.load(f)
-        except:
+                cfg = json.load(f)
+            vis = cfg.get("lancamentos", [])
+        except Exception:
             return
+
+        # aplica visibilidade das colunas de lançamentos
+        for c, shown in enumerate(vis):
+            self.tab_lanc.setColumnHidden(c, not shown)
+
+        # sincroniza os checkboxes do menu
+        for wa in self._lanc_filter_menu.actions():
+            if isinstance(wa, QWidgetAction):
+                chk = wa.defaultWidget()
+                if isinstance(chk, QCheckBox):
+                    label = chk.text()
+                    try:
+                        idx = self._lanc_labels.index(label)
+                    except ValueError:
+                        continue
+                    chk.setChecked(not self.tab_lanc.isColumnHidden(idx))
     
         # first, hide/show columns based on the saved vis list
         for c, shown in enumerate(vis):
@@ -2522,52 +2572,56 @@ class MainWindow(QMainWindow):
         d1 = self.dt_ini.date().toString("dd/MM/yyyy")
         d2 = self.dt_fim.date().toString("dd/MM/yyyy")
         q = f"""
-        SELECT l.id, l.data, i.nome_imovel, l.historico,
+        SELECT l.id, l.data, i.nome_imovel,
+               l.num_doc,
+               p.nome AS participante,
+               l.historico,
                CASE l.tipo_lanc WHEN 1 THEN 'Receita'
                                  WHEN 2 THEN 'Despesa'
-                                 ELSE 'Adiantamento' END,
+                                 ELSE 'Adiantamento' END AS tipo,
                l.valor_entrada, l.valor_saida,
-               (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) as saldo
+               (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo
         FROM lancamento l
         JOIN imovel_rural i ON l.cod_imovel = i.id
+        LEFT JOIN participante p ON l.id_participante = p.id
         WHERE l.data BETWEEN '{d1}' AND '{d2}'
         ORDER BY l.data DESC
         """
         rows = self.db.fetch_all(q)
         self.tab_lanc.setRowCount(len(rows))
-    
+
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
-                # ID column: integer sort
+                # ID
                 if c == 0:
                     item = NumericItem(int(val))
-                # date column: plain text
+                # Data
                 elif c == 1:
                     date = QDate.fromString(val, "dd/MM/yyyy")
                     item = QTableWidgetItem(date.toString("dd/MM/yyyy"))
-                # monetary columns: numeric sort + formatted text
-                elif c in (5, 6, 7):
+                # Valores monetários: colunas 7=Entrada, 8=Saída, 9=Saldo
+                elif c in (7, 8, 9):
                     num = float(val)
                     br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                     item = NumericItem(num, f"R$ {br}")
-                # all others: plain text
+                # Textos (Imóvel, Documento, Participante, Histórico, Tipo)
                 else:
                     item = QTableWidgetItem(str(val))
-    
-                # center text
+
+                # Centraliza texto
                 item.setTextAlignment(Qt.AlignCenter)
-    
-                # apply colors
-                if c == 5:
+
+                # Cores específicas
+                if c == 7:      # Entrada
                     item.setForeground(QColor("#27ae60"))
-                elif c == 6:
+                elif c == 8:    # Saída
                     item.setForeground(QColor("#e74c3c"))
-                elif c == 7:
+                elif c == 9:    # Saldo
                     color = "#27ae60" if float(val) >= 0 else "#e74c3c"
                     item.setForeground(QColor(color))
-    
+
                 self.tab_lanc.setItem(r, c, item)
-        
+
     def editar_lancamento(self):
         row = self.tab_lanc.currentRow()
         lanc_id = int(self.tab_lanc.item(row,0).text())
