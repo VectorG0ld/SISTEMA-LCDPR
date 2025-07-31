@@ -723,8 +723,6 @@ class CadastroContaDialog(CadastroBaseDialog):
                 f"Não foi possível salvar a conta bancária:\n{e}"
             )
 
-
-
 # --- DIALOG CADASTRO PARTICIPANTE COM MÁSCARA DINÂMICA ---
 class CadastroParticipanteDialog(QDialog):
     def __init__(self, parent=None, participante_id=None):
@@ -983,7 +981,6 @@ class ParametrosDialog(QDialog):
         QMessageBox.information(self, "Sucesso", "Parâmetros salvos com sucesso!")
         self.accept()
 
-
 # --- DIALOG DE RELATÓRIO POR PERÍODO ---
 class RelatorioPeriodoDialog(QDialog):
     def __init__(self, tipo, parent=None):
@@ -1006,7 +1003,6 @@ class RelatorioPeriodoDialog(QDialog):
             self.dt_ini.date().toString("dd/MM/yyyy"),
             self.dt_fim.date().toString("dd/MM/yyyy")
         )
-
 
 # --- WIDGET DASHBOARD (Painel) COM FILTRO INICIAL/FINAL E %
 class DashboardWidget(QWidget):
@@ -1104,7 +1100,6 @@ class DashboardWidget(QWidget):
             pct = slice.percentage() * 100
             slice.setLabelVisible(True)
             slice.setLabel(f"{slice.label()} ({pct:.1f}%)")
-
 
 # --- DIALOG PARA LANÇAMENTOS CONTÁBEIS ---
 class LancamentoDialog(QDialog):
@@ -1230,7 +1225,6 @@ class LancamentoDialog(QDialog):
         self.valor_entrada.setText(f"{ent:.2f}")
         self.valor_saida.setText(f"{sai:.2f}")
     
-    
     def salvar(self):
         try:
             # Campos obrigatórios
@@ -1323,7 +1317,6 @@ class LancamentoDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao salvar lançamento: {e}")
 
-
     def carregar_imoveis(self):
         termo = f"%{self.pesquisa.text()}%"
         rows = self.db.fetch_all("""
@@ -1374,7 +1367,6 @@ class LancamentoDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao excluir: {e}")
 
-
 # --- WIDGET GERENCIAMENTO CONTAS ---
 class GerenciamentoContasWidget(QWidget):
     def __init__(self, parent=None):
@@ -1390,7 +1382,6 @@ class GerenciamentoContasWidget(QWidget):
         self._build_ui()
         self._load_column_filter()
         self.carregar_contas()
-
 
     def _build_ui(self):
         # ===== Top bar: botões + pesquisa + filtro =====
@@ -1492,7 +1483,6 @@ class GerenciamentoContasWidget(QWidget):
                 self, "Importação Falhou",
                 "Arquivo não segue o layout esperado e não foi importado."
             )
-
 
     def _import_contas_txt(self, path):
         with open(path, encoding='utf-8') as f:
@@ -1768,7 +1758,6 @@ class GerenciamentoImoveisWidget(QWidget):
             if isinstance(chk, QCheckBox):
                 idx = self._imoveis_labels.index(chk.text())
                 chk.setChecked(not self.tabela.isColumnHidden(idx))
-
 
     def _filter_imoveis(self, text: str):
         text = text.lower()
@@ -2191,7 +2180,6 @@ class CadastrosWidget(QTabWidget):
         for i,ic in enumerate(icons):
             self.setTabIcon(i, QIcon.fromTheme(ic))
 
-
 # --- JANELA PRINCIPAL ---
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -2429,11 +2417,11 @@ class MainWindow(QMainWindow):
                     except ValueError:
                         continue
                     chk.setChecked(not self.tab_lanc.isColumnHidden(idx))
-    
+
         # first, hide/show columns based on the saved vis list
         for c, shown in enumerate(vis):
             self.tab_lanc.setColumnHidden(c, not shown)
-    
+
         # now sync all the checkboxes in the menu
         for wa in self._lanc_filter_menu.actions():
             # only QWidgetActions hold our QCheckBox
@@ -2486,7 +2474,6 @@ class MainWindow(QMainWindow):
     
         dlg.exec()
     
-    
     def _filter_lancamentos(self, text: str):
         text = text.lower()
         for row in range(self.tab_lanc.rowCount()):
@@ -2497,7 +2484,6 @@ class MainWindow(QMainWindow):
                     hide = False
                     break
             self.tab_lanc.setRowHidden(row, hide)
-
 
     def _create_menu(self):
         mb = self.menuBar()
@@ -2566,7 +2552,6 @@ class MainWindow(QMainWindow):
         btn_import.clicked.connect(lambda: (dlg.accept(), self.importar_arquivo_lcdpr()))
 
         dlg.exec()
-
 
     def carregar_lancamentos(self):
         d1 = self.dt_ini.date().toString("dd/MM/yyyy")
@@ -2906,7 +2891,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", str(e))
 
-
     def show_export_dialog(self, parent_dialog):
         parent_dialog.hide()
 
@@ -3097,7 +3081,6 @@ class MainWindow(QMainWindow):
                         nat
                     ]
                 )
-
 
     def _import_lancamentos_excel(self, path):
         df = pd.read_excel(path, dtype=str)
