@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
-    QWidgetAction
+    QWidgetAction, QInputDialog
 )
 from PySide6.QtCore import Qt, QDate, QSize, QSettings
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
@@ -92,6 +92,8 @@ APP_ICON    = 'agro_icon.png'
 
 # 1) Pasta base do seu projeto (onde está esse script)
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+ICONS_DIR = os.path.join(PROJECT_DIR, 'banco_de_dados', 'icons')
+LOCK_ICON = os.path.join(ICONS_DIR, 'lock.png')
 
 # Perfil dinâmico
 CURRENT_PROFILE = "Cleuber Marcos"
@@ -105,6 +107,147 @@ def get_profile_db_filename():
     os.makedirs(base, exist_ok=True)
     return os.path.join(base, 'lcdpr.db')
 
+# ── (1) Configuração da pasta de login ─────────────────────────────
+LOGIN_DIR   = os.path.join(PROJECT_DIR, 'banco_de_dados', 'login')
+ADMIN_FILE  = os.path.join(LOGIN_DIR, 'admin.json')
+USERS_FILE  = os.path.join(LOGIN_DIR, 'users.json')
+
+def ensure_login_files():
+    os.makedirs(LOGIN_DIR, exist_ok=True)
+    # cria admin.json com senha padrão se não existir
+    if not os.path.isfile(ADMIN_FILE):
+        with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
+            json.dump({"admin_password": "admin123"}, f, ensure_ascii=False, indent=2)
+    # cria users.json vazio se não existir
+    if not os.path.isfile(USERS_FILE):
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+
+def load_admin_password() -> str:
+    with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f).get("admin_password", "")
+
+def load_users() -> dict:
+    with open(USERS_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+def valida_usuario(username: str, password: str) -> bool:
+    """
+    Retorna True se o usuário e senha forem válidos.
+    - Usuário 'admin' é validado contra admin.json
+    - Demais usuários são validados contra users.json
+    """
+    # garante que os arquivos de login existem
+    ensure_login_files()
+
+    # trata admin separadamente
+    if username.lower() == "admin":
+        return password == load_admin_password()
+
+    # valida demais usuários
+    users = load_users()
+    return users.get(username) == password
+
+def save_users(users: dict):
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+# ── (2) Diálogo de registro de novo usuário ────────────────────────
+class RegisterUserDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Registrar Novo Usuário")
+        self.setModal(True)
+        layout = QFormLayout(self)
+        self.user_edit = QLineEdit(); layout.addRow("Novo usuário:", self.user_edit)
+        self.pw_edit   = QLineEdit(); self.pw_edit.setEchoMode(QLineEdit.Password)
+        layout.addRow("Senha:", self.pw_edit)
+        self.pw2_edit  = QLineEdit(); self.pw2_edit.setEchoMode(QLineEdit.Password)
+        layout.addRow("Confirmar senha:", self.pw2_edit)
+        btns = QDialogButtonBox(QDialogButtonBox.Save|QDialogButtonBox.Cancel, Qt.Horizontal, self)
+        btns.accepted.connect(self.on_save)
+        btns.rejected.connect(self.reject)
+        layout.addRow(btns)
+
+    def on_save(self):
+        u = self.user_edit.text().strip()
+        p = self.pw_edit.text()
+        p2 = self.pw2_edit.text()
+        if not u or not p:
+            QMessageBox.warning(self, "Erro", "Preencha usuário e senha.")
+            return
+        if p != p2:
+            QMessageBox.warning(self, "Erro", "As senhas não conferem.")
+            return
+        users = load_users()
+        if u in users:
+            QMessageBox.warning(self, "Erro", "Usuário já existe.")
+            return
+        users[u] = p
+        save_users(users)
+        QMessageBox.information(self, "Sucesso", f"Usuário '{u}' cadastrado.")
+        self.accept()
+
+
+# ── (3) Diálogo principal de login ──────────────────────────────────
+class LoginDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Login")
+        self.setWindowIcon(QIcon(LOCK_ICON))
+        # aplica o mesmo CSS que o MainWindow
+        self.setStyleSheet(STYLE_SHEET)
+
+        self.setModal(True)
+        self.resize(350, 150)
+
+        layout = QVBoxLayout(self)
+        form   = QFormLayout()
+        self.username = QLineEdit(); self.username.setPlaceholderText("usuário")
+        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("senha")
+        form.addRow("Usuário:", self.username)
+        form.addRow("Senha:  ", self.password)
+        layout.addLayout(form)
+
+        btns = QHBoxLayout()
+        btn_login    = QPushButton("Logar");    btn_login.clicked.connect(self.try_login)
+        btn_register = QPushButton("Registrar"); btn_register.clicked.connect(self.try_register)
+        for b in (btn_login, btn_register):
+            b.setFixedHeight(28)
+            btns.addWidget(b)
+        layout.addLayout(btns)
+
+    def try_login(self):
+        user = self.username.text().strip()
+        pwd  = self.password.text().strip()
+        # TODO: validar contra arquivos em banco_de_dados/login/...
+        if valida_usuario(user, pwd):
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
+
+    def try_register(self):
+        # pede a senha de admin
+        senha, ok = QInputDialog.getText(
+            self,
+            "Senha de Administrador",
+            "Digite a senha de administrador:",
+            QLineEdit.Password
+        )
+        if not ok:
+            return  # usuário cancelou
+
+        if senha != load_admin_password():
+            QMessageBox.warning(self, "Acesso negado", "Senha de administrador incorreta.")
+            return
+
+        # se a senha estiver correta, abre o diálogo de registro
+        dlg = RegisterUserDialog(self)
+        dlg.setStyleSheet(STYLE_SHEET)
+        dlg.exec()
+        
 # ─── Passo 2: Ajuste da classe Database ───
 class Database:
     def __init__(self, filename: str = None):
@@ -2541,18 +2684,31 @@ class MainWindow(QMainWindow):
     def _create_toolbar(self):
         tb = QToolBar("Barra de Ferramentas", self)
         tb.setIconSize(QSize(32,32))
-
+    
+        # adiciona a toolbar na área esquerda
         self.addToolBar(Qt.LeftToolBarArea, tb)
-        tb.addAction(QAction(QIcon("icons/add.png"), "Novo Lançamento", self, triggered=self.novo_lancamento))
-        tb.addAction(QAction(QIcon("icons/farm.png"), "Cad. Imóvel",     self, triggered=lambda: self.tabs.setCurrentIndex(1)))
-        tb.addAction(QAction(QIcon("icons/bank.png"), "Cad. Conta",      self, triggered=lambda: self.tabs.setCurrentIndex(2)))
-        tb.addAction(QAction(QIcon("icons/users.png"),"Cad. Participante",self, triggered=lambda: self.tabs.setCurrentIndex(3)))
-        tb.addAction(QAction(QIcon("icons/report.png"),"Relatórios",     self, triggered=lambda: self.tabs.setCurrentIndex(4)))
-        # Substitui o antigo "Gerar TXT LCDPR"
-        tb.addAction(QAction(QIcon("icons/txt.png"), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
-
-        # ────────────────────────────────────────
-        # Adiciona o combo de perfis
+    
+        # usa ICONS_DIR para todos os ícones
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "add.png")),
+                             "Novo Lançamento", self,
+                             triggered=self.novo_lancamento))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "farm.png")),
+                             "Cad. Imóvel", self,
+                             triggered=lambda: self.tabs.setCurrentIndex(1)))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "bank.png")),
+                             "Cad. Conta", self,
+                             triggered=lambda: self.tabs.setCurrentIndex(2)))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "users.png")),
+                             "Cad. Participante", self,
+                             triggered=lambda: self.tabs.setCurrentIndex(3)))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")),
+                             "Relatórios", self,
+                             triggered=lambda: self.tabs.setCurrentIndex(4)))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "txt.png")),
+                             "Arquivo LCDPR", self,
+                             triggered=self.arquivo_lcdpr))
+    
+        # ── combo de perfis ──
         tb.addSeparator()
         tb.addWidget(QLabel("Perfil:"))
         self.profile_selector = QComboBox()
@@ -2562,15 +2718,10 @@ class MainWindow(QMainWindow):
             "Adriana Lucia",
             "Lucas Laignier"
         ])
-        # inicia no perfil atual
         self.profile_selector.setCurrentText(CURRENT_PROFILE)
-        # ao trocar, chama switch_profile
         self.profile_selector.currentTextChanged.connect(self.switch_profile)
         tb.addWidget(self.profile_selector)
-        # ────────────────────────────────────────
-
-        self.addToolBar(Qt.LeftToolBarArea, tb)
-
+        
     def switch_profile(self, profile: str):
         """
         1) Atualiza CURRENT_PROFILE
@@ -3241,9 +3392,15 @@ class MainWindow(QMainWindow):
                 )
             )
 
+# ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    # antes de tudo, mostrar login
+    login = LoginDialog()
+    if not login.exec():
+        sys.exit(0)
+    # só então a janela principal
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
