@@ -93,29 +93,28 @@ APP_ICON    = 'agro_icon.png'
 # 1) Pasta base do seu projeto (onde está esse script)
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 2) Caminho completo até a pasta que você descreveu
-DB_DIR = os.path.join(
-    PROJECT_DIR,
-    'banco_de_dados',
-    'Cleuber Marcos',
-    'data'
-)
+# Perfil dinâmico
+CURRENT_PROFILE = "Cleuber Marcos"
 
-# 3) Caminho final do arquivo .db
-DB_FILENAME = os.path.join(DB_DIR, 'lcdpr.db')
+def get_profile_db_filename():
+    """
+    Retorna o caminho completo para o banco de dados do perfil selecionado,
+    criando a pasta se necessário.
+    """
+    base = os.path.join(PROJECT_DIR, 'banco_de_dados', CURRENT_PROFILE, 'data')
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, 'lcdpr.db')
 
-# 4) Garante que a hierarquia exista
-os.makedirs(DB_DIR, exist_ok=True)
-
+# ─── Passo 2: Ajuste da classe Database ───
 class Database:
-    def __init__(self, filename: str = DB_FILENAME):
+    def __init__(self, filename: str = None):
+        # Usa o DB do perfil atual se nenhum filename for passado
+        if filename is None:
+            filename = get_profile_db_filename()
         try:
             self.conn = sqlite3.connect(filename)
         except sqlite3.OperationalError as e:
-            raise RuntimeError(
-                f"Não foi possível abrir/criar o banco em '{filename}':\n  {e}"
-            )
-
+            raise RuntimeError(f"Não foi possível abrir/criar o banco em '{filename}':\n  {e}")
         self._create_tables()
         self._create_views()
 
@@ -906,7 +905,7 @@ class ParametrosDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Parâmetros do Contribuinte")
         self.setMinimumSize(400, 500)
-        self.settings = QSettings("PrimeOnHub", "AgroApp")
+        self.settings = QSettings("Automatize Tech", "AgroApp")
         layout = QFormLayout(self)
 
         # Versão do leiaute
@@ -2340,6 +2339,7 @@ class MainWindow(QMainWindow):
         self.cadw = CadastrosWidget()
         self.tabs.addTab(self.cadw, "Cadastros")
 
+
         # --- Aba Planejamento ---
         w_p = QWidget()
         l_p = QVBoxLayout(w_p)
@@ -2376,6 +2376,7 @@ class MainWindow(QMainWindow):
 
         # Carrega dados iniciais
         self.carregar_lancamentos()
+        self.profile_selector.setCurrentText("Cleuber Marcos")
         self.carregar_planejamento()
         # depois de carregar os lançamentos:
         self._load_lanc_filter_settings()
@@ -2540,6 +2541,7 @@ class MainWindow(QMainWindow):
     def _create_toolbar(self):
         tb = QToolBar("Barra de Ferramentas", self)
         tb.setIconSize(QSize(32,32))
+
         self.addToolBar(Qt.LeftToolBarArea, tb)
         tb.addAction(QAction(QIcon("icons/add.png"), "Novo Lançamento", self, triggered=self.novo_lancamento))
         tb.addAction(QAction(QIcon("icons/farm.png"), "Cad. Imóvel",     self, triggered=lambda: self.tabs.setCurrentIndex(1)))
@@ -2548,6 +2550,73 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction(QIcon("icons/report.png"),"Relatórios",     self, triggered=lambda: self.tabs.setCurrentIndex(4)))
         # Substitui o antigo "Gerar TXT LCDPR"
         tb.addAction(QAction(QIcon("icons/txt.png"), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
+
+        # ────────────────────────────────────────
+        # Adiciona o combo de perfis
+        tb.addSeparator()
+        tb.addWidget(QLabel("Perfil:"))
+        self.profile_selector = QComboBox()
+        self.profile_selector.addItems([
+            "Cleuber Marcos",
+            "Gilson Oliveira",
+            "Adriana Lucia",
+            "Lucas Laignier"
+        ])
+        # inicia no perfil atual
+        self.profile_selector.setCurrentText(CURRENT_PROFILE)
+        # ao trocar, chama switch_profile
+        self.profile_selector.currentTextChanged.connect(self.switch_profile)
+        tb.addWidget(self.profile_selector)
+        # ────────────────────────────────────────
+
+        self.addToolBar(Qt.LeftToolBarArea, tb)
+
+    def switch_profile(self, profile: str):
+        """
+        1) Atualiza CURRENT_PROFILE
+        2) Recria todas as conexões Database()
+        3) Recarrega Imóveis, Contas, Lançamentos e Planejamento
+        (Participantes continuam do banco universal)
+        """
+        global CURRENT_PROFILE
+        if profile == CURRENT_PROFILE:
+            return
+
+        CURRENT_PROFILE = profile
+
+        # 1) Main DB
+        self.db.conn.close()
+        self.db = Database()
+
+        # 2) Dashboard
+        self.dashboard.db.conn.close()
+        self.dashboard.db = Database()
+        self.dashboard.load_data()
+
+        # 3) Lançamentos
+        self.carregar_lancamentos()
+
+        # 4) Planejamento
+        self.carregar_planejamento()
+
+        # 5) Cadastros — Imóveis
+        im_w = self.cadw.widget(0)
+        im_w.db.conn.close()
+        im_w.db = Database()
+        im_w.carregar_imoveis()
+
+        # 6) Cadastros — Contas
+        ct_w = self.cadw.widget(1)
+        ct_w.db.conn.close()
+        ct_w.db = Database()
+        ct_w.carregar_contas()
+
+        # NOTA: Participantes não muda de banco
+
+        QMessageBox.information(
+            self, "Perfil alterado",
+            f"Perfil Trocado para: '{profile}'."
+        )
 
     def arquivo_lcdpr(self):
         dlg = QDialog(self)
@@ -2648,19 +2717,39 @@ class MainWindow(QMainWindow):
         self.dashboard.load_data()
 
     def carregar_planejamento(self):
-        q = """
-        SELECT c.nome, a.area, a.data_plantio, a.data_colheita_estimada, a.produtividade_estimada
-        FROM area_producao a
-        JOIN cultura c ON a.cultura_id=c.id
-        """
-        rows = self.db.fetch_all(q)
+        perfil = self.profile_selector.currentText()
+        # monta o path correto do DB
+        db_path = os.path.join(
+            PROJECT_DIR,
+            'banco_de_dados',
+            perfil,
+            'data',
+            'lcdpr.db'
+        )
+        # garanta que o folder exista
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        # abre só para carregar planejamento
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT c.nome, a.area,
+                   a.data_plantio, a.data_colheita_estimada,
+                   a.produtividade_estimada
+            FROM area_producao a
+            JOIN cultura c ON a.cultura_id = c.id
+        """)
+        rows = cur.fetchall()
+        conn.close()
+
+        # popula a tabela
         self.tab_plan.setRowCount(len(rows))
-        for r,(cultura,area,pl,ce,prod) in enumerate(rows):
-            self.tab_plan.setItem(r,0, QTableWidgetItem(cultura))
-            self.tab_plan.setItem(r,1, QTableWidgetItem(f"{area} ha"))
-            self.tab_plan.setItem(r,2, QTableWidgetItem(pl or ""))
-            self.tab_plan.setItem(r,3, QTableWidgetItem(ce or ""))
-            self.tab_plan.setItem(r,4, QTableWidgetItem(f"{prod}"))
+        for r, (cultura, area, pl, ce, prod) in enumerate(rows):
+            self.tab_plan.setItem(r, 0, QTableWidgetItem(cultura))
+            self.tab_plan.setItem(r, 1, QTableWidgetItem(f"{area} ha"))
+            self.tab_plan.setItem(r, 2, QTableWidgetItem(pl or ""))
+            self.tab_plan.setItem(r, 3, QTableWidgetItem(ce or ""))
+            self.tab_plan.setItem(r, 4, QTableWidgetItem(f"{prod}"))
 
     def novo_lancamento(self):
         dlg = LancamentoDialog(self)
@@ -2700,7 +2789,7 @@ class MainWindow(QMainWindow):
             path, _ = QFileDialog.getSaveFileName(self,"Salvar LCDPR",last,"TXT (*.txt)")
             if not path: return
 
-        settings = QSettings("PrimeOnHub","AgroApp")
+        settings = QSettings("Automatize Tech","AgroApp")
         ver   = settings.value("param/version","0013")
         iden  = settings.value("param/ident","")
         nome  = settings.value("param/nome","")
