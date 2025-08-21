@@ -1805,20 +1805,98 @@ class GerenciamentoParticipantesWidget(QWidget):
             QMessageBox.warning(self, "Importação Falhou", "Arquivo não segue o layout esperado e não foi importado.")
 
     def _import_participantes_txt(self, path):
-        with open(path, encoding='utf-8') as f:
-            for line in f:
-                parts = line.strip().split("|")
-                if len(parts) != 3: raise ValueError("Layout de TXT inválido")
-                cpf_cnpj, nome, tipo = parts
-                self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (cpf_cnpj.strip(), nome.strip(), int(tipo)))
+        warnings = []
+        with open(path, 'rb') as f:
+            for lineno, raw in enumerate(f, start=1):
+                try:
+                    line = raw.decode('utf-8')
+                except UnicodeDecodeError:
+                    line = raw.decode('latin-1')
+
+                line = line.strip()
+                if not line:
+                    continue
+
+                parts = line.split("|")
+
+                # Suporta os dois formatos:
+                #  a) "0100|cpf_cnpj|nome|tipo"
+                #  b) "cpf_cnpj|nome|tipo"
+                if parts[0] == "0100":
+                    campos = parts[1:]
+                else:
+                    # pula cabeçalhos/regs que não são participantes
+                    if parts[0] in {"0000", "0010", "0030", "0040", "0050", "Q100", "9999"}:
+                        continue
+                    campos = parts
+
+                if len(campos) < 3:
+                    warnings.append(f"L{lineno}: linha inválida para participante -> '{line[:80]}'")
+                    continue
+
+                raw_doc, nome, tipo_raw = (campos + ["", "", ""])[:3]
+                doc, tipo_calc = normalize_tax_id(raw_doc)
+                if not doc:
+                    warnings.append(f"L{lineno}: CPF/CNPJ inválido -> '{raw_doc}'")
+                    continue
+
+                try:
+                    tipo = int(tipo_raw) if str(tipo_raw).strip().isdigit() else (tipo_calc or 4)
+                except:
+                    tipo = tipo_calc or 4
+
+                self.db.execute_query(
+                    "INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
+                    (doc, (nome or "").strip(), tipo)
+                )
+        if warnings:
+            QMessageBox.information(self, "Importação de Participantes", "Concluída com avisos:\n" + "\n".join(warnings[:50]))
 
     def _import_participantes_excel(self, path):
         df = pd.read_excel(path, dtype=str)
         required = ['cpf_cnpj','nome','tipo_contraparte']
-        if not all(col in df.columns for col in required): raise ValueError("Layout de Excel inválido")
-        df.fillna('', inplace=True)
+        if not all(col in df.columns for col in required):
+            raise ValueError("Layout de Excel inválido")
+        df = df.fillna('')
         for row in df.itertuples(index=False):
-            self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (row.cpf_cnpj.strip(), row.nome.strip(), int(row.tipo_contraparte)))
+            doc, tipo_calc = normalize_tax_id(getattr(row, 'cpf_cnpj', ''))
+            if not doc:
+                continue
+            try:
+                tipo = int(getattr(row, 'tipo_contraparte', '').strip()) if str(getattr(row, 'tipo_contraparte', '')).strip().isdigit() else (tipo_calc or 4)
+            except:
+                tipo = tipo_calc or 4
+            self.db.execute_query(
+                "INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
+                (doc, str(getattr(row, 'nome', '')).strip(), tipo)
+            )
+    
+    # --- Utilitários de participante ---
+    def normalize_tax_id(raw: str) -> tuple[str, int]:
+        """
+        Retorna (documento_normalizado, tipo_contraparte)
+        - CPF => 11 dígitos (tipo 2)
+        - CNPJ => 14 dígitos (tipo 1)
+        Aceita entradas encurtadas; preenche zeros à esquerda.
+        """
+        digits = re.sub(r"\D", "", raw or "")
+        if not digits:
+            return "", 0
+        if len(digits) <= 11:
+            return digits.zfill(11), 2  # Pessoa Física
+        if len(digits) <= 14:
+            return digits.zfill(14), 1  # Pessoa Jurídica
+        return "", 0  # inválido
+
+    def extract_name_from_historico(h: str) -> str:
+        # Se houver algo entre parênteses, usa como nome; senão retorna a parte textual limpa
+        if not h:
+            return ""
+        m = re.search(r"\(([^)]+)\)", h)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+        return re.sub(r"\s+", " ", h).strip()[:120]
+
 
     def carregar_participantes(self):
         rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
@@ -2289,24 +2367,19 @@ class MainWindow(QMainWindow):
 
                     # 0100 – Participante (upsert)
                     elif reg == "0100" and len(campos) >= 3:
-                        raw_cpf_cnpj, nome_p, tipo_pc = campos[:3]
+                        raw_doc, nome_p, tipo_pc_raw = campos[:3]
 
-                        # Apenas dígitos; valida tamanho exato
-                        digits = re.sub(r"\D", "", raw_cpf_cnpj or "")
-                        if len(digits) == 11:
-                            cpf_cnpj_norm = digits  # CPF
-                        elif len(digits) == 14:
-                            cpf_cnpj_norm = digits  # CNPJ
-                        else:
-                            warnings.append(f"L{lineno}: 0100 com CPF/CNPJ inválido '{raw_cpf_cnpj}'")
+                        doc, tipo_calc = normalize_tax_id(raw_doc)
+                        if not doc:
+                            warnings.append(f"L{lineno}: 0100 com CPF/CNPJ inválido '{raw_doc}'")
                             continue
-
+                        
                         try:
-                            tipo_pc = int((tipo_pc or "3"))
+                            tipo_pc = int((tipo_pc_raw or "").strip()) if str(tipo_pc_raw).strip().isdigit() else (tipo_calc or 4)
                         except:
-                            tipo_pc = 3
+                            tipo_pc = tipo_calc or 4
 
-                        row = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (cpf_cnpj_norm,))
+                        row = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (doc,))
                         if row:
                             db.execute_query(
                                 "UPDATE participante SET nome = ?, tipo_contraparte = ? WHERE id = ?",
@@ -2315,7 +2388,7 @@ class MainWindow(QMainWindow):
                         else:
                             db.execute_query(
                                 "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                                [cpf_cnpj_norm, nome_p or "", tipo_pc]
+                                [doc, nome_p or "", tipo_pc]
                             )
                     elif reg == "Q100" and len(campos) >= 12:
                         # Layout no SEU TXT: [9]=ENTRADA, [10]=SAÍDA (ajuste crítico)
@@ -2349,25 +2422,78 @@ class MainWindow(QMainWindow):
                         saldo_final = abs(to_float(raw_saldo))
                         natureza_saldo = (natureza or "P").strip()[:1]
 
-                        # AJUSTE 3: participante - normaliza CPF/CNPJ e fallback por nome (entre parênteses no histórico)
-                        digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                        row_pa = None
-                        if digits:
-                            if len(digits) <= 11:
-                                row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits.zfill(11),))
-                                if not row_pa:
-                                    row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits,))
-                            else:
-                                row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits.zfill(14),))
-                                if not row_pa:
-                                    row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits,))
-                        if not row_pa:
-                            m = re.search(r"\(([^)]+)\)\s*$", historico or "")
-                            if m:
-                                nome_busca = m.group(1).strip()
-                                row_pa = db.fetch_one("SELECT id FROM participante WHERE UPPER(nome) LIKE UPPER(?)", (f"%{nome_busca}%",))
+                        # ------------------------------
+                        # AJUSTE 3: Participante - normaliza CPF/CNPJ, busca tolerante e auto-cadastro
+                        # ------------------------------
+                        digits_raw = re.sub(r"\D", "", cpf_cnpj_raw or "")
+                        id_pa = None
 
-                        id_pa = row_pa[0] if row_pa else None
+                        # Normaliza documento e infere tipo_contraparte (1 PJ, 2 PF)
+                        if digits_raw:
+                            if len(digits_raw) <= 11:
+                                doc_norm = digits_raw.zfill(11)
+                                tipo_calc = 2
+                            else:
+                                doc_norm = digits_raw.zfill(14)
+                                tipo_calc = 1
+                        else:
+                            doc_norm = ""
+                            tipo_calc = 0
+
+                        # Candidatos de busca (tenta diferentes comprimentos/variações)
+                        candidatos = []
+                        if doc_norm:
+                            candidatos.append(doc_norm)
+                            if len(digits_raw) <= 11:
+                                # caso tenha vindo com menos dígitos e seja PJ no cadastro
+                                candidatos.append(digits_raw.zfill(14))
+                            elif len(digits_raw) <= 14 and len(digits_raw) >= 12:
+                                # tenta um fallback CPF a partir dos 11 finais
+                                candidatos.append(digits_raw[-11:].zfill(11))
+
+                        row_pa = None
+                        for d in candidatos:
+                            row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (d,))
+                            if row_pa:
+                                doc_norm = d  # confirma a forma que bateu no banco
+                                break
+
+                        # Se não achou pelo documento, tenta por nome (entre parênteses no histórico)
+                        if not row_pa:
+                            nome_busca = ""
+                            m = re.search(r"\(([^)]+)\)", historico or "")
+                            if m and m.group(1).strip():
+                                nome_busca = m.group(1).strip()
+                            elif historico:
+                                nome_busca = re.sub(r"\s+", " ", historico).strip()[:120]
+                            if nome_busca:
+                                row_pa = db.fetch_one(
+                                    "SELECT id FROM participante WHERE UPPER(nome) LIKE UPPER(?)",
+                                    (f"%{nome_busca}%",)
+                                )
+
+                        if row_pa:
+                            id_pa = row_pa[0]
+                        else:
+                            # Auto-cadastra participante quando possível (se tiver documento)
+                            if doc_norm:
+                                # nome padrão: usa parenteses do histórico, senão o histórico limpo
+                                m = re.search(r"\(([^)]+)\)", historico or "")
+                                if m and m.group(1).strip():
+                                    nome_padrao = m.group(1).strip()
+                                else:
+                                    nome_padrao = (re.sub(r"\s+", " ", historico or "").strip() or f"Participante {doc_norm}")[:120]
+
+                                tipo_final = tipo_calc or 4  # 4 = não informado/outros, se não inferir
+                                db.execute_query(
+                                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
+                                    (doc_norm, nome_padrao, tipo_final)
+                                )
+                                row_new = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (doc_norm,))
+                                id_pa = row_new[0] if row_new else None
+                            else:
+                                # sem documento não inserimos; mantém id_pa=None
+                                pass
 
                         # chaves estrangeiras
                         row_im = db.fetch_one("SELECT id FROM imovel_rural  WHERE cod_imovel = ?", (cod_imv,))
