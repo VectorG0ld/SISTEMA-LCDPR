@@ -1805,98 +1805,20 @@ class GerenciamentoParticipantesWidget(QWidget):
             QMessageBox.warning(self, "Importação Falhou", "Arquivo não segue o layout esperado e não foi importado.")
 
     def _import_participantes_txt(self, path):
-        warnings = []
-        with open(path, 'rb') as f:
-            for lineno, raw in enumerate(f, start=1):
-                try:
-                    line = raw.decode('utf-8')
-                except UnicodeDecodeError:
-                    line = raw.decode('latin-1')
-
-                line = line.strip()
-                if not line:
-                    continue
-
-                parts = line.split("|")
-
-                # Suporta os dois formatos:
-                #  a) "0100|cpf_cnpj|nome|tipo"
-                #  b) "cpf_cnpj|nome|tipo"
-                if parts[0] == "0100":
-                    campos = parts[1:]
-                else:
-                    # pula cabeçalhos/regs que não são participantes
-                    if parts[0] in {"0000", "0010", "0030", "0040", "0050", "Q100", "9999"}:
-                        continue
-                    campos = parts
-
-                if len(campos) < 3:
-                    warnings.append(f"L{lineno}: linha inválida para participante -> '{line[:80]}'")
-                    continue
-
-                raw_doc, nome, tipo_raw = (campos + ["", "", ""])[:3]
-                doc, tipo_calc = normalize_tax_id(raw_doc)
-                if not doc:
-                    warnings.append(f"L{lineno}: CPF/CNPJ inválido -> '{raw_doc}'")
-                    continue
-
-                try:
-                    tipo = int(tipo_raw) if str(tipo_raw).strip().isdigit() else (tipo_calc or 4)
-                except:
-                    tipo = tipo_calc or 4
-
-                self.db.execute_query(
-                    "INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                    (doc, (nome or "").strip(), tipo)
-                )
-        if warnings:
-            QMessageBox.information(self, "Importação de Participantes", "Concluída com avisos:\n" + "\n".join(warnings[:50]))
+        with open(path, encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split("|")
+                if len(parts) != 3: raise ValueError("Layout de TXT inválido")
+                cpf_cnpj, nome, tipo = parts
+                self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (cpf_cnpj.strip(), nome.strip(), int(tipo)))
 
     def _import_participantes_excel(self, path):
         df = pd.read_excel(path, dtype=str)
         required = ['cpf_cnpj','nome','tipo_contraparte']
-        if not all(col in df.columns for col in required):
-            raise ValueError("Layout de Excel inválido")
-        df = df.fillna('')
+        if not all(col in df.columns for col in required): raise ValueError("Layout de Excel inválido")
+        df.fillna('', inplace=True)
         for row in df.itertuples(index=False):
-            doc, tipo_calc = normalize_tax_id(getattr(row, 'cpf_cnpj', ''))
-            if not doc:
-                continue
-            try:
-                tipo = int(getattr(row, 'tipo_contraparte', '').strip()) if str(getattr(row, 'tipo_contraparte', '')).strip().isdigit() else (tipo_calc or 4)
-            except:
-                tipo = tipo_calc or 4
-            self.db.execute_query(
-                "INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                (doc, str(getattr(row, 'nome', '')).strip(), tipo)
-            )
-    
-    # --- Utilitários de participante ---
-    def normalize_tax_id(raw: str) -> tuple[str, int]:
-        """
-        Retorna (documento_normalizado, tipo_contraparte)
-        - CPF => 11 dígitos (tipo 2)
-        - CNPJ => 14 dígitos (tipo 1)
-        Aceita entradas encurtadas; preenche zeros à esquerda.
-        """
-        digits = re.sub(r"\D", "", raw or "")
-        if not digits:
-            return "", 0
-        if len(digits) <= 11:
-            return digits.zfill(11), 2  # Pessoa Física
-        if len(digits) <= 14:
-            return digits.zfill(14), 1  # Pessoa Jurídica
-        return "", 0  # inválido
-
-    def extract_name_from_historico(h: str) -> str:
-        # Se houver algo entre parênteses, usa como nome; senão retorna a parte textual limpa
-        if not h:
-            return ""
-        m = re.search(r"\(([^)]+)\)", h)
-        if m and m.group(1).strip():
-            return m.group(1).strip()
-        return re.sub(r"\s+", " ", h).strip()[:120]
-
+            self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (row.cpf_cnpj.strip(), row.nome.strip(), int(row.tipo_contraparte)))
 
     def carregar_participantes(self):
         rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
@@ -2147,14 +2069,20 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Perfil alterado", f"Perfil Trocado para: '{profile}'.")
 
     def arquivo_lcdpr(self):
-        dlg = QDialog(self); dlg.setWindowTitle("Arquivo LCDPR"); dlg.setMinimumSize(400, 200); layout = QVBoxLayout(dlg)
-        btn_export_txt = QPushButton("Exportar TXT LCDPR"); btn_export_plan = QPushButton("Exportar Planilha LCDPR")
-        btn_import_txt = QPushButton("Importar TXT LCDPR"); btn_import_plan = QPushButton("Importar Planilha LCDPR")
-        for btn in (btn_export_txt, btn_export_plan, btn_import_txt, btn_import_plan): layout.addWidget(btn)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Arquivo LCDPR")
+        dlg.setMinimumSize(400, 200)
+        layout = QVBoxLayout(dlg)
+    
+        # Apenas opções de EXPORTAÇÃO
+        btn_export_txt = QPushButton("Exportar TXT LCDPR")
+        btn_export_plan = QPushButton("Exportar Planilha LCDPR")
+        for btn in (btn_export_txt, btn_export_plan):
+            layout.addWidget(btn)
+    
         btn_export_txt.clicked.connect(lambda: self.show_export_dialog(dlg))
         btn_export_plan.clicked.connect(lambda: (dlg.accept(), self._exportar_planilha_lcdpr()))
-        btn_import_txt.clicked.connect(lambda: (dlg.accept(), self.importar_arquivo_lcdpr_txt()))
-        btn_import_plan.clicked.connect(lambda: (dlg.accept(), self.importar_arquivo_lcdpr_planilha()))
+    
         dlg.exec()
 
     def carregar_lancamentos(self):
@@ -2297,252 +2225,6 @@ class MainWindow(QMainWindow):
         save_last_txt_path(path)
         QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
 
-        
-    def importar_arquivo_lcdpr_txt(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Importar arquivo LCDPR", "", "TXT (*.txt)")
-        if not path:
-            return
-
-        warnings = []
-        db = getattr(self, "db", Database())
-
-        def to_float(s: str) -> float:
-            s = (s or "").strip()
-            if not s:
-                return 0.0
-            return float(s.replace(".", "").replace(",", ".")) if ("," in s and "." in s and s.rfind(",") > s.rfind(".")) else float(s.replace(",", "."))
-
-        try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                for lineno, linha in enumerate(f, start=1):
-                    parts = linha.rstrip("\n").split("|")
-                    if not parts:
-                        continue
-
-                    reg = parts[0]
-                    campos = parts[1:]
-
-                    # 0040 – Imóvel Rural (upsert)
-                    if reg == "0040" and len(campos) >= 16:
-                        cod_imovel, pais, moeda, cad_itr, caepf, insc_est, nome, endereco, num, compl, bairro, uf, cod_mun, cep, tipo_expl, particip = campos[:16]
-                        exists = db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel = ?", (cod_imovel,))
-                        if exists:
-                            db.execute_query("""
-                                UPDATE imovel_rural
-                                   SET pais=?, moeda=?, cad_itr=?, caepf=?, insc_estadual=?, nome_imovel=?,
-                                       endereco=?, num=?, compl=?, bairro=?, uf=?, cod_mun=?, cep=?,
-                                       tipo_exploracao=?, participacao=?
-                                 WHERE cod_imovel=?""",
-                                [pais or "BR", moeda or "BRL", cad_itr or None, caepf or None, insc_est or None, nome or "",
-                                 endereco or "", num or None, compl or None, bairro or "", uf or "", cod_mun or "", cep or "",
-                                 int(tipo_expl or 1), float(particip or 100.0), cod_imovel])
-                        else:
-                            db.execute_query("""
-                                INSERT INTO imovel_rural (cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
-                                                          nome_imovel, endereco, num, compl, bairro, uf, cod_mun, cep,
-                                                          tipo_exploracao, participacao)
-                                             VALUES     (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                                [cod_imovel, pais or "BR", moeda or "BRL", cad_itr or None, caepf or None, insc_est or None,
-                                 nome or "", endereco or "", num or None, compl or None, bairro or "", uf or "", cod_mun or "",
-                                 cep or "", int(tipo_expl or 1), float(particip or 100.0)])
-
-                    # 0050 – Conta bancária (upsert)
-                    elif reg == "0050" and len(campos) >= 7:
-                        cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_str = campos[:7]
-                        saldo_inicial = to_float(saldo_str)
-                        exists = db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta = ?", (cod_conta,))
-                        if exists:
-                            db.execute_query("""
-                                UPDATE conta_bancaria
-                                   SET pais_cta=?, banco=?, nome_banco=?, agencia=?, num_conta=?, saldo_inicial=?
-                                 WHERE cod_conta=?""",
-                                [pais_cta or "BR", banco or None, nome_banco or "", agencia or "", num_conta or "",
-                                 saldo_inicial, cod_conta])
-                        else:
-                            db.execute_query("""
-                                INSERT INTO conta_bancaria (cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial)
-                                                    VALUES (?,        ?,        ?,     ?,          ?,       ?,         ?)""",
-                                [cod_conta, pais_cta or "BR", banco or None, nome_banco or "", agencia or "", num_conta or "",
-                                 saldo_inicial])
-
-                    # 0100 – Participante (upsert)
-                    elif reg == "0100" and len(campos) >= 3:
-                        raw_doc, nome_p, tipo_pc_raw = campos[:3]
-
-                        doc, tipo_calc = normalize_tax_id(raw_doc)
-                        if not doc:
-                            warnings.append(f"L{lineno}: 0100 com CPF/CNPJ inválido '{raw_doc}'")
-                            continue
-                        
-                        try:
-                            tipo_pc = int((tipo_pc_raw or "").strip()) if str(tipo_pc_raw).strip().isdigit() else (tipo_calc or 4)
-                        except:
-                            tipo_pc = tipo_calc or 4
-
-                        row = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (doc,))
-                        if row:
-                            db.execute_query(
-                                "UPDATE participante SET nome = ?, tipo_contraparte = ? WHERE id = ?",
-                                [nome_p or "", tipo_pc, row[0]]
-                            )
-                        else:
-                            db.execute_query(
-                                "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                                [doc, nome_p or "", tipo_pc]
-                            )
-                    elif reg == "Q100" and len(campos) >= 12:
-                        # Layout no SEU TXT: [9]=ENTRADA, [10]=SAÍDA (ajuste crítico)
-                        #   data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                        #   cpf_cnpj, tipo_lanc(ignorado), col9=entrada, col10=saida, saldo, natureza
-                        data_iso, cod_imv, cod_cta, num_doc, raw_tipo_doc, historico, cpf_cnpj_raw, raw_tipo_lanc, col9, col10, raw_saldo, natureza = campos[:12]
-
-                        # códigos com zeros à esquerda
-                        cod_imv = (cod_imv or '').strip().zfill(3)
-                        cod_cta = (cod_cta or '').strip().zfill(3)
-
-                        # data para dd/MM/yyyy
-                        try:
-                            data_str = datetime.strptime(data_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
-                        except ValueError:
-                            try:
-                                data_str = datetime.strptime(data_iso, "%d/%m/%Y").strftime("%d/%m/%Y")
-                            except ValueError:
-                                warnings.append(f"Linha {lineno}: data inválida '{data_iso}'")
-                                continue
-
-                        tipo_doc = int(raw_tipo_doc or 0) or 4
-
-                        # AJUSTE 1: no seu arquivo, coluna 9 é ENTRADA e coluna 10 é SAÍDA
-                        valor_entrada = to_float(col9)
-                        valor_saida   = to_float(col10)
-
-                        # AJUSTE 2: define tipo_lanc pela movimentação (ignora raw_tipo_lanc do TXT)
-                        tipo_lanc = 1 if valor_saida > 0 else (2 if valor_entrada > 0 else (int(raw_tipo_lanc or 0) or 1))
-
-                        saldo_final = abs(to_float(raw_saldo))
-                        natureza_saldo = (natureza or "P").strip()[:1]
-
-                        # ------------------------------
-                        # AJUSTE 3: Participante - normaliza CPF/CNPJ, busca tolerante e auto-cadastro
-                        # ------------------------------
-                        digits_raw = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                        id_pa = None
-
-                        # Normaliza documento e infere tipo_contraparte (1 PJ, 2 PF)
-                        if digits_raw:
-                            if len(digits_raw) <= 11:
-                                doc_norm = digits_raw.zfill(11)
-                                tipo_calc = 2
-                            else:
-                                doc_norm = digits_raw.zfill(14)
-                                tipo_calc = 1
-                        else:
-                            doc_norm = ""
-                            tipo_calc = 0
-
-                        # Candidatos de busca (tenta diferentes comprimentos/variações)
-                        candidatos = []
-                        if doc_norm:
-                            candidatos.append(doc_norm)
-                            if len(digits_raw) <= 11:
-                                # caso tenha vindo com menos dígitos e seja PJ no cadastro
-                                candidatos.append(digits_raw.zfill(14))
-                            elif len(digits_raw) <= 14 and len(digits_raw) >= 12:
-                                # tenta um fallback CPF a partir dos 11 finais
-                                candidatos.append(digits_raw[-11:].zfill(11))
-
-                        row_pa = None
-                        for d in candidatos:
-                            row_pa = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (d,))
-                            if row_pa:
-                                doc_norm = d  # confirma a forma que bateu no banco
-                                break
-
-                        # Se não achou pelo documento, tenta por nome (entre parênteses no histórico)
-                        if not row_pa:
-                            nome_busca = ""
-                            m = re.search(r"\(([^)]+)\)", historico or "")
-                            if m and m.group(1).strip():
-                                nome_busca = m.group(1).strip()
-                            elif historico:
-                                nome_busca = re.sub(r"\s+", " ", historico).strip()[:120]
-                            if nome_busca:
-                                row_pa = db.fetch_one(
-                                    "SELECT id FROM participante WHERE UPPER(nome) LIKE UPPER(?)",
-                                    (f"%{nome_busca}%",)
-                                )
-
-                        if row_pa:
-                            id_pa = row_pa[0]
-                        else:
-                            # Auto-cadastra participante quando possível (se tiver documento)
-                            if doc_norm:
-                                # nome padrão: usa parenteses do histórico, senão o histórico limpo
-                                m = re.search(r"\(([^)]+)\)", historico or "")
-                                if m and m.group(1).strip():
-                                    nome_padrao = m.group(1).strip()
-                                else:
-                                    nome_padrao = (re.sub(r"\s+", " ", historico or "").strip() or f"Participante {doc_norm}")[:120]
-
-                                tipo_final = tipo_calc or 4  # 4 = não informado/outros, se não inferir
-                                db.execute_query(
-                                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                                    (doc_norm, nome_padrao, tipo_final)
-                                )
-                                row_new = db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (doc_norm,))
-                                id_pa = row_new[0] if row_new else None
-                            else:
-                                # sem documento não inserimos; mantém id_pa=None
-                                pass
-
-                        # chaves estrangeiras
-                        row_im = db.fetch_one("SELECT id FROM imovel_rural  WHERE cod_imovel = ?", (cod_imv,))
-                        row_ct = db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta  = ?", (cod_cta,))
-                        if not row_im:
-                            warnings.append(f"Linha {lineno}: imóvel '{cod_imv}' não encontrado (0040)."); continue
-                        if not row_ct:
-                            warnings.append(f"Linha {lineno}: conta '{cod_cta}' não encontrada (0050)."); continue
-
-                        # insere lançamento já com despesa/receita corretas e participante acertado
-                        db.execute_query("""
-                            INSERT INTO lancamento (
-                                data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                                id_participante, tipo_lanc, valor_entrada, valor_saida,
-                                saldo_final, natureza_saldo, usuario
-                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            [data_str, row_im[0], row_ct[0], (num_doc or None), tipo_doc, (historico or ""),
-                             id_pa, tipo_lanc, valor_entrada, valor_saida,
-                             saldo_final, natureza_saldo, "Importado LCDPR"]
-                        )
-
-                    # Q200 – resumo mensal (ignora para o banco)
-                    elif reg == "Q200":
-                        continue
-
-                    # 9999 – trailer (aviso apenas; não bloqueia)
-                    elif reg == "9999" and campos:
-                        try:
-                            esperado = int(campos[-1])
-                            if esperado != lineno:
-                                warnings.append(f"Linha {lineno}: trailer espera {esperado} linhas")
-                        except Exception:
-                            warnings.append(f"Linha {lineno}: trailer inválido")
-
-                    # Demais/linhas vazias -> ignora
-
-            if warnings:
-                QMessageBox.warning(self, "Importação concluída com avisos", "\n".join(warnings), QMessageBox.Ok)
-
-            # Atualiza as telas
-            self.cadw.widget(0).carregar_imoveis()
-            self.cadw.widget(1).carregar_contas()
-            self.cadw.widget(2).carregar_participantes()
-            self.carregar_lancamentos()
-            self.dashboard.load_data()
-            QMessageBox.information(self, "Importação", "Arquivo LCDPR importado com sucesso!")
-        except Exception as e:
-            QMessageBox.warning(self, "Importação Falhou", str(e))
-
 
     def _exportar_planilha_lcdpr(self):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
@@ -2579,154 +2261,6 @@ class MainWindow(QMainWindow):
 
         rows.append({"registro": "9999", "EOF": ""}); df = pd.DataFrame(rows); df.to_excel(path, index=False, engine='openpyxl')
         save_last_txt_path(path); QMessageBox.information(self, "Sucesso", f"Planilha {os.path.basename(path)} gerada!")
-
-
-    def importar_arquivo_lcdpr_planilha(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Importar Planilha LCDPR", "", "Excel (*.xlsx *.xls)")
-        if not path: return
-        import pandas as pd; df = pd.read_excel(path, dtype=str)
-        for idx, row in df.iterrows():
-            reg = row.get("registro")
-            if reg == "0040": pass  # lógica para imóvel
-            elif reg == "0050": pass  # lógica para conta
-            elif reg == "0100": pass  # lógica para participante
-            elif reg == "Q100": pass  # lógica para lançamentos
-        self.cadw.widget(0).carregar_imoveis(); self.cadw.widget(1).carregar_contas()
-        self.cadw.widget(2).carregar_participantes(); self.carregar_lancamentos(); self.dashboard.load_data()
-        QMessageBox.information(self, "Importação", "Arquivo LCDPR Planilha importado com sucesso!")
-
-    def importar_arquivo_lcdpr(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Importar arquivo LCDPR", "", "TXT (*.txt);;Todos os arquivos (*)")
-        if not path: return
-        expected_fields = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"]
-        warnings = []
-        try:
-            with open(path, 'rb') as f:
-                for lineno, raw in enumerate(f, start=1):
-                    try: linha = raw.decode('utf-8')
-                    except UnicodeDecodeError: linha = raw.decode('latin-1')
-                    parts = linha.rstrip('\r\n').split("|"); parts = parts[1:] if parts and parts[0] == "" else parts
-                    if len(parts) < 2: continue
-                    reg, campos = parts[0], parts[1:]
-
-                    if reg == "0040":
-                        if len(campos) < 18:
-                            nome_im = campos[6].strip() if len(campos) > 6 else "<sem nome>"
-                            falt = [expected_fields[i] for i in range(18) if i >= len(campos) or not campos[i].strip()]
-                            warnings.append(f"L{lineno}: imóvel '{nome_im}' faltando: {', '.join(falt)}"); campos += [""] * (18 - len(campos))
-                        cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual, nome_imovel, endereco, num, compl, bairro, uf, cod_mun, cep, tipo_exploracao, participacao, area_total, area_utilizada = campos[:18]
-                        cod_imovel = (cod_imovel or '').strip().zfill(3)  # ← preserva “001”, “002”, …
-                        try: participacao_val = float(participacao) / 100.0
-                        except: participacao_val = None
-                        self.db.execute_query("""INSERT OR REPLACE INTO imovel_rural (cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,tipo_exploracao,participacao,area_total,area_utilizada) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            [cod_imovel or None, pais or None, moeda or None, cad_itr or None, caepf or None, insc_estadual or None, nome_imovel or None, endereco or None, num or None, compl or None, bairro or None, uf or None, cod_mun or None, cep or None, int(tipo_exploracao) if tipo_exploracao.isdigit() else None, participacao_val, float(area_total) if area_total else None, float(area_utilizada) if area_utilizada else None])
-
-                    elif reg == "0050":
-                        if len(campos) < 6: continue
-                        cod_cta, pais_cta, banco_cod, nome_banco, agencia, num_conta = (campos + [""]*6)[:6]
-                        cod_cta = (cod_cta or '').strip().zfill(3)        # ← preserva “001”, “002”, …
-                        if len(campos) >= 7:
-                            try: saldo_val = float(campos[6].strip().replace(',', '.'))
-                            except: saldo_val = 0.0
-                        else: saldo_val = 0.0
-                        self.db.execute_query("""INSERT OR REPLACE INTO conta_bancaria (cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                            [cod_cta or None, pais_cta or None, banco_cod or None, nome_banco or None, agencia or None, num_conta or None, saldo_val])
-
-                    elif reg == "Q100":
-                        # Campos: data, cod_imovel, cod_conta, num_doc, tipo_doc,
-                        # historico, cpf_cnpj, tipo_lanc(IGNORAR), valor_saida, valor_entrada, saldo, natureza
-                        if len(campos) < 12:
-                            warnings.append(f"L{lineno}: Q100 com colunas insuficientes ({len(campos)})")
-                            continue
-
-                        data_str, cod_im_raw, cod_cta_raw, num_doc, raw_tipo_doc, historico, cpf_cnpj_raw, _, raw_sai, raw_ent, _, _ = (campos + [""]*12)[:12]
-
-                        # Normaliza códigos (ex.: '6' -> '006')
-                        cod_imovel = str(cod_im_raw).strip().zfill(3)
-                        cod_conta  = str(cod_cta_raw).strip().zfill(3)
-
-                        # Converte tipos e valores
-                        try:
-                            tipo_doc = int((raw_tipo_doc or "0").strip())
-                        except:
-                            tipo_doc = 0
-
-                        def _to_float(s: str) -> float:
-                            s = (s or "0").strip().replace(".", "").replace(",", ".")
-                            try:
-                                return float(s)
-                            except:
-                                return 0.0
-
-                        # No seu arquivo, o valor NÃO-ZERO está na 10ª coluna e representa SAÍDA (Despesa)
-                        sai = _to_float(raw_ent)  # trata a 10ª coluna como SAÍDA
-                        ent = _to_float(raw_sai)  # 9ª coluna como ENTRADA (geralmente 0.00)
-
-                        # Tipo do lançamento definido pelo valor: 1=Despesa(saída), 2=Receita(entrada)
-                        tipo_lanc = 1 if sai > 0 else (2 if ent > 0 else 1)
-
-                        # Participante: usar somente CPF/CNPJ; se não existir, CADASTRA e vincula
-                        cpf_digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                        id_participante = None
-                        if len(cpf_digits) in (11, 14):
-                            row_pa = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (cpf_digits,))
-                            if row_pa:
-                                id_participante = row_pa[0]
-                            else:
-                                # cadastra automaticamente
-                                tipo_pc = 1 if len(cpf_digits) == 14 else 2  # 1=PJ, 2=PF (ajuste conforme seu enum)
-                                nome_padrao = (historico or "").strip()[:120] or f"Participante {cpf_digits}"
-                                self.db.execute_query(
-                                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-                                    (cpf_digits, nome_padrao, tipo_pc)
-                                )
-                                row_pa = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (cpf_digits,))
-                                if row_pa:
-                                    id_participante = row_pa[0]
-                        elif cpf_digits:
-                            warnings.append(f"L{lineno}: CPF/CNPJ inválido '{cpf_cnpj_raw}' – lançamento importado sem participante")
-
-                        # Busca chaves estrangeiras
-                        im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,))
-                        if not im:
-                            warnings.append(f"L{lineno}: imóvel '{cod_imovel}' não encontrado")
-                            continue
-                        ct = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,))
-                        if not ct:
-                            warnings.append(f"L{lineno}: conta '{cod_conta}' não encontrada")
-                            continue
-
-                        id_imovel, id_conta = im[0], ct[0]
-
-                        # Calcula saldo anterior e saldo final dessa conta
-                        last = self.db.fetch_one(
-                            "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
-                            "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
-                            (id_conta,)
-                        )
-                        saldo_ant = last[0] if last and last[0] is not None else 0.0
-                        saldo_f = saldo_ant + ent - sai
-                        nat = 'P' if saldo_f >= 0 else 'N'
-
-                        # Insere lançamento
-                        self.db.execute_query(
-                            "INSERT INTO lancamento (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, "
-                            "id_participante, tipo_lanc, valor_entrada, valor_saida, saldo_final, natureza_saldo, usuario) "
-                            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                            (data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
-                             id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER)
-                        )
-
-
-            if warnings:
-                QMessageBox.warning(self, "Importação concluída com avisos", "\n".join(warnings), QMessageBox.Ok)
-
-            self.cadw.widget(0).carregar_imoveis(); self.cadw.widget(1).carregar_contas()
-            self.cadw.widget(2).carregar_participantes(); self.carregar_lancamentos(); self.dashboard.load_data()
-            QMessageBox.information(self, "Importação", "Arquivo LCDPR importado com sucesso!")
-
-        except Exception as e:
-            QMessageBox.warning(self, "Importação Falhou", str(e))
 
     def show_export_dialog(self, parent_dialog):
         parent_dialog.hide(); dlg = QDialog(self); dlg.setWindowTitle("Exportar Arquivo LCDPR"); dlg.setMinimumSize(400, 120)
@@ -2780,36 +2314,107 @@ class MainWindow(QMainWindow):
             self.carregar_lancamentos(); self.dashboard.load_data()
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", f"Arquivo não segue o layout esperado:\n{e}")
-
+    
     def _import_lancamentos_txt(self, path):
+        def _parse_cent(v: str) -> float:
+            s = re.sub(r'\D', '', (v or ''))
+            return (int(s) / 100.0) if s else 0.0
+    
         with open(path, encoding='utf-8') as f:
             for lineno, line in enumerate(f, 1):
                 parts = line.strip().split("|")
-
+    
+                # --- Layout antigo (11 colunas) -> YYYY-MM-DD | ... | entrada | saída | _
                 if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}", parts[0]):
-                    data_str, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico, id_participante, tipo_lanc, raw_ent, raw_sai, _ = parts
-                    tipo_doc = int(raw_tipo_doc); ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0; sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
+                    (data_str, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                     participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
+    
+                    # tipo_doc
+                    tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+    
+                    # valores decimais já em reais
+                    ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
+                    sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
+    
+                    # participante: tenta CPF/CNPJ, senão usa ID se for número
+                    id_participante = None
+                    digits = re.sub(r"\D", "", participante_raw or "")
+                    if digits and len(digits) in (11, 14):
+                        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                        if row:
+                            id_participante = row[0]
+                    elif (participante_raw or "").isdigit():
+                        id_participante = int(participante_raw)
+    
+                    # tipo_lanc: usa arquivo se vier numérico; senão deduz pelo movimento
+                    tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+    
+                # --- NOVO layout (12 colunas) -> DD-MM-AAAA | imovel | conta | doc | tipo_doc | historico | CPF/CNPJ | tipo_lanc | ent_cent | sai_cent | saldo_cent | nat
                 elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}", parts[0]):
-                    data_br, cod_imovel, cod_conta, num_doc, _, historico, id_participante, tipo_lanc, _, raw_val, _, _ = parts
-                    d, m, y = data_br.split("-"); data_str = f"{y}-{m}-{d}"; tipo_doc = 4; ent = 0.0; sai = float(raw_val)/100.0 if raw_val.isdigit() else 0.0
+                    (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                     cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
+    
+                    # data dd-mm-aaaa -> yyyy-mm-dd
+                    d, m, y = data_br.split("-")
+                    data_str = f"{y}-{m}-{d}"
+    
+                    # tipo_doc
+                    tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+    
+                    # valores em centavos -> float
+                    ent = _parse_cent(cent_ent)
+                    sai = _parse_cent(cent_sai)
+                    # saldo_final e natureza do TXT são ignorados (o sistema recalcula)
+    
+                    # participante via CPF/CNPJ
+                    id_participante = None
+                    digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
+                    if digits and len(digits) in (11, 14):
+                        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                        if row:
+                            id_participante = row[0]
+    
+                    # tipo_lanc: usa arquivo se vier numérico; senão deduz pelo movimento
+                    tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+    
                 else:
                     raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
-
-                desc = historico.upper()
-                if "TALAO" in desc or any(k in desc for k in ("FOLHA", "IRPJ", "INSS", "FGTS")): tipo_doc = 4
-
+    
+                # Heurística do tipo de documento pelo histórico (mantida)
+                desc = (historico or "").upper()
+                if "TALAO" in desc or any(k in desc for k in ("FOLHA", "IRPJ", "INSS", "FGTS")):
+                    tipo_doc = 4  # outros
+    
+                # Chaves estrangeiras: imóvel e conta
                 im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,))
-                if not im: raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
+                if not im:
+                    raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
                 ct = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,))
-                if not ct: raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
+                if not ct:
+                    raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
                 id_imovel, id_conta = im[0], ct[0]
-
-                last = self.db.fetch_one("SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1", (id_conta,))
-                saldo_ant = last[0] if last and last[0] is not None else 0.0; saldo_f = saldo_ant + ent - sai; nat = 'P' if saldo_f >= 0 else 'N'
-
-                self.db.execute_query("""INSERT INTO lancamento (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, id_participante, tipo_lanc, valor_entrada, valor_saida, saldo_final, natureza_saldo, usuario, categoria) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)""",
-                    [data_str, id_imovel, id_conta, num_doc or None, tipo_doc, historico, int(id_participante), int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER])
-
+    
+                # Saldo anterior e saldo final (recalcula sempre)
+                last = self.db.fetch_one(
+                    "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                    "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                    (id_conta,)
+                )
+                saldo_ant = last[0] if last and last[0] is not None else 0.0
+                saldo_f = saldo_ant + ent - sai
+                nat = 'P' if saldo_f >= 0 else 'N'
+    
+                # INSERT (categoria = NULL); NÃO force int() em id_participante (pode ser None)
+                self.db.execute_query(
+                    """INSERT INTO lancamento (
+                           data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                           id_participante, tipo_lanc, valor_entrada, valor_saida,
+                           saldo_final, natureza_saldo, usuario, categoria
+                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)""",
+                    [data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
+                     id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER]
+                )
+    
     def _import_lancamentos_excel(self, path):
         df = pd.read_excel(path, dtype=str); required = ['data','cod_imovel','cod_conta','num_doc','tipo_doc','historico','id_participante','tipo_lanc','valor_entrada','valor_saida','categoria']
         missing = [c for c in required if c not in df.columns]; df.fillna('', inplace=True)
