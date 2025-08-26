@@ -389,6 +389,91 @@ class NumericItem(QTableWidgetItem):
     def __init__(self, value, text=None): super().__init__(text or str(value)); self._value = value
     def __lt__(self, other): return self._value < other._value if isinstance(other, NumericItem) else super().__lt__(other)
 
+class DateItem(QTableWidgetItem):
+    """Item que ordena por data (aceita dd/MM/yyyy ou yyyy-MM-dd)."""
+    def __init__(self, value: str):
+        val = str(value or "")
+        if "/" in val:  # dd/MM/yyyy
+            d, m, y = val.split("/")
+            self._key = (int(y), int(m), int(d))
+            text = f"{int(d):02d}/{int(m):02d}/{y}"
+        elif "-" in val:  # yyyy-MM-dd
+            y, m, d = val.split("-")
+            self._key = (int(y), int(m), int(d))
+            text = f"{int(d):02d}/{int(m):02d}/{y}"
+        else:
+            self._key = (0, 0, 0)
+            text = val
+        super().__init__(text)
+
+    def __lt__(self, other):
+        if isinstance(other, DateItem):
+            return self._key < other._key
+        return super().__lt__(other)
+
+# ===== Ordenação global por duplo clique no cabeçalho =====
+def _install_header_double_click_sort(table: QTableWidget):
+    """Instala ordenação por duplo clique no cabeçalho para QUALQUER QTableWidget.
+    Faz detecção automática da coluna (texto, número, moeda BR, data dd/MM/yyyy ou yyyy-MM-dd)
+    e converte os itens da coluna para NumericItem/DateItem antes de ordenar.
+    """
+    if getattr(table, "_sort_installed", False):
+        return  # evita instalar duas vezes
+    hdr = table.horizontalHeader()
+    hdr.setSortIndicatorShown(True)
+    table._sort_installed = True
+    table._sort_state = {}  # por coluna
+    def _detect_and_wrap_column(col: int):
+        """Detecta tipo da coluna e troca os itens para NumericItem/DateItem quando aplicável."""
+        import re
+        # 1) pega uma amostra não vazia
+        sample = None
+        for r in range(table.rowCount()):
+            it = table.item(r, col)
+            if it and it.text().strip():
+                sample = it.text().strip()
+                break
+        if not sample:
+            return  # nada para fazer
+        # 2) detecta o tipo
+        is_date = bool(re.match(r"^\d{2}/\d{2}/\d{4}$", sample) or re.match(r"^\d{4}-\d{2}-\d{2}$", sample))
+        is_money_or_num = bool(re.match(r"^\s*(R\$\s*)?[-\d\.\,]+\s*$", sample) or
+                               re.match(r"^\s*-?\d+(?:[.,]\d+)?\s*$", sample))
+        if not (is_date or is_money_or_num):
+            return  # deixa como texto
+        # 3) converte TODAS as células da coluna para o item adequado
+        for r in range(table.rowCount()):
+            old = table.item(r, col)
+            if not old:
+                continue
+            txt = old.text()
+            role = old.data(Qt.UserRole)  # preserva IDs guardados no UserRole
+            align = old.textAlignment()
+            if is_date:
+                new = DateItem(txt)
+            else:
+                # normaliza BR: "1.234,56" -> 1234.56 ; aceita também "-1234,56" e "R$ ..."
+                raw = re.sub(r"[^\d,\.\-]", "", txt)
+                val = float(raw.replace(".", "").replace(",", ".")) if raw else 0.0
+                new = NumericItem(val, text=txt)
+            new.setTextAlignment(align)
+            if role is not None:
+                new.setData(Qt.UserRole, role)
+            table.setItem(r, col, new)
+    def _on_header_double_clicked(col: int):
+        # prepara a coluna (wrap para itens corretos) e alterna asc/desc
+        _detect_and_wrap_column(col)
+        order = table._sort_state.get(col, Qt.DescendingOrder)
+        order = Qt.AscendingOrder if order == Qt.DescendingOrder else Qt.DescendingOrder
+        table._sort_state = {col: order}  # mantém só o estado da coluna ativa
+        table.sortItems(col, order)
+        hdr.setSortIndicator(col, order)
+    hdr.sectionDoubleClicked.connect(_on_header_double_clicked)
+def install_sorting_for_all_tables(root: QWidget):
+    """Liga a ordenação por duplo clique em TODAS as QTableWidget existentes no 'root'."""
+    for tbl in root.findChildren(QTableWidget):
+        _install_header_double_click_sort(tbl)
+        
 class CurrencyLineEdit(QLineEdit):
     def __init__(self, parent=None): super().__init__(parent); self.setAlignment(Qt.AlignRight); self.setPlaceholderText("R$ 0,00"); self.textChanged.connect(self._format_currency)
     def _format_currency(self, text):
@@ -1934,6 +2019,8 @@ class MainWindow(QMainWindow):
                 self.tab_lanc.setColumnHidden(i, not vis.get(label, True))
 
         hdr = self.tab_lanc.horizontalHeader()
+        hdr.sectionDoubleClicked.connect(self._sort_lanc_by_column)
+        hdr.setSortIndicatorShown(True)  # opcional (mostra a setinha)
         for i, _ in enumerate(self._lanc_labels):
             hdr.setSectionResizeMode(i, QHeaderView.ResizeToContents if self._lanc_labels[i]=="Usuário" else QHeaderView.Stretch)
         self.tab_lanc.setAlternatingRowColors(True); self.tab_lanc.setShowGrid(False); self.tab_lanc.verticalHeader().setVisible(False)
@@ -1956,6 +2043,9 @@ class MainWindow(QMainWindow):
 
         # Status
         self.status = QStatusBar(); self.setStatusBar(self.status); self.status.showMessage("Sistema iniciado com sucesso!")
+
+        # >>> Habilita ordenação por duplo clique em TODAS as tabelas desta janela
+        install_sorting_for_all_tables(self)
 
         # Dados iniciais
         self.carregar_lancamentos(); self.profile_selector.setCurrentText("Cleuber Marcos")
@@ -2086,20 +2176,48 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def carregar_lancamentos(self):
-        d1, d2 = self.dt_ini.date().toString("dd/MM/yyyy"), self.dt_fim.date().toString("dd/MM/yyyy")
-        q = f"""SELECT l.id, l.data, i.nome_imovel, l.num_doc, p.nome, l.historico,
-                CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END,
-                l.valor_entrada, l.valor_saida,
-                (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END),
-                l.usuario FROM lancamento l
-                JOIN imovel_rural i ON l.cod_imovel = i.id
-                LEFT JOIN participante p ON l.id_participante = p.id
-                WHERE l.data BETWEEN '{d1}' AND '{d2}' ORDER BY l.data DESC"""
+        # Filtra em ISO para a comparação correta
+        d1 = self.dt_ini.date().toString("yyyy-MM-dd")
+        d2 = self.dt_fim.date().toString("yyyy-MM-dd")
+        
+        # Normaliza a data do registro para ISO (aceita tanto dd/MM/yyyy quanto yyyy-MM-dd)
+        q = f"""
+        SELECT
+            l.id,
+            -- Exibe sempre dd/MM/yyyy
+            CASE
+                WHEN instr(l.data, '/') > 0
+                    THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
+                ELSE strftime('%d/%m/%Y', l.data)
+            END AS data,
+            i.nome_imovel, l.num_doc, p.nome, l.historico,
+            CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END,
+            l.valor_entrada, l.valor_saida,
+            (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END),
+            l.usuario
+        FROM lancamento l
+        JOIN imovel_rural i ON l.cod_imovel = i.id
+        LEFT JOIN participante p ON l.id_participante = p.id
+        WHERE date(
+                CASE
+                    WHEN instr(l.data, '/') > 0
+                        THEN substr(l.data, 7, 4) || '-' || substr(l.data, 4, 2) || '-' || substr(l.data, 1, 2)
+                    ELSE l.data
+                END
+            ) BETWEEN date('{d1}') AND date('{d2}')
+        ORDER BY date(
+                CASE
+                    WHEN instr(l.data, '/') > 0
+                        THEN substr(l.data, 7, 4) || '-' || substr(l.data, 4, 2) || '-' || substr(l.data, 1, 2)
+                    ELSE l.data
+                END
+            ) DESC
+        """
         rows = self.db.fetch_all(q); self.tab_lanc.setRowCount(len(rows))
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
                 if c == 0: item = NumericItem(int(val))
-                elif c == 1: item = QTableWidgetItem(QDate.fromString(val, "dd/MM/yyyy").toString("dd/MM/yyyy"))
+                elif c == 1: item = DateItem(str(val))
                 elif c in (7,8,9):
                     num = float(val); br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                     item = NumericItem(num, f"R$ {br}")
@@ -2110,6 +2228,14 @@ class MainWindow(QMainWindow):
                 elif c == 9: item.setForeground(QColor("#27ae60" if float(val) >= 0 else "#e74c3c"))
                 self.tab_lanc.setItem(r, c, item)
             self.tab_lanc.resizeColumnToContents(self._lanc_labels.index("Usuário"))
+
+    def _sort_lanc_by_column(self, col: int):
+        # Alterna entre asc/desc por coluna
+        order = self._lanc_sort_state.get(col, Qt.DescendingOrder)
+        order = Qt.AscendingOrder if order == Qt.DescendingOrder else Qt.DescendingOrder
+        self._lanc_sort_state[col] = order
+        self.tab_lanc.sortItems(col, order)
+        self.tab_lanc.horizontalHeader().setSortIndicator(col, order)
 
     def editar_lancamento(self):
         row = self.tab_lanc.currentRow(); lanc_id = int(self.tab_lanc.item(row,0).text())
@@ -2316,6 +2442,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Importação Falhou", f"Arquivo não segue o layout esperado:\n{e}")
     
     def _import_lancamentos_txt(self, path):
+        import re
+    
         def _parse_cent(v: str) -> float:
             s = re.sub(r'\D', '', (v or ''))
             return (int(s) / 100.0) if s else 0.0
@@ -2324,19 +2452,26 @@ class MainWindow(QMainWindow):
             for lineno, line in enumerate(f, 1):
                 parts = line.strip().split("|")
     
-                # --- Layout antigo (11 colunas) -> YYYY-MM-DD | ... | entrada | saída | _
-                if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}", parts[0]):
-                    (data_str, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                # -----------------------------
+                # Layout 1 (11 colunas)
+                # YYYY-MM-DD | imovel | conta | num_doc | tipo_doc | historico | participante | tipo_lanc | entrada | saida | _
+                # -----------------------------
+                if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
+                    (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
                      participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
     
-                    # tipo_doc
+                    # Salvar como dd/MM/yyyy (para aparecer na interface)
+                    y, m, d = data_iso.split("-")
+                    data_str = f"{d}/{m}/{y}"
+    
+                    # tipo_doc vindo do arquivo (fallback Fatura=4 se vazio/inválido)
                     tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
     
-                    # valores decimais já em reais
+                    # valores em reais já no arquivo
                     ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
                     sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
     
-                    # participante: tenta CPF/CNPJ, senão usa ID se for número
+                    # participante: tenta CPF/CNPJ; se não, aceita ID numérico
                     id_participante = None
                     digits = re.sub(r"\D", "", participante_raw or "")
                     if digits and len(digits) in (11, 14):
@@ -2346,25 +2481,27 @@ class MainWindow(QMainWindow):
                     elif (participante_raw or "").isdigit():
                         id_participante = int(participante_raw)
     
-                    # tipo_lanc: usa arquivo se vier numérico; senão deduz pelo movimento
+                    # tipo_lanc: usa o arquivo se numérico; senão deduz pelo movimento
                     tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
     
-                # --- NOVO layout (12 colunas) -> DD-MM-AAAA | imovel | conta | doc | tipo_doc | historico | CPF/CNPJ | tipo_lanc | ent_cent | sai_cent | saldo_cent | nat
-                elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}", parts[0]):
+                # -----------------------------
+                # Layout 2 (12 colunas)
+                # DD-MM-AAAA | imovel | conta | num_doc | tipo_doc | historico | cpf/cnpj | tipo_lanc | ent_cent | sai_cent | saldo_cent | nat
+                # -----------------------------
+                elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
                     (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
                      cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
     
-                    # data dd-mm-aaaa -> yyyy-mm-dd
+                    # Salvar como dd/MM/yyyy (para aparecer na interface)
                     d, m, y = data_br.split("-")
-                    data_str = f"{y}-{m}-{d}"
+                    data_str = f"{d}/{m}/{y}"
     
-                    # tipo_doc
+                    # tipo_doc vindo do arquivo (fallback Fatura=4 se vazio/inválido)
                     tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
     
-                    # valores em centavos -> float
+                    # valores (em centavos no arquivo) -> float em reais
                     ent = _parse_cent(cent_ent)
                     sai = _parse_cent(cent_sai)
-                    # saldo_final e natureza do TXT são ignorados (o sistema recalcula)
     
                     # participante via CPF/CNPJ
                     id_participante = None
@@ -2374,18 +2511,31 @@ class MainWindow(QMainWindow):
                         if row:
                             id_participante = row[0]
     
-                    # tipo_lanc: usa arquivo se vier numérico; senão deduz pelo movimento
+                    # tipo_lanc: usa o arquivo se numérico; senão deduz pelo movimento
                     tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
     
                 else:
                     raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
     
-                # Heurística do tipo de documento pelo histórico (mantida)
+                # -----------------------------
+                # Heurística pelo histórico -> define tipo_doc e categoria
+                # -----------------------------
+                categoria = None
                 desc = (historico or "").upper()
-                if "TALAO" in desc or any(k in desc for k in ("FOLHA", "IRPJ", "INSS", "FGTS")):
-                    tipo_doc = 4  # outros
     
-                # Chaves estrangeiras: imóvel e conta
+                # Folha
+                if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
+                    tipo_doc = 5
+                    categoria = "Folha"
+    
+                # Fatura (talão / energia)
+                elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
+                    tipo_doc = 4
+                    categoria = "Fatura"
+    
+                # -----------------------------
+                # Chaves estrangeiras
+                # -----------------------------
                 im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,))
                 if not im:
                     raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
@@ -2394,7 +2544,9 @@ class MainWindow(QMainWindow):
                     raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
                 id_imovel, id_conta = im[0], ct[0]
     
-                # Saldo anterior e saldo final (recalcula sempre)
+                # -----------------------------
+                # Recalcula saldos
+                # -----------------------------
                 last = self.db.fetch_one(
                     "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
                     "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
@@ -2404,17 +2556,20 @@ class MainWindow(QMainWindow):
                 saldo_f = saldo_ant + ent - sai
                 nat = 'P' if saldo_f >= 0 else 'N'
     
-                # INSERT (categoria = NULL); NÃO force int() em id_participante (pode ser None)
+                # -----------------------------
+                # INSERT (inclui categoria)
+                # -----------------------------
                 self.db.execute_query(
                     """INSERT INTO lancamento (
                            data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
                            id_participante, tipo_lanc, valor_entrada, valor_saida,
                            saldo_final, natureza_saldo, usuario, categoria
-                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)""",
+                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     [data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
-                     id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER]
+                     id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER, categoria]
                 )
     
+
     def _import_lancamentos_excel(self, path):
         df = pd.read_excel(path, dtype=str); required = ['data','cod_imovel','cod_conta','num_doc','tipo_doc','historico','id_participante','tipo_lanc','valor_entrada','valor_saida','categoria']
         missing = [c for c in required if c not in df.columns]; df.fillna('', inplace=True)
