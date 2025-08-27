@@ -14,11 +14,12 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
-    QWidgetAction, QInputDialog
+    QWidgetAction, QInputDialog, QProgressDialog
 )
-from PySide6.QtCore import Qt, QDate, QSize, QSettings
+from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from contextlib import contextmanager
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -70,23 +71,81 @@ def save_cache(cache: dict):
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
+# Substitua toda a função por esta versão (usa o mesmo cache existente)
+RATE_LIMIT_RETRIES = 4          # nº de tentativas
+RATE_LIMIT_BASE_DELAY = 2.0     # segundos (backoff exponencial: 2,4,8,16)
+MIN_INTERVAL_BETWEEN_CALLS = 1.0  # garante espaçamento mínimo entre hits
+_RECEITA_LAST_HIT_TS = 0.0
+
 def consulta_receita(cpf_cnpj: str, tipo: str = 'cnpj') -> dict:
     """
     Faz consulta na API ou no cache. Chave = "<tipo>:<cpf_cnpj>"
+    Tenta respeitar limite de requisições e faz backoff em 429/erros transitórios.
     """
+    import time
     cache = load_cache()
     key = f"{tipo}:{cpf_cnpj}"
     if key in cache:
         return cache[key]
 
+    global _RECEITA_LAST_HIT_TS
     url = (API_URL_CPF if tipo == 'cpf' else API_URL_CNPJ) + cpf_cnpj
-    res = requests.get(url, timeout=5)
-    res.raise_for_status()
-    data = res.json()
 
-    cache[key] = data
-    save_cache(cache)
-    return data
+    for attempt in range(RATE_LIMIT_RETRIES):
+        # espaçamento mínimo entre chamadas
+        elapsed = time.time() - _RECEITA_LAST_HIT_TS
+        if elapsed < MIN_INTERVAL_BETWEEN_CALLS:
+            time.sleep(MIN_INTERVAL_BETWEEN_CALLS - elapsed)
+
+        try:
+            res = requests.get(url, timeout=8)
+            _RECEITA_LAST_HIT_TS = time.time()
+
+            # 429 (Too Many Requests) → backoff e tenta de novo
+            if res.status_code == 429:
+                time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
+                continue
+
+            res.raise_for_status()
+            data = res.json()
+
+            # receitaws retorna {"status":"ERROR","message":"muitas consultas"...}
+            if isinstance(data, dict):
+                status = str(data.get('status', '')).upper()
+                msg = str(data.get('message', '')).lower()
+                if status == 'ERROR' and ('muita' in msg or 'many' in msg or 'limite' in msg):
+                    time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
+                    continue
+
+            cache[key] = data
+            save_cache(cache)
+            return data
+
+        except requests.RequestException:
+            # erro transitório → backoff e tenta novamente
+            time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
+            continue
+
+    # todas as tentativas falharam → sinaliza erro (sem estourar exceção)
+    return {"status": "ERROR", "message": "RATE_LIMIT_OR_NETWORK"}
+
+def _extract_name_from_historico(historico: str) -> str:
+    """Pega o texto dentro do último parêntese do histórico (para CPF)."""
+    import re
+    if not historico:
+        return ""
+    m = re.findall(r"\(([^)]+)\)", historico)
+    return (m[-1].strip() if m else "")
+
+def _nome_cnpj_from_receita(data: dict) -> str:
+    """Extrai o melhor nome de um retorno da Receita para CNPJ."""
+    if not isinstance(data, dict):
+        return ""
+    for k in ("nome", "razao_social", "razaosocial", "razaoSocial", "fantasia", "nome_fantasia"):
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
 
 APP_ICON    = 'agro_icon.png'
 
@@ -247,16 +306,25 @@ class LoginDialog(QDialog):
 # ─── Passo 2: Ajuste da classe Database ───
 class Database:
     def __init__(self, filename: str = None):
-        # Usa o DB do perfil atual se nenhum filename for passado
         if filename is None:
             filename = get_profile_db_filename()
         try:
             self.conn = sqlite3.connect(filename)
         except sqlite3.OperationalError as e:
             raise RuntimeError(f"Não foi possível abrir/criar o banco em '{filename}':\n  {e}")
+
+        # Uma única passagem de criação/migração
         self._create_tables()
         self._create_views()
-        self._migrate_schema()   # <-- inserir esta chamada
+        self._migrate_schema()
+        self._migrate_add_data_ord()
+        self._create_indexes()
+
+        # PRAGMAs de desempenho (apenas aqui)
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA temp_store=MEMORY")
+        self.conn.execute("PRAGMA cache_size=-200000")  # ~200 MB (ajuste se quiser)
 
     def _migrate_schema(self):
         """Adiciona a coluna usuario em lancamento se ela ainda não existir."""
@@ -312,14 +380,25 @@ class Database:
             imovel_id INTEGER, FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id)
         );
         CREATE TABLE IF NOT EXISTS lancamento (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, data DATE NOT NULL,
-            cod_imovel INTEGER NOT NULL, cod_conta INTEGER NOT NULL,
-            num_doc TEXT, tipo_doc INTEGER NOT NULL, historico TEXT NOT NULL,
-            id_participante INTEGER, tipo_lanc INTEGER NOT NULL,
-            valor_entrada REAL DEFAULT 0, valor_saida REAL DEFAULT 0,
-            saldo_final REAL NOT NULL, natureza_saldo TEXT NOT NULL,
-            usuario TEXT NOT NULL, categoria TEXT, area_afetada INTEGER,
-            quantidade REAL, unidade_medida TEXT,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data DATE NOT NULL,
+            cod_imovel INTEGER NOT NULL,
+            cod_conta INTEGER NOT NULL,
+            num_doc TEXT,
+            tipo_doc INTEGER NOT NULL,
+            historico TEXT NOT NULL,
+            id_participante INTEGER,
+            tipo_lanc INTEGER NOT NULL,
+            valor_entrada REAL DEFAULT 0,
+            valor_saida REAL DEFAULT 0,
+            saldo_final REAL NOT NULL,
+            natureza_saldo TEXT NOT NULL,
+            usuario TEXT NOT NULL,
+            categoria TEXT,
+            data_ord INTEGER,                 -- <<< NOVO CAMPO
+            area_afetada INTEGER,
+            quantidade REAL,
+            unidade_medida TEXT,
             FOREIGN KEY(cod_imovel) REFERENCES imovel_rural(id),
             FOREIGN KEY(cod_conta) REFERENCES conta_bancaria(id),
             FOREIGN KEY(id_participante) REFERENCES participante(id),
@@ -348,11 +427,48 @@ class Database:
         self.conn.commit()
     
     
-    def execute_query(self, sql: str, params: list = None):
+    def execute_query(self, sql: str, params: list = None, autocommit: bool = True):
         cur = self.conn.cursor()
         cur.execute(sql, params or [])
-        self.conn.commit()
+        if autocommit:
+            self.conn.commit()
         return cur
+
+    @contextmanager
+    def bulk(self):
+        cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+
+    def _migrate_add_data_ord(self):
+        cur = self.conn.cursor()
+        # Descobre as colunas atuais
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento)").fetchall()]
+        # 1) Se a coluna não existir, adiciona
+        if "data_ord" not in cols:
+            cur.execute("ALTER TABLE lancamento ADD COLUMN data_ord INTEGER")
+            self.conn.commit()
+            # 2) Preenche para registros antigos (data DD/MM/AAAA ou YYYY-MM-DD)
+            # DD/MM/AAAA -> AAAAMMDD
+            cur.execute("""
+                UPDATE lancamento
+                   SET data_ord = CAST(substr(data, 7, 4) || substr(data, 4, 2) || substr(data, 1, 2) AS INTEGER)
+                 WHERE instr(data, '/') > 0 AND length(data) = 10
+            """)
+            # YYYY-MM-DD -> AAAAMMDD
+            cur.execute("""
+                UPDATE lancamento
+                   SET data_ord = CAST(replace(data, '-', '') AS INTEGER)
+                 WHERE instr(data, '-') > 0 AND length(data) = 10
+            """)
+            self.conn.commit()
+
+
 
     def fetch_one(self, sql: str, params: list = None):
         return self.execute_query(sql, params).fetchone()
@@ -362,6 +478,23 @@ class Database:
 
     def close(self):
         self.conn.close()
+
+    def _create_indexes(self):
+        self.conn.cursor().executescript("""
+        CREATE INDEX IF NOT EXISTS idx_part_cpf        ON participante(cpf_cnpj);
+        CREATE INDEX IF NOT EXISTS idx_part_nome       ON participante(nome);
+        CREATE INDEX IF NOT EXISTS idx_cta_cod         ON conta_bancaria(cod_conta);
+        CREATE INDEX IF NOT EXISTS idx_cta_nome        ON conta_bancaria(nome_banco);
+        CREATE INDEX IF NOT EXISTS idx_imov_cod        ON imovel_rural(cod_imovel);
+        CREATE INDEX IF NOT EXISTS idx_imov_nome       ON imovel_rural(nome_imovel);
+        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord   ON lancamento(data_ord);   -- **chave**
+        CREATE INDEX IF NOT EXISTS idx_lanc_cta        ON lancamento(cod_conta);
+        CREATE INDEX IF NOT EXISTS idx_lanc_part       ON lancamento(id_participante);
+        CREATE INDEX IF NOT EXISTS idx_lanc_docp       ON lancamento(num_doc, id_participante);
+        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord_valent ON lancamento(data_ord, valor_entrada);
+        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord_valsai ON lancamento(data_ord, valor_saida);
+        """)
+        self.conn.commit()
 
 # --- ESTILO GLOBAL AGRO  ---
 STYLE_SHEET = """
@@ -383,7 +516,157 @@ QTabBar::tab { background: #2A2C2D; color: #E0E0E0; padding: 8px 16px; border: 1
 QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px solid #002a54; }
 QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
 """
+# ==== PROGRESSO GLOBAL (UMA ÚNICA INSTÂNCIA) ==================================
+class GlobalProgress:
+    """
+    Tela de progresso global. Use:
+        GlobalProgress.begin("Importando...", maximo, parent=self.window())
+        ... (loop) GlobalProgress.set_value(i)  ou GlobalProgress.step()
+        GlobalProgress.end()
+    Se não souber o total ainda, chame begin(maximo=0) que vira 'busy'.
+    """
+    _dlg = None
 
+    @classmethod
+    def _ensure(cls, parent=None):
+        if cls._dlg is None:
+            cls._dlg = QProgressDialog("", "Cancelar", 0, 0, parent)
+            cls._dlg.setWindowTitle("Processando…")
+            cls._dlg.setAutoClose(False)
+            cls._dlg.setAutoReset(False)
+            cls._dlg.setWindowModality(Qt.ApplicationModal)
+
+    @classmethod
+    def begin(cls, texto: str, maximo: int = 0, parent=None):
+        cls._ensure(parent or QApplication.activeWindow())
+        dlg = cls._dlg
+        dlg.setLabelText(texto)
+        dlg.setRange(0, maximo if maximo and maximo > 0 else 0)  # 0..0 == busy
+        dlg.setValue(0)
+        dlg.show()
+        QCoreApplication.processEvents()
+
+    @classmethod
+    def set_max(cls, maximo: int):
+        cls._ensure()
+        cls._dlg.setRange(0, maximo if maximo and maximo > 0 else 0)
+        QCoreApplication.processEvents()
+
+    @classmethod
+    def set_value(cls, valor: int):
+        if cls._dlg:
+            cls._dlg.setValue(valor)
+            QCoreApplication.processEvents()
+
+    @classmethod
+    def step(cls, inc: int = 1):
+        if not cls._dlg:
+            return
+        if cls._dlg.maximum() == 0:
+            return  # está em busy; nada a fazer
+        cls._dlg.setValue(cls._dlg.value() + (inc or 1))
+        QCoreApplication.processEvents()
+
+    @classmethod
+    def end(cls):
+        if cls._dlg:
+            cls._dlg.reset()
+            cls._dlg.hide()
+            QCoreApplication.processEvents()
+# ==============================================================================
+
+# ==== ACELERADOR UNIVERSAL DE LISTAS (OTIMIZADO) ==============================
+class ListAccelerator:
+    """
+    Filtro universal com cache por linha (armazenado em Qt.UserRole+1 do item da coluna 0),
+    debounce (150ms) e aplicação sem repaints por linha.
+    Use:
+        ListAccelerator.install(self)  # 1x no root (opcional, mantido por compatibilidade)
+        ListAccelerator.filter(tabela, texto)
+    """
+    _timers = {}       # tabela -> QTimer (debounce)
+    _last_txt = {}     # tabela -> último texto aplicado
+
+    @staticmethod
+    def install(root: QWidget):
+        # Mantido por compatibilidade; não conecta sinais pesados.
+        # Se quiser, poderia varrer as tabelas aqui; não é necessário.
+        return
+
+    @staticmethod
+    def _ensure_row_cache(table: QTableWidget, row: int):
+        """Garante que a linha 'row' tenha cache de busca em UserRole+1 do item(0)."""
+        it0 = table.item(row, 0)
+        if it0 is None:
+            it0 = QTableWidgetItem("")
+            table.setItem(row, 0, it0)
+        cache = it0.data(Qt.UserRole + 1)
+        if cache is None:
+            cols = table.columnCount()
+            parts = []
+            for c in range(cols):
+                it = table.item(row, c)
+                if it:
+                    parts.append(it.text())
+            it0.setData(Qt.UserRole + 1, " | ".join(parts).casefold())
+        return it0.data(Qt.UserRole + 1)
+
+    @staticmethod
+    def _apply_filter(table: QTableWidget, text: str):
+        needle = (text or "").casefold()
+
+        # pausa ordenação e repaints
+        sort_enabled = table.isSortingEnabled()
+        if sort_enabled:
+            table.setSortingEnabled(False)
+
+        table.setUpdatesEnabled(False)
+        try:
+            if not needle:
+                # mostrar tudo rápido
+                for r in range(table.rowCount()):
+                    if table.isRowHidden(r):
+                        table.setRowHidden(r, False)
+                return
+
+            for r in range(table.rowCount()):
+                cache = ListAccelerator._ensure_row_cache(table, r)
+                hide = needle not in cache
+                if table.isRowHidden(r) != hide:
+                    table.setRowHidden(r, hide)
+        finally:
+            table.setUpdatesEnabled(True)
+            if sort_enabled:
+                table.setSortingEnabled(True)
+            QCoreApplication.processEvents()
+
+    @staticmethod
+    def filter(table: QTableWidget, text: str, delay_ms: int = 150):
+        """
+        Aplica filtro com debounce. Chamar livremente em textChanged.
+        """
+        ListAccelerator._last_txt[table] = text
+        t = ListAccelerator._timers.get(table)
+        if t is None:
+            t = QTimer(table)
+            t.setSingleShot(True)
+            ListAccelerator._timers[table] = t
+            def _run():
+                txt = ListAccelerator._last_txt.get(table, "")
+                ListAccelerator._apply_filter(table, txt)
+            t.timeout.connect(_run)
+        t.start(max(0, delay_ms))
+
+    @staticmethod
+    def build_cache(table: QTableWidget):
+        table.setUpdatesEnabled(False)
+        try:
+            for r in range(table.rowCount()):
+                ListAccelerator._ensure_row_cache(table, r)
+        finally:
+            table.setUpdatesEnabled(True)
+
+# ==============================================================================
 
 class NumericItem(QTableWidgetItem):
     def __init__(self, value, text=None): super().__init__(text or str(value)); self._value = value
@@ -411,22 +694,21 @@ class DateItem(QTableWidgetItem):
             return self._key < other._key
         return super().__lt__(other)
 
-# ===== Ordenação global por duplo clique no cabeçalho =====
+# ===== Ordenação global por duplo clique no cabeçalho (OTIMIZADA) ============
 def _install_header_double_click_sort(table: QTableWidget):
-    """Instala ordenação por duplo clique no cabeçalho para QUALQUER QTableWidget.
-    Faz detecção automática da coluna (texto, número, moeda BR, data dd/MM/yyyy ou yyyy-MM-dd)
-    e converte os itens da coluna para NumericItem/DateItem antes de ordenar.
-    """
     if getattr(table, "_sort_installed", False):
-        return  # evita instalar duas vezes
+        return
     hdr = table.horizontalHeader()
     hdr.setSortIndicatorShown(True)
     table._sort_installed = True
-    table._sort_state = {}  # por coluna
-    def _detect_and_wrap_column(col: int):
-        """Detecta tipo da coluna e troca os itens para NumericItem/DateItem quando aplicável."""
-        import re
-        # 1) pega uma amostra não vazia
+    table._sort_state = {}         # col -> ordem
+    table._wrapped_cols = set()    # colunas já convertidas p/ NumericItem/DateItem
+
+    def _wrap_column_once(col: int):
+        """Detecta tipo e converte a coluna só uma vez para itens otimizados."""
+        if col in table._wrapped_cols:
+            return
+        # amostra
         sample = None
         for r in range(table.rowCount()):
             it = table.item(r, col)
@@ -434,45 +716,60 @@ def _install_header_double_click_sort(table: QTableWidget):
                 sample = it.text().strip()
                 break
         if not sample:
-            return  # nada para fazer
-        # 2) detecta o tipo
+            table._wrapped_cols.add(col)
+            return
+
+        import re
         is_date = bool(re.match(r"^\d{2}/\d{2}/\d{4}$", sample) or re.match(r"^\d{4}-\d{2}-\d{2}$", sample))
         is_money_or_num = bool(re.match(r"^\s*(R\$\s*)?[-\d\.\,]+\s*$", sample) or
                                re.match(r"^\s*-?\d+(?:[.,]\d+)?\s*$", sample))
         if not (is_date or is_money_or_num):
-            return  # deixa como texto
-        # 3) converte TODAS as células da coluna para o item adequado
-        for r in range(table.rowCount()):
-            old = table.item(r, col)
-            if not old:
-                continue
-            txt = old.text()
-            role = old.data(Qt.UserRole)  # preserva IDs guardados no UserRole
-            align = old.textAlignment()
-            if is_date:
-                new = DateItem(txt)
-            else:
-                # normaliza BR: "1.234,56" -> 1234.56 ; aceita também "-1234,56" e "R$ ..."
-                raw = re.sub(r"[^\d,\.\-]", "", txt)
-                val = float(raw.replace(".", "").replace(",", ".")) if raw else 0.0
-                new = NumericItem(val, text=txt)
-            new.setTextAlignment(align)
-            if role is not None:
-                new.setData(Qt.UserRole, role)
-            table.setItem(r, col, new)
+            table._wrapped_cols.add(col)
+            return
+
+        model = table.model()
+        blocker = QSignalBlocker(model)  # evita 'dataChanged' em massa
+        table.setUpdatesEnabled(False)
+        try:
+            for r in range(table.rowCount()):
+                old = table.item(r, col)
+                if not old:
+                    continue
+                txt = old.text()
+                role = old.data(Qt.UserRole)      # preserva payload
+                role1 = old.data(Qt.UserRole + 1) # preserva cache (acelerador)
+                align = old.textAlignment()
+                if is_date:
+                    new = DateItem(txt)
+                else:
+                    raw = re.sub(r"[^\d,\.\-]", "", txt)
+                    val = float(raw.replace(".", "").replace(",", ".")) if raw else 0.0
+                    new = NumericItem(val, text=txt)
+                new.setTextAlignment(align)
+                if role is not None:
+                    new.setData(Qt.UserRole, role)
+                if role1 is not None:
+                    new.setData(Qt.UserRole + 1, role1)
+                table.setItem(r, col, new)
+        finally:
+            table.setUpdatesEnabled(True)
+        table._wrapped_cols.add(col)
+
     def _on_header_double_clicked(col: int):
-        # prepara a coluna (wrap para itens corretos) e alterna asc/desc
-        _detect_and_wrap_column(col)
+        _wrap_column_once(col)
         order = table._sort_state.get(col, Qt.DescendingOrder)
         order = Qt.AscendingOrder if order == Qt.DescendingOrder else Qt.DescendingOrder
-        table._sort_state = {col: order}  # mantém só o estado da coluna ativa
+        table._sort_state = {col: order}
         table.sortItems(col, order)
         hdr.setSortIndicator(col, order)
+
     hdr.sectionDoubleClicked.connect(_on_header_double_clicked)
+
+
 def install_sorting_for_all_tables(root: QWidget):
-    """Liga a ordenação por duplo clique em TODAS as QTableWidget existentes no 'root'."""
     for tbl in root.findChildren(QTableWidget):
         _install_header_double_click_sort(tbl)
+# ==============================================================================
         
 class CurrencyLineEdit(QLineEdit):
     def __init__(self, parent=None): super().__init__(parent); self.setAlignment(Qt.AlignRight); self.setPlaceholderText("R$ 0,00"); self.textChanged.connect(self._format_currency)
@@ -717,41 +1014,93 @@ class CadastroParticipanteDialog(QDialog):
         self.cpf_cnpj.setCursorPosition(cur)
 
     def _on_cpf_cnpj(self):
-        raw = self.cpf_cnpj.text().strip(); digits = re.sub(r'\D', '', raw); idx = self.tipo.currentIndex()
-        if idx == 0 and not valida_cpf(raw): QMessageBox.warning(self, "CPF inválido", "O CPF digitado não é válido."); self.nome.clear(); return
-        if idx == 1 and len(digits) != 14: return
-        try:
-            kind = 'cpf' if idx == 0 else 'cnpj'; info = consulta_receita(digits, tipo=kind)
-            if info.get('status') == 'OK':
-                nome_api = info.get('nome') or info.get('fantasia')
-                if nome_api: self.nome.setText(nome_api)
-        except: return
+        import re
+        raw = self.cpf_cnpj.text().strip()
+        digits = re.sub(r'\D', '', raw)
+        idx = self.tipo.currentIndex()  # 0=Pessoa Jurídica (CNPJ), 1=Pessoa Física (CPF)
+
+        # Pessoa Física (CPF)
+        if idx == 1:
+            if not valida_cpf(raw):
+                QMessageBox.warning(self, "CPF inválido", "O CPF digitado não é válido.")
+                self.nome.clear()
+                return
+            # Tenta Receita para preencher nome (se disponível)
+            try:
+                info = consulta_receita(digits, tipo='cpf')
+                nome_api = (info.get('nome') or "").strip()
+                if nome_api:
+                    self.nome.setText(nome_api)
+            except Exception:
+                pass
+
+        # Pessoa Jurídica (CNPJ)
+        elif idx == 0:
+            if len(digits) != 14:
+                return
+            try:
+                info = consulta_receita(digits, tipo='cnpj')
+                nome_api = _nome_cnpj_from_receita(info)
+                if nome_api:
+                    self.nome.setText(nome_api)
+            except Exception:
+                pass
 
     def salvar(self):
-        raw = self.cpf_cnpj.text().strip(); digits = re.sub(r'\D', '', raw); idx = self.tipo.currentIndex()
-        if idx == 0 and not valida_cpf(raw): QMessageBox.warning(self, "Inválido", "CPF inválido."); return
+        import re, requests
+        raw = self.cpf_cnpj.text().strip()
+        digits = re.sub(r'\D', '', raw)
+        idx = self.tipo.currentIndex()  # 0=Pessoa Jurídica (CNPJ), 1=Pessoa Física (CPF)
+
+        # Validações corretas por tipo
         if idx == 1:
-            if len(digits) != 14: QMessageBox.warning(self, "Inválido", "CNPJ deve ter 14 dígitos."); return
-            try: info = consulta_receita(digits, tipo='cnpj')
-            except requests.HTTPError: QMessageBox.warning(self, "Inválido", "Não foi possível consultar o CNPJ na Receita Federal."); return
-            if info.get('status') != 'OK': QMessageBox.warning(self, "Não Encontrado", "CNPJ não localizado na Receita Federal."); return
+            if not valida_cpf(raw):
+                QMessageBox.warning(self, "Inválido", "CPF inválido.")
+                return
+        elif idx == 0:
+            if len(digits) != 14:
+                QMessageBox.warning(self, "Inválido", "CNPJ deve ter 14 dígitos.")
+                return
+            try:
+                info = consulta_receita(digits, tipo='cnpj')
+            except requests.HTTPError:
+                QMessageBox.warning(self, "Inválido", "Não foi possível consultar o CNPJ na Receita Federal.")
+                return
+            # Aceita se vier nome/fantasia, mesmo que não tenha 'status'
+            if not _nome_cnpj_from_receita(info):
+                QMessageBox.warning(self, "Não Encontrado", "CNPJ não localizado na Receita Federal.")
+                return
 
         nome = self.nome.text().strip()
-        if not nome: QMessageBox.warning(self, "Inválido", "Nome não pode ficar vazio."); return
+        if not nome:
+            QMessageBox.warning(self, "Inválido", "Nome não pode ficar vazio.")
+            return
 
         exists = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits,))
         if exists and not self.participante_id:
-            QMessageBox.information(self, "Já existe", f"Participante já cadastrado (ID {exists[0]})."); return
+            QMessageBox.information(self, "Já existe", f"Participante já cadastrado (ID {exists[0]}).")
+            return
 
-        data = (digits, nome, idx + 1)
+        data = (digits, nome, idx + 1)  # 1=Juridica, 2=Fisica
         try:
             if self.participante_id:
-                self.db.execute_query("UPDATE participante SET cpf_cnpj = ?, nome = ?, tipo_contraparte = ? WHERE id = ?", data + (self.participante_id,))
+                self.db.execute_query(
+                    "UPDATE participante SET cpf_cnpj = ?, nome = ?, tipo_contraparte = ? WHERE id = ?",
+                    data + (self.participante_id,))
             else:
-                self.db.execute_query("INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", data)
-            QMessageBox.information(self, "Sucesso", "Participante salvo com sucesso!"); self.accept()
+                self.db.execute_query(
+                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", data)
+            QMessageBox.information(self, "Sucesso", "Participante salvo com sucesso!")
+            # Ao salvar manualmente, também atualiza combos abertos:
+            if hasattr(self.parent(), "_broadcast_participantes_changed"):
+                try:
+                    self.parent()._broadcast_participantes_changed()
+                except Exception:
+                    pass
+            self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Erro ao Salvar", f"Não foi possível salvar participante:\n{e}")
+
 
 class ParametrosDialog(QDialog):
     def __init__(self, parent=None):
@@ -939,31 +1288,37 @@ class DashboardWidget(QWidget):
         self.load_data()
 
     def load_data(self):
-        d1 = self.dt_dash_ini.date().toString("dd/MM/yyyy")
-        d2 = self.dt_dash_fim.date().toString("dd/MM/yyyy")
+        d1_ord = int(self.dt_dash_ini.date().toString("yyyyMMdd"))
+        d2_ord = int(self.dt_dash_fim.date().toString("yyyyMMdd"))
+
         # Saldo total
         saldo = self.db.fetch_one("SELECT SUM(saldo_atual) FROM saldo_contas")[0] or 0
         s = f"{saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.saldo_card.findChild(QLabel, "value").setText(f"R$ {s}")
-        # Receitas e Despesas no intervalo
+
+        # Receitas e Despesas no intervalo (indexado e cobrindo)
         rec = self.db.fetch_one(
-            "SELECT SUM(valor_entrada) FROM lancamento WHERE data BETWEEN ? AND ?", (d1, d2)
+            "SELECT SUM(valor_entrada) FROM lancamento WHERE data_ord BETWEEN ? AND ?",
+            (d1_ord, d2_ord)
         )[0] or 0
         desp = self.db.fetch_one(
-            "SELECT SUM(valor_saida)   FROM lancamento WHERE data BETWEEN ? AND ?", (d1, d2)
+            "SELECT SUM(valor_saida)   FROM lancamento WHERE data_ord BETWEEN ? AND ?",
+            (d1_ord, d2_ord)
         )[0] or 0
+
         r = f"{rec:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.receita_card.findChild(QLabel, "value").setText(f"R$ {r}")
         d = f"{desp:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.despesa_card.findChild(QLabel, "value").setText(f"R$ {d}")
+
         # Gráfico de pizza com %
         self.series.clear()
-        s1 = self.series.append("Receitas", rec)
-        s2 = self.series.append("Despesas", desp)
-        for slice in self.series.slices():
-            pct = slice.percentage() * 100
-            slice.setLabelVisible(True)
-            slice.setLabel(f"{slice.label()} ({pct:.1f}%)")
+        self.series.append("Receitas", rec)
+        self.series.append("Despesas", desp)
+        for sl in self.series.slices():
+            pct = sl.percentage() * 100
+            sl.setLabelVisible(True)
+            sl.setLabel(f"{sl.label()} ({pct:.1f}%)")
 
 # --- DIALOG PARA LANÇAMENTOS CONTÁBEIS ---
 class LancamentoDialog(QDialog):
@@ -1144,9 +1499,12 @@ class LancamentoDialog(QDialog):
             now = datetime.now().strftime("%d/%m/%Y %H:%M")
             usuario_ts = f"{CURRENT_USER} dia {now}"
 
+            data_str = self.data.date().toString("dd/MM/yyyy")
+            data_ord = int(self.data.date().toString("yyyyMMdd"))
+
             # Parâmetros para INSERT/UPDATE (sem categoria)
             params = [
-                self.data.date().toString("dd/MM/yyyy"),
+                data_str,
                 self.imovel.currentData(),
                 self.conta.currentData(),
                 num or None,
@@ -1154,11 +1512,8 @@ class LancamentoDialog(QDialog):
                 self.historico.text().strip(),
                 part,
                 self.tipo_lanc.currentIndex() + 1,
-                ent,
-                sai,
-                abs(saldo_f),
-                nat,
-                usuario_ts
+                ent, sai, abs(saldo_f), nat, usuario_ts,
+                data_ord
             ]
             
             if self.lanc_id:
@@ -1167,7 +1522,7 @@ class LancamentoDialog(QDialog):
                     data = ?, cod_imovel = ?, cod_conta = ?, num_doc = ?, tipo_doc = ?,
                     historico = ?, id_participante = ?, tipo_lanc = ?,
                     valor_entrada = ?, valor_saida = ?, saldo_final = ?,
-                    natureza_saldo = ?, usuario = ?
+                    natureza_saldo = ?, usuario = ?, data_ord = ?
                 WHERE id = ?
                 """
                 self.db.execute_query(sql, params + [self.lanc_id])
@@ -1177,7 +1532,7 @@ class LancamentoDialog(QDialog):
                     data, cod_imovel, cod_conta, num_doc, tipo_doc,
                     historico, id_participante, tipo_lanc,
                     valor_entrada, valor_saida, saldo_final,
-                    natureza_saldo, usuario
+                    natureza_saldo, usuario, data_ord
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """
                 self.db.execute_query(sql, params)
@@ -1208,6 +1563,8 @@ class LancamentoDialog(QDialog):
                 self.tabela.setItem(r, c, item)
             self.tabela.item(r, 0).setData(Qt.UserRole, id_)
 
+            ListAccelerator.build_cache(self.tabela)
+
     def _select_row(self, row, _):
         self.selected_row = row
         self.btn_editar.setEnabled(True)
@@ -1237,6 +1594,22 @@ class LancamentoDialog(QDialog):
                 self.carregar_imoveis()
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao excluir: {e}")
+
+    def _reload_participantes(self):
+        """Recarrega o combo de participantes mantendo a seleção atual."""
+        cur_id = self.participante.currentData() if hasattr(self, "participante") else None
+        self.participante.blockSignals(True)
+        try:
+            self.participante.clear()
+            self.participante.addItem("Selecione...", None)
+            for id_, nome in self.db.fetch_all("SELECT id, nome FROM participante ORDER BY nome"):
+                self.participante.addItem(nome, id_)
+            if cur_id is not None:
+                idx = self.participante.findData(cur_id)
+                if idx >= 0:
+                    self.participante.setCurrentIndex(idx)
+        finally:
+            self.participante.blockSignals(False)
 
 # --- WIDGET GERENCIAMENTO CONTAS ---
 class GerenciamentoContasWidget(QWidget):
@@ -1327,15 +1700,8 @@ class GerenciamentoContasWidget(QWidget):
         self.layout.addWidget(self.tabela)
 
     def _filter_contas(self, text: str):
-        text = text.lower()
-        for row in range(self.tabela.rowCount()):
-            hide = True
-            for col in range(self.tabela.columnCount()):
-                item = self.tabela.item(row, col)
-                if item and text in item.text().lower():
-                    hide = False
-                    break
-            self.tabela.setRowHidden(row, hide)
+        ListAccelerator.filter(self.tabela, text, delay_ms=0)
+
 
     def importar_contas(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1378,19 +1744,29 @@ class GerenciamentoContasWidget(QWidget):
         if not all(col in df.columns for col in required):
             raise ValueError("Layout de Excel inválido")
         df.fillna('', inplace=True)
-        for row in df.itertuples(index=False):
-            self.db.execute_query(
-                """
-                INSERT OR REPLACE INTO conta_bancaria (
-                    cod_conta, pais_cta, banco, nome_banco,
-                    agencia, num_conta, saldo_inicial
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row.cod_conta, row.pais_cta, row.banco, row.nome_banco,
-                    row.agencia, row.num_conta, float(row.saldo_inicial)
-                )
-            )
+
+        total = len(df.index)
+        GlobalProgress.begin("Importando contas (Excel)…", maximo=total, parent=self.window())
+        try:
+            with self.db.bulk():
+                for i, row in enumerate(df.itertuples(index=False), start=1):
+                    self.db.execute_query(
+                        """
+                        INSERT OR REPLACE INTO conta_bancaria (
+                            cod_conta, pais_cta, banco, nome_banco, agencia, num_conta, saldo_inicial
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            row.cod_conta, row.pais_cta, row.banco, row.nome_banco,
+                            row.agencia, row.num_conta, float(row.saldo_inicial or 0)
+                        ),
+                        autocommit=False
+                    )
+                    if i % 100 == 0:
+                        GlobalProgress.set_value(i)
+            GlobalProgress.set_value(total)
+        finally:
+            GlobalProgress.end()
 
     def _toggle_sort(self, index: int):
         """Cicla entre sem ordenação, asc e desc."""
@@ -1462,6 +1838,9 @@ class GerenciamentoContasWidget(QWidget):
         # limpa seleção e botoes
         self.btn_editar.setEnabled(False)
         self.btn_excluir.setEnabled(False)
+
+        ListAccelerator.build_cache(self.tabela)
+
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -1631,15 +2010,8 @@ class GerenciamentoImoveisWidget(QWidget):
                 chk.setChecked(not self.tabela.isColumnHidden(idx))
 
     def _filter_imoveis(self, text: str):
-        text = text.lower()
-        for row in range(self.tabela.rowCount()):
-            hide = True
-            for col in range(self.tabela.columnCount()):
-                item = self.tabela.item(row, col)
-                if item and text in item.text().lower():
-                    hide = False
-                    break
-            self.tabela.setRowHidden(row, hide)
+        ListAccelerator.filter(self.tabela, text, delay_ms=0)
+
 
     def importar_imoveis(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -1675,70 +2047,90 @@ class GerenciamentoImoveisWidget(QWidget):
 
 
     def _import_imoveis_txt(self, path: str):
-        with open(path, encoding='utf-8') as f:
-            for lineno, line in enumerate(f, 1):
-                parts = line.strip().split("|")
-                if len(parts) != 18:
-                    raise ValueError(
-                        f"Linha {lineno}: esperado 18 campos, encontrou {len(parts)}"
-                    )
-                (
-                    cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
-                    nome_imovel, endereco, num, compl, bairro, uf,
-                    cod_mun, cep, tipo_exploracao, participacao,
-                    area_total, area_utilizada
-                ) = parts
-                self.db.execute_query(
-                    """
-                    INSERT OR REPLACE INTO imovel_rural (
-                        cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
-                        nome_imovel, endereco, num, compl, bairro, uf,
-                        cod_mun, cep, tipo_exploracao, participacao,
-                        area_total, area_utilizada
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    [
-                        cod_imovel, pais, moeda,
-                        cad_itr or None, caepf or None, insc_estadual or None,
-                        nome_imovel, endereco,
-                        num or None, compl or None, bairro, uf,
-                        cod_mun, cep,
-                        int(tipo_exploracao), float(participacao),
-                        float(area_total), float(area_utilizada)
-                    ]
-                )
+        # conta linhas para o progresso
+        with open(path, encoding='utf-8') as _f:
+            total = sum(1 for _ in _f)
+
+        GlobalProgress.begin("Importando imóveis (TXT)…", maximo=total, parent=self.window())
+        try:
+            with self.db.bulk():
+                with open(path, encoding='utf-8') as f:
+                    for lineno, line in enumerate(f, 1):
+                        parts = line.strip().split("|")
+                        if len(parts) != 18:
+                            raise ValueError(f"Linha {lineno}: esperado 18 campos, encontrou {len(parts)}")
+                        (
+                            cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                            nome_imovel, endereco, num, compl, bairro, uf,
+                            cod_mun, cep, tipo_exploracao, participacao,
+                            area_total, area_utilizada
+                        ) = parts
+                        self.db.execute_query(
+                            """
+                            INSERT OR REPLACE INTO imovel_rural (
+                                cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                                nome_imovel, endereco, num, compl, bairro, uf,
+                                cod_mun, cep, tipo_exploracao, participacao,
+                                area_total, area_utilizada
+                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """,
+                            [
+                                cod_imovel, pais, moeda,
+                                cad_itr or None, caepf or None, insc_estadual or None,
+                                nome_imovel, endereco,
+                                num or None, compl or None, bairro, uf,
+                                cod_mun, cep, int(tipo_exploracao), float(participacao),
+                                float(area_total), float(area_utilizada)
+                            ],
+                            autocommit=False
+                        )
+                        if lineno % 50 == 0:
+                            GlobalProgress.set_value(lineno)
+            GlobalProgress.set_value(total)
+        finally:
+            GlobalProgress.end()
+
 
     def _import_imoveis_excel(self, path: str):
         df = pd.read_excel(path, dtype=str)
         required = [
             'cod_imovel','pais','moeda','cad_itr','caepf','insc_estadual',
             'nome_imovel','endereco','num','compl','bairro','uf',
-            'cod_mun','cep','tipo_exploracao','participacao',
-            'area_total','area_utilizada'
+            'cod_mun','cep','tipo_exploracao','participacao','area_total','area_utilizada'
         ]
-        if not all(col in df.columns for col in required):
-            raise ValueError("Layout de Excel inválido")
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"Colunas faltando no Excel: {', '.join(missing)}")
+    
         df.fillna('', inplace=True)
-        for row in df.itertuples(index=False):
-            self.db.execute_query(
-                """
-                INSERT OR REPLACE INTO imovel_rural (
-                    cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
-                    nome_imovel, endereco, num, compl, bairro, uf,
-                    cod_mun, cep, tipo_exploracao, participacao,
-                    area_total, area_utilizada
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    row.cod_imovel, row.pais, row.moeda,
-                    row.cad_itr or None, row.caepf or None, row.insc_estadual or None,
-                    row.nome_imovel, row.endereco,
-                    row.num or None, row.compl or None, row.bairro, row.uf,
-                    row.cod_mun, row.cep,
-                    int(row.tipo_exploracao), float(row.participacao),
-                    float(row.area_total), float(row.area_utilizada)
-                )
-            )
+        total = len(df.index)
+        GlobalProgress.begin("Importando imóveis (Excel)…", maximo=total, parent=self.window())
+        try:
+            with self.db.bulk():
+                for i, row in enumerate(df.itertuples(index=False), start=1):
+                    self.db.execute_query(
+                        """
+                        INSERT OR REPLACE INTO imovel_rural (
+                            cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+                            nome_imovel, endereco, num, compl, bairro, uf,
+                            cod_mun, cep, tipo_exploracao, participacao, area_total, area_utilizada
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        [
+                            row.cod_imovel, row.pais, row.moeda,
+                            (row.cad_itr or None), (row.caepf or None), (row.insc_estadual or None),
+                            row.nome_imovel, row.endereco,
+                            (row.num or None), (row.compl or None), row.bairro, row.uf,
+                            row.cod_mun, row.cep, int(row.tipo_exploracao), float(row.participacao or 0),
+                            float(row.area_total or 0), float(row.area_utilizada or 0)
+                        ],
+                        autocommit=False
+                    )
+                    if i % 50 == 0:
+                        GlobalProgress.set_value(i)
+            GlobalProgress.set_value(total)
+        finally:
+            GlobalProgress.end()
 
     def carregar_imoveis(self):
         rows = self.db.fetch_all(
@@ -1875,10 +2267,8 @@ class GerenciamentoParticipantesWidget(QWidget):
 
 
     def _filter_participantes(self, text: str):
-        text = text.lower()
-        for row in range(self.tabela.rowCount()):
-            hide = all(text not in (self.tabela.item(row, col).text().lower() if self.tabela.item(row, col) else '') for col in range(self.tabela.columnCount()))
-            self.tabela.setRowHidden(row, hide)
+        # usa cache por linha e aplica já (delay=0)
+        ListAccelerator.filter(self.tabela, text, delay_ms=0)
 
     def importar_participantes(self):
         path, _ = QFileDialog.getOpenFileName(self, "Importar Participantes", "", "TXT (*.txt);;Excel (*.xlsx *.xls)")
@@ -1914,6 +2304,9 @@ class GerenciamentoParticipantesWidget(QWidget):
                 item = QTableWidgetItem(v); item.setTextAlignment(Qt.AlignCenter); self.tabela.setItem(r, c, item)
             self.tabela.item(r, 0).setData(Qt.UserRole, id_)
         self.btn_editar.setEnabled(False); self.btn_excluir.setEnabled(False)
+
+        ListAccelerator.build_cache(self.tabela)
+
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -2046,6 +2439,9 @@ class MainWindow(QMainWindow):
 
         # >>> Habilita ordenação por duplo clique em TODAS as tabelas desta janela
         install_sorting_for_all_tables(self)
+        
+        # NOVO: indexação/cache + filtro rápido universal
+        ListAccelerator.install(self)
 
         # Dados iniciais
         self.carregar_lancamentos(); self.profile_selector.setCurrentText("Cleuber Marcos")
@@ -2105,10 +2501,7 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _filter_lancamentos(self, text: str):
-        text = text.lower()
-        for row in range(self.tab_lanc.rowCount()):
-            hide = all(text not in (self.tab_lanc.item(row, col).text().lower() if self.tab_lanc.item(row, col) else '') for col in range(self.tab_lanc.columnCount()))
-            self.tab_lanc.setRowHidden(row, hide)
+        ListAccelerator.filter(self.tab_lanc, text, delay_ms=0)
 
     def _create_menu(self):
         mb = self.menuBar(); m1 = mb.addMenu("&Arquivo")
@@ -2174,60 +2567,132 @@ class MainWindow(QMainWindow):
         btn_export_plan.clicked.connect(lambda: (dlg.accept(), self._exportar_planilha_lcdpr()))
     
         dlg.exec()
-
+    
     def carregar_lancamentos(self):
-        # Filtra em ISO para a comparação correta
-        d1 = self.dt_ini.date().toString("yyyy-MM-dd")
-        d2 = self.dt_fim.date().toString("yyyy-MM-dd")
-        
-        # Normaliza a data do registro para ISO (aceita tanto dd/MM/yyyy quanto yyyy-MM-dd)
-        q = f"""
+        # 1) Consulta (rápida, indexada)
+        d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+        d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+        q = """
         SELECT
             l.id,
-            -- Exibe sempre dd/MM/yyyy
             CASE
                 WHEN instr(l.data, '/') > 0
                     THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
                 ELSE strftime('%d/%m/%Y', l.data)
             END AS data,
-            i.nome_imovel, l.num_doc, p.nome, l.historico,
-            CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END,
-            l.valor_entrada, l.valor_saida,
-            (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END),
+            i.nome_imovel,
+            l.num_doc,
+            p.nome,
+            l.historico,
+            CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END AS tipo,
+            l.valor_entrada,
+            l.valor_saida,
+            (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo,
             l.usuario
         FROM lancamento l
-        JOIN imovel_rural i ON l.cod_imovel = i.id
-        LEFT JOIN participante p ON l.id_participante = p.id
-        WHERE date(
-                CASE
-                    WHEN instr(l.data, '/') > 0
-                        THEN substr(l.data, 7, 4) || '-' || substr(l.data, 4, 2) || '-' || substr(l.data, 1, 2)
-                    ELSE l.data
-                END
-            ) BETWEEN date('{d1}') AND date('{d2}')
-        ORDER BY date(
-                CASE
-                    WHEN instr(l.data, '/') > 0
-                        THEN substr(l.data, 7, 4) || '-' || substr(l.data, 4, 2) || '-' || substr(l.data, 1, 2)
-                    ELSE l.data
-                END
-            ) DESC
+        JOIN imovel_rural i       ON l.cod_imovel = i.id
+        LEFT JOIN participante p  ON l.id_participante = p.id
+        WHERE l.data_ord BETWEEN ? AND ?
+        ORDER BY l.data_ord DESC, l.id DESC
+        LIMIT 2000
         """
-        rows = self.db.fetch_all(q); self.tab_lanc.setRowCount(len(rows))
-        for r, row in enumerate(rows):
-            for c, val in enumerate(row):
-                if c == 0: item = NumericItem(int(val))
-                elif c == 1: item = DateItem(str(val))
-                elif c in (7,8,9):
-                    num = float(val); br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    item = NumericItem(num, f"R$ {br}")
-                else: item = QTableWidgetItem(str(val))
-                item.setTextAlignment(Qt.AlignCenter)
-                if c == 7: item.setForeground(QColor("#27ae60"))
-                elif c == 8: item.setForeground(QColor("#e74c3c"))
-                elif c == 9: item.setForeground(QColor("#27ae60" if float(val) >= 0 else "#e74c3c"))
-                self.tab_lanc.setItem(r, c, item)
-            self.tab_lanc.resizeColumnToContents(self._lanc_labels.index("Usuário"))
+        rows = self.db.fetch_all(q, [d1_ord, d2_ord])
+    
+        # 2) Prepara a tabela sem travar a UI
+        self.tab_lanc.setSortingEnabled(False)
+        self.tab_lanc.setUpdatesEnabled(False)
+        self.tab_lanc.clearContents()
+        self.tab_lanc.setRowCount(len(rows))
+        self.tab_lanc.setUpdatesEnabled(True)
+    
+        # 3) Estado para carga assíncrona
+        self._lanc_rows = rows
+        self._lanc_fill_pos = 0
+    
+        # 4) Pinta um primeiro pedaço já (feedback instantâneo)
+        self._fill_lanc_chunk(size=300)
+    
+        # 5) Agenda o resto em background (sem travar)
+        QTimer.singleShot(0, self._fill_lanc_async)
+    
+    def _fill_lanc_async(self):
+        # Ajuste o tamanho do chunk conforme a sua máquina
+        self._fill_lanc_chunk(size=400)
+    
+    def _fill_lanc_chunk(self, size=400):
+        tbl = self.tab_lanc
+        rows = getattr(self, "_lanc_rows", [])
+        start = getattr(self, "_lanc_fill_pos", 0)
+        end = min(start + size, len(rows))
+        if start >= end:
+            # terminou: reativa ordenação e faz o resize de coluna no próximo tick
+            tbl.setSortingEnabled(True)
+            try:
+                idx = self._lanc_labels.index("Usuário")
+                QTimer.singleShot(0, lambda: tbl.resizeColumnToContents(idx))
+            except Exception:
+                pass
+            return
+    
+        # Evita sinais e repaints desnecessários
+        model = tbl.model()
+        blocker = QSignalBlocker(model)
+        tbl.setUpdatesEnabled(False)
+        try:
+            for r in range(start, end):
+                row = rows[r]
+                for c, val in enumerate(row):
+                    if c == 0:
+                        item = NumericItem(int(val))
+                    elif c == 1:
+                        item = DateItem(str(val))
+                    elif c in (7, 8, 9):  # valores
+                        num = float(val or 0)
+                        br = f"{num:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        item = NumericItem(num, f"R$ {br}")
+                    else:
+                        item = QTableWidgetItem("" if val is None else str(val))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    if c == 7:
+                        item.setForeground(QColor("#27ae60"))
+                    elif c == 8:
+                        item.setForeground(QColor("#e74c3c"))
+                    elif c == 9:
+                        v = float(val or 0)
+                        item.setForeground(QColor("#27ae60" if v >= 0 else "#e74c3c"))
+                    tbl.setItem(r, c, item)
+    
+                # já constroi cache de filtro desta linha → busca instantânea
+                ListAccelerator._ensure_row_cache(tbl, r)
+        finally:
+            tbl.setUpdatesEnabled(True)
+    
+        self._lanc_fill_pos = end
+        # Continua no próximo “tick” até completar tudo
+        QTimer.singleShot(0, self._fill_lanc_async)
+    
+
+    def _warm_lanc_cache_async(self, chunk=400):
+        tbl = self.tab_lanc
+        total = tbl.rowCount()
+        if total == 0:
+            return
+        tbl._cache_pos = 0
+
+        def step():
+            start = tbl._cache_pos
+            end = min(start + chunk, total)
+            tbl.setUpdatesEnabled(False)
+            try:
+                for r in range(start, end):
+                    ListAccelerator._ensure_row_cache(tbl, r)
+            finally:
+                tbl.setUpdatesEnabled(True)
+            tbl._cache_pos = end
+            if end < total:
+                QTimer.singleShot(0, step)
+
+        QTimer.singleShot(0, step)
 
     def _sort_lanc_by_column(self, col: int):
         # Alterna entre asc/desc por coluna
@@ -2440,153 +2905,365 @@ class MainWindow(QMainWindow):
             self.carregar_lancamentos(); self.dashboard.load_data()
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", f"Arquivo não segue o layout esperado:\n{e}")
-    
+
+    def _extract_name_from_historico(historico: str) -> str:
+        """Retorna o texto dentro do último parêntese no histórico, ou ''."""
+        import re
+        if not historico:
+            return ""
+        m = re.findall(r"\(([^)]+)\)", historico)
+        return (m[-1].strip() if m else "")
+
+    def _ensure_participante(self, digits: str, historico: str = "") -> int:
+        """
+        Garante que o participante (CPF/CNPJ) exista.
+        - CNPJ: consulta Receita e usa razão/fantasia como nome.
+        - CPF: usa o nome entre parênteses do histórico; se vazio, tenta Receita.
+        Retorna id do participante.
+        """
+        # já existe?
+        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+        if row:
+            return row[0]
+
+        is_pf = (len(digits) == 11)
+        tipo_contraparte = 2 if is_pf else 1  # 1=Pessoa Jurídica, 2=Pessoa Física
+        nome = ""
+
+        if is_pf:
+            # 1) tenta pegar do histórico (RENATA ... dentro de parênteses)
+            nome = _extract_name_from_historico(historico)
+            # 2) se não tiver no histórico, tenta Receita (se disponível)
+            if not nome:
+                try:
+                    info = consulta_receita(digits, tipo='cpf')
+                    nome = (info.get('nome') or "").strip()
+                except Exception:
+                    pass
+            if not nome:
+                nome = f"CPF {digits}"
+        else:
+            # CNPJ -> sempre tenta Receita para vir com razão/fantasia
+            try:
+                info = consulta_receita(digits, tipo='cnpj')
+                nome = _nome_cnpj_from_receita(info)
+            except Exception:
+                pass
+            if not nome:
+                # Fallback (só se a API falhar)
+                nome = f"CNPJ {digits}"
+
+        cur = self.db.execute_query(
+            "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
+            [digits, nome, tipo_contraparte]
+        )
+        return cur.lastrowid
+
+    def _broadcast_participantes_changed(self):
+        """Pede para todas as janelas/diálogos recarregarem a lista de participantes."""
+        try:
+            from PySide6.QtWidgets import QApplication, QDialog
+            for top in QApplication.topLevelWidgets():
+                for dlg in top.findChildren(QDialog):
+                    if hasattr(dlg, "_reload_participantes"):
+                        try:
+                            dlg._reload_participantes()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
     def _import_lancamentos_txt(self, path):
         import re
-    
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        usuario_ts = f"{CURRENT_USER} dia {now}"
+
         def _parse_cent(v: str) -> float:
             s = re.sub(r'\D', '', (v or ''))
             return (int(s) / 100.0) if s else 0.0
-    
-        with open(path, encoding='utf-8') as f:
-            for lineno, line in enumerate(f, 1):
-                parts = line.strip().split("|")
-    
-                # -----------------------------
-                # Layout 1 (11 colunas)
-                # YYYY-MM-DD | imovel | conta | num_doc | tipo_doc | historico | participante | tipo_lanc | entrada | saida | _
-                # -----------------------------
-                if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
-                    (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                     participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
-    
-                    # Salvar como dd/MM/yyyy (para aparecer na interface)
-                    y, m, d = data_iso.split("-")
-                    data_str = f"{d}/{m}/{y}"
-    
-                    # tipo_doc vindo do arquivo (fallback Fatura=4 se vazio/inválido)
-                    tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
-    
-                    # valores em reais já no arquivo
-                    ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
-                    sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
-    
-                    # participante: tenta CPF/CNPJ; se não, aceita ID numérico
-                    id_participante = None
-                    digits = re.sub(r"\D", "", participante_raw or "")
-                    if digits and len(digits) in (11, 14):
-                        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                        if row:
-                            id_participante = row[0]
-                    elif (participante_raw or "").isdigit():
-                        id_participante = int(participante_raw)
-    
-                    # tipo_lanc: usa o arquivo se numérico; senão deduz pelo movimento
-                    tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
-    
-                # -----------------------------
-                # Layout 2 (12 colunas)
-                # DD-MM-AAAA | imovel | conta | num_doc | tipo_doc | historico | cpf/cnpj | tipo_lanc | ent_cent | sai_cent | saldo_cent | nat
-                # -----------------------------
-                elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
-                    (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                     cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
-    
-                    # Salvar como dd/MM/yyyy (para aparecer na interface)
-                    d, m, y = data_br.split("-")
-                    data_str = f"{d}/{m}/{y}"
-    
-                    # tipo_doc vindo do arquivo (fallback Fatura=4 se vazio/inválido)
-                    tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
-    
-                    # valores (em centavos no arquivo) -> float em reais
-                    ent = _parse_cent(cent_ent)
-                    sai = _parse_cent(cent_sai)
-    
-                    # participante via CPF/CNPJ
-                    id_participante = None
-                    digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                    if digits and len(digits) in (11, 14):
-                        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                        if row:
-                            id_participante = row[0]
-    
-                    # tipo_lanc: usa o arquivo se numérico; senão deduz pelo movimento
-                    tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
-    
-                else:
-                    raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
-    
-                # -----------------------------
-                # Heurística pelo histórico -> define tipo_doc e categoria
-                # -----------------------------
-                categoria = None
-                desc = (historico or "").upper()
-    
-                # Folha
-                if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
-                    tipo_doc = 5
-                    categoria = "Folha"
-    
-                # Fatura (talão / energia)
-                elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
-                    tipo_doc = 4
-                    categoria = "Fatura"
-    
-                # -----------------------------
-                # Chaves estrangeiras
-                # -----------------------------
-                im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (cod_imovel,))
-                if not im:
-                    raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
-                ct = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (cod_conta,))
-                if not ct:
-                    raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
-                id_imovel, id_conta = im[0], ct[0]
-    
-                # -----------------------------
-                # Recalcula saldos
-                # -----------------------------
-                last = self.db.fetch_one(
-                    "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
-                    "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
-                    (id_conta,)
-                )
-                saldo_ant = last[0] if last and last[0] is not None else 0.0
-                saldo_f = saldo_ant + ent - sai
-                nat = 'P' if saldo_f >= 0 else 'N'
-    
-                # -----------------------------
-                # INSERT (inclui categoria)
-                # -----------------------------
-                self.db.execute_query(
-                    """INSERT INTO lancamento (
-                           data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                           id_participante, tipo_lanc, valor_entrada, valor_saida,
-                           saldo_final, natureza_saldo, usuario, categoria
-                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    [data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
-                     id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER, categoria]
-                )
-    
+
+        def _norms(code: str):
+            s = (code or '').strip()
+            if not s:
+                return []
+            out = [s]
+            if s.isdigit():
+                out += [s.zfill(3), (s.lstrip('0') or '0')]
+            return list(dict.fromkeys(out))
+
+        # ---- contagem de linhas para configurar o progresso ----
+        with open(path, encoding='utf-8') as _f:
+            total = sum(1 for _ in _f)
+
+        # ---- caches para acelerar lookups de FK/participante/saldo por conta ----
+        im_cache = {}      # cod_imovel_normalizado -> id_imovel
+        ct_cache = {}      # cod_conta_normalizado  -> id_conta
+        part_cache = {}    # cpf_cnpj_digits        -> id_participante
+        saldos = {}        # id_conta -> saldo atual (considerando natureza)
+
+        GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=total, parent=self.window())
+        try:
+            with self.db.bulk():
+                with open(path, encoding='utf-8') as f:
+                    for lineno, line in enumerate(f, 1):
+                        parts = line.strip().split("|")
+
+                        # Layout 1 (11 colunas) -> YYYY-MM-DD | ... | participante | ...
+                        if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
+                            (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                             participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
+
+                            y, m, d = data_iso.split("-")
+                            data_str = f"{d}/{m}/{y}"
+                            data_ord = int(f"{y}{m}{d}")  # AAAAMMDD
+                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+                            ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
+                            sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
+
+                            # Participante: CPF/CNPJ ou ID
+                            id_participante = None
+                            digits = re.sub(r"\D", "", participante_raw or "")
+                            if digits and len(digits) in (11, 14):
+                                if digits in part_cache:
+                                    id_participante = part_cache[digits]
+                                else:
+                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
+                                    part_cache[digits] = id_participante
+                            elif (participante_raw or "").isdigit():
+                                id_participante = int(participante_raw)
+
+                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+
+                        # Layout 2 (12 colunas) -> DD-MM-AAAA | ... | cpf/cnpj | ...
+                        elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
+                            (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                             cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
+
+                            d, m, y = data_br.split("-")
+                            data_str = f"{d}/{m}/{y}"
+                            data_ord = int(f"{y}{m}{d}")  # AAAAMMDD
+                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+                            ent = _parse_cent(cent_ent)
+                            sai = _parse_cent(cent_sai)
+
+                            id_participante = None
+                            digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
+                            if digits and len(digits) in (11, 14):
+                                if digits in part_cache:
+                                    id_participante = part_cache[digits]
+                                else:
+                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
+                                    part_cache[digits] = id_participante
+
+                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+
+                        else:
+                            raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+
+                        # Heurísticas de tipo_doc/categoria
+                        categoria = None
+                        desc = (historico or "").upper()
+                        if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
+                            tipo_doc = 5; categoria = "Folha"
+                        elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
+                            tipo_doc = 4; categoria = "Fatura"
+
+                        # FK imóvel (normalização 1/01/001) com cache
+                        id_imovel = None
+                        for c in _norms(cod_imovel):
+                            if c in im_cache:
+                                id_imovel = im_cache[c]
+                                break
+                            row = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (c,))
+                            if row:
+                                id_imovel = row[0]
+                                # guarda no cache para todas as variantes normalizadas
+                                for alt in _norms(cod_imovel):
+                                    im_cache[alt] = id_imovel
+                                break
+                        if not id_imovel:
+                            raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
+
+                        # FK conta (normalização 1/01/001) com cache
+                        id_conta = None
+                        for c in _norms(cod_conta):
+                            if c in ct_cache:
+                                id_conta = ct_cache[c]
+                                break
+                            row = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (c,))
+                            if row:
+                                id_conta = row[0]
+                                for alt in _norms(cod_conta):
+                                    ct_cache[alt] = id_conta
+                                break
+                        if not id_conta:
+                            raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
+
+                        # Saldo/natureza por conta (consulta 1x e mantém acumulado)
+                        if id_conta not in saldos:
+                            last = self.db.fetch_one(
+                                "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                                "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                                (id_conta,)
+                            )
+                            saldos[id_conta] = last[0] if last and last[0] is not None else 0.0
+
+                        saldo_ant = saldos[id_conta]
+                        saldo_f = saldo_ant + ent - sai
+                        saldos[id_conta] = saldo_f  # atualiza para próxima linha dessa conta
+                        nat = 'P' if saldo_f >= 0 else 'N'
+
+                        # INSERT (sem autocommit, estamos dentro do bulk)
+                        self.db.execute_query(
+                            """INSERT INTO lancamento (
+                                   data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                                   id_participante, tipo_lanc, valor_entrada, valor_saida,
+                                   saldo_final, natureza_saldo, usuario, categoria, data_ord
+                               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            [data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
+                             id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
+                        )
+
+                        if lineno % 200 == 0:
+                            GlobalProgress.set_value(lineno)
+
+                GlobalProgress.set_value(total)
+        finally:
+            GlobalProgress.end()
+
+        # terminou: atualiza listas/combos de participantes nas janelas abertas
+        self._broadcast_participantes_changed()
+
 
     def _import_lancamentos_excel(self, path):
-        df = pd.read_excel(path, dtype=str); required = ['data','cod_imovel','cod_conta','num_doc','tipo_doc','historico','id_participante','tipo_lanc','valor_entrada','valor_saida','categoria']
-        missing = [c for c in required if c not in df.columns]; df.fillna('', inplace=True)
-        if missing: raise ValueError(f"Colunas faltando no Excel: {', '.join(missing)}")
+        import re
+        df = pd.read_excel(path, dtype=str)
 
-        for lineno, row in enumerate(df.itertuples(index=False), start=2):
-            im = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", ((row.cod_imovel or '').zfill(3),))
-            if not im: raise ValueError(f"Linha {lineno}: imóvel '{row.cod_imovel}' não encontrado")
-            ct = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", ((row.cod_conta  or '').zfill(3),))
-            if not ct: raise ValueError(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada")
-            id_imovel, id_conta = im[0], ct[0]; ent, sai = float(row.valor_entrada), float(row.valor_saida)
+        required = ['data','cod_imovel','cod_conta','num_doc','tipo_doc','historico','tipo_lanc','valor_entrada','valor_saida','categoria']
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(f"Colunas faltando no Excel: {', '.join(missing)}")
 
-            last = self.db.fetch_one("SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1", (id_conta,))
-            saldo_ant = last[0] if last and last[0] is not None else 0.0; saldo_f = saldo_ant + ent - sai; nat = 'P' if saldo_f >= 0 else 'N'
+        has_pid = 'id_participante' in df.columns
+        has_doc = 'cpf_cnpj' in df.columns
+        if not (has_pid or has_doc):
+            raise ValueError("Planilha deve ter 'id_participante' ou 'cpf_cnpj'.")
 
-            self.db.execute_query("""INSERT INTO lancamento (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, id_participante, tipo_lanc, valor_entrada, valor_saida, saldo_final, natureza_saldo, usuario, categoria) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (row.data, id_imovel, id_conta, row.num_doc or None, int(row.tipo_doc), row.historico, int(row.id_participante), int(row.tipo_lanc), ent, sai, abs(saldo_f), nat, CURRENT_USER, row.categoria))
+        df.fillna('', inplace=True)
+
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        usuario_ts = f"{CURRENT_USER} dia {now}"
+
+        def _norms(code: str):
+            s = (code or '').strip()
+            if not s:
+                return []
+            out = [s]
+            if s.isdigit():
+                out += [s.zfill(3), (s.lstrip('0') or '0')]
+            return list(dict.fromkeys(out))
+
+        total = len(df.index)
+
+        # ---- caches e saldos por conta (mesma lógica do TXT) ----
+        im_cache = {}
+        ct_cache = {}
+        part_cache = {}
+        saldos = {}
+
+        GlobalProgress.begin("Importando lançamentos (Excel)…", maximo=total, parent=self.window())
+        try:
+            with self.db.bulk():
+                for lineno, row in enumerate(df.itertuples(index=False), start=2):
+                    # FK Imóvel (com cache)
+                    id_imovel = None
+                    for c in _norms(getattr(row, 'cod_imovel', '')):
+                        if c in im_cache:
+                            id_imovel = im_cache[c]; break
+                        r = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (c,))
+                        if r:
+                            id_imovel = r[0]
+                            for alt in _norms(getattr(row, 'cod_imovel', '')):
+                                im_cache[alt] = id_imovel
+                            break
+                    if not id_imovel:
+                        raise ValueError(f"Linha {lineno}: imóvel '{row.cod_imovel}' não encontrado")
+
+                    # FK Conta (com cache)
+                    id_conta = None
+                    for c in _norms(getattr(row, 'cod_conta', '')):
+                        if c in ct_cache:
+                            id_conta = ct_cache[c]; break
+                        r = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (c,))
+                        if r:
+                            id_conta = r[0]
+                            for alt in _norms(getattr(row, 'cod_conta', '')):
+                                ct_cache[alt] = id_conta
+                            break
+                    if not id_conta:
+                        raise ValueError(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada")
+
+                    # Participante
+                    pid = None
+                    if has_pid and str(getattr(row, 'id_participante', '')).strip().isdigit():
+                        pid = int(getattr(row, 'id_participante'))
+                    elif has_doc:
+                        digits = re.sub(r'\D', '', str(getattr(row, 'cpf_cnpj', '')))
+                        if digits:
+                            if digits in part_cache:
+                                pid = part_cache[digits]
+                            else:
+                                r = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                                pid = r[0] if r else self._ensure_participante(digits, getattr(row, 'historico', ''))
+                                part_cache[digits] = pid
+
+                    # Valores
+                    ent = float(row.valor_entrada or 0)
+                    sai = float(row.valor_saida or 0)
+                    tipo_doc = int(row.tipo_doc) if str(row.tipo_doc).strip().isdigit() else 4
+                    tipo_lanc = int(row.tipo_lanc) if str(row.tipo_lanc).strip().isdigit() else (1 if sai > 0 else 2)
+
+                    # Saldo/natureza por conta (consulta 1x e mantém acumulado)
+                    if id_conta not in saldos:
+                        last = self.db.fetch_one(
+                            "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                            "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                            (id_conta,)
+                        )
+                        saldos[id_conta] = last[0] if last and last[0] is not None else 0.0
+
+                    saldo_ant = saldos[id_conta]
+                    saldo_f = saldo_ant + ent - sai
+                    saldos[id_conta] = saldo_f
+                    nat = 'P' if saldo_f >= 0 else 'N'
+                    # row.data no formato DD/MM/AAAA
+                    dd, mm, yyyy = str(row.data).split("/")
+                    data_ord = int(f"{yyyy}{mm}{dd}")  # AAAAMMDD
+
+                    # INSERT (sem autocommit, estamos no bulk)
+                    self.db.execute_query(
+                        """INSERT INTO lancamento
+                           (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                            id_participante, tipo_lanc, valor_entrada, valor_saida,
+                            saldo_final, natureza_saldo, usuario, categoria, data_ord)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (row.data, id_imovel, id_conta, (row.num_doc or None), tipo_doc, row.historico,
+                         pid, tipo_lanc, ent, sai, abs(saldo_f), nat, usuario_ts, row.categoria, data_ord)
+                    )
+
+                    if (lineno - 1) % 200 == 0:
+                        GlobalProgress.set_value(lineno - 1)
+
+            GlobalProgress.set_value(total)
+        finally:
+            GlobalProgress.end()
+
+        # terminou: atualiza listas/combos de participantes nas janelas abertas
+        self._broadcast_participantes_changed()
+
+
 
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":
