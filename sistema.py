@@ -14,12 +14,13 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
-    QWidgetAction, QInputDialog, QProgressDialog
+    QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy
 )
-from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker
+from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from contextlib import contextmanager
+import shiboken6
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -214,7 +215,6 @@ def save_users(users: dict):
     with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
-
 # ── (2) Diálogo de registro de novo usuário ────────────────────────
 class RegisterUserDialog(QDialog):
     def __init__(self, parent=None):
@@ -242,7 +242,6 @@ class RegisterUserDialog(QDialog):
             QMessageBox.warning(self, "Erro", "Usuário já existe."); return
         users[u] = p; save_users(users)
         QMessageBox.information(self, "Sucesso", f"Usuário '{u}' cadastrado."); self.accept()
-
 
 # ── (3) Diálogo principal de login ──────────────────────────────────
 class LoginDialog(QDialog):
@@ -407,7 +406,6 @@ class Database:
         """)
         self.conn.commit()
 
-
     def _create_views(self):
         self.conn.cursor().executescript("""
         CREATE VIEW IF NOT EXISTS saldo_contas AS
@@ -467,8 +465,6 @@ class Database:
                  WHERE instr(data, '-') > 0 AND length(data) = 10
             """)
             self.conn.commit()
-
-
 
     def fetch_one(self, sql: str, params: list = None):
         return self.execute_query(sql, params).fetchone()
@@ -573,7 +569,6 @@ class GlobalProgress:
             cls._dlg.reset()
             cls._dlg.hide()
             QCoreApplication.processEvents()
-# ==============================================================================
 
 # ==== ACELERADOR UNIVERSAL DE LISTAS (OTIMIZADO) ==============================
 class ListAccelerator:
@@ -654,6 +649,11 @@ class ListAccelerator:
             def _run():
                 txt = ListAccelerator._last_txt.get(table, "")
                 ListAccelerator._apply_filter(table, txt)
+                # >>> ATUALIZA O BADGE APÓS O FILTRO <<<
+                try:
+                    ListCounter.refresh(table)
+                except Exception:
+                    pass
             t.timeout.connect(_run)
         t.start(max(0, delay_ms))
 
@@ -666,7 +666,167 @@ class ListAccelerator:
         finally:
             table.setUpdatesEnabled(True)
 
-# ==============================================================================
+# ==== CONTADOR GLOBAL DE ITENS VISÍVEIS (para todas as QTableWidget) =========
+class _BadgeHelper(QObject):
+    def __init__(self, table: QTableWidget, label: QLabel):
+        super().__init__(table)
+        self.table = table
+        self.label = label
+        table.installEventFilter(self)
+        self._reposition()
+
+    def _reposition(self):
+        try:
+            p = self.table.mapToParent(QPoint(0, 0))
+            x = p.x() + self.table.width() - self.label.width() - 8
+            # tenta posicionar ACIMA da tabela (fora da lista)
+            y_acima = p.y() - self.label.height() - 6
+            # fallback: se não houver espaço, posiciona DENTRO no alto
+            y_dentro = p.y() + 6
+            y = y_acima if y_acima > 0 else y_dentro
+            self.label.move(x, y)
+            self.label.raise_()
+            self.label.show()
+        except Exception:
+            pass
+
+    def eventFilter(self, obj, ev):
+        if ev.type() in (QEvent.Show, QEvent.Resize, QEvent.Move):
+            self._reposition()
+        return False
+
+class ListCounter:
+    """Badge pequeno no cantinho com 'visíveis/total' para cada QTableWidget."""
+    _helpers = {}  # table -> _BadgeHelper
+
+    @staticmethod
+    def attach(table: QTableWidget):
+        if table in ListCounter._helpers:
+            return
+        parent = table.parentWidget() or table
+        lbl = QLabel(parent)
+        lbl.setObjectName("listCounterBadge")
+        lbl.setStyleSheet("""
+            QLabel#listCounterBadge{
+                background:#0d1b3d; color:#ffffff;
+                border:1px solid #11398a; border-radius:10px;
+                padding:1px 6px; font-size:11px;
+            }
+        """)
+        lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+        helper = _BadgeHelper(table, lbl)
+        ListCounter._helpers[table] = helper
+
+        m = table.model()
+        # Atualiza em qualquer mudança estrutural/visual (com checagem no refresh)
+        m.rowsInserted.connect(lambda *_: ListCounter.refresh(table))
+        m.rowsRemoved.connect(lambda *_: ListCounter.refresh(table))
+        m.modelReset.connect(lambda *_: ListCounter.refresh(table))
+        m.layoutChanged.connect(lambda *_: ListCounter.refresh(table))
+        m.dataChanged.connect(lambda *_: ListCounter.refresh(table))
+
+        # limpa quando a tabela for destruída
+        table.destroyed.connect(lambda *_: ListCounter._on_table_destroyed(table))
+
+        ListCounter.refresh(table)
+
+    @staticmethod
+    def refresh(table: QTableWidget):
+        # se a tabela já foi destruída, sai e limpa
+        if table is None or not shiboken6.isValid(table):
+            ListCounter.detach(table)
+            return
+
+        helper = ListCounter._helpers.get(table)
+        if not helper:
+            return
+
+        lbl = getattr(helper, "label", None)
+        if lbl is None or not shiboken6.isValid(lbl):
+            return
+
+        # pode acontecer de ainda receber sinal com C++ destruído → proteja o acesso
+        try:
+            total = table.rowCount()
+        except RuntimeError:
+            ListCounter.detach(table)
+            return
+
+        visiveis = 0
+        for i in range(total):
+            try:
+                if not table.isRowHidden(i):
+                    visiveis += 1
+            except RuntimeError:
+                ListCounter.detach(table)
+                return
+
+        texto = f"{visiveis}/{total}" if total else "0/0"
+        lbl.setText(texto)
+        lbl.adjustSize()
+        try:
+            helper._reposition()
+        except Exception:
+            pass
+
+    @staticmethod
+    def detach(table: QTableWidget):
+        """Remove o helper e destrói o label, se existirem."""
+        helper = ListCounter._helpers.pop(table, None)
+        if helper:
+            try:
+                if getattr(helper, "label", None) and shiboken6.isValid(helper.label):
+                    helper.label.deleteLater()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _on_table_destroyed(table: QTableWidget):
+        """Slot chamado quando a QTableWidget é destruída."""
+        ListCounter.detach(table)
+
+def install_counters_for_all_tables(root: QWidget):
+    """Chame 1x após montar a UI: instala badge em todas as QTableWidget da tela."""
+    for tbl in root.findChildren(QTableWidget):
+        if tbl.property("counter_in_layout"):  # <<< NÃO criar badge flutuante para essas
+            continue
+        ListCounter.attach(tbl)
+
+def attach_counter_in_layout(table: QTableWidget, layout: QHBoxLayout):
+    """Acopla o contador no layout (direita), sem badge flutuante."""
+    table.setProperty("counter_in_layout", True)
+
+    lbl = QLabel()
+    lbl.setObjectName("listCounterBadge")
+    lbl.setStyleSheet("""
+        QLabel#listCounterBadge{
+            background:#0d1b3d; color:#ffffff;
+            border:1px solid #11398a; border-radius:10px;
+            padding:1px 6px; font-size:11px;
+        }
+    """)
+    lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+    lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+    # empurra para a direita e adiciona o label no fim da barra de filtros
+    layout.addStretch()
+    layout.addWidget(lbl)
+
+    # registra no mesmo dicionário do ListCounter (sem reposicionamento)
+    class _H: pass
+    h = _H(); h.table = table; h.label = lbl; h._reposition = lambda: None
+    ListCounter._helpers[table] = h
+
+    m = table.model()
+    m.rowsInserted.connect(lambda *_: ListCounter.refresh(table))
+    m.rowsRemoved.connect(lambda *_: ListCounter.refresh(table))
+    m.modelReset.connect(lambda *_: ListCounter.refresh(table))
+    m.layoutChanged.connect(lambda *_: ListCounter.refresh(table))
+    m.dataChanged.connect(lambda *_: ListCounter.refresh(table))
+
+    ListCounter.refresh(table)
+    table.destroyed.connect(lambda *_: ListCounter._on_table_destroyed(table))
+# =================================================================================
 
 class NumericItem(QTableWidgetItem):
     def __init__(self, value, text=None): super().__init__(text or str(value)); self._value = value
@@ -765,7 +925,6 @@ def _install_header_double_click_sort(table: QTableWidget):
 
     hdr.sectionDoubleClicked.connect(_on_header_double_clicked)
 
-
 def install_sorting_for_all_tables(root: QWidget):
     for tbl in root.findChildren(QTableWidget):
         _install_header_double_click_sort(tbl)
@@ -779,7 +938,6 @@ class CurrencyLineEdit(QLineEdit):
         value = int(digits); inteiro = value // 100; cents = value % 100
         inteiro_str = f"{inteiro:,}".replace(",", "."); formatted = f"R$ {inteiro_str},{cents:02d}"
         self.blockSignals(True); self.setText(formatted); self.blockSignals(False)
-
 
 # --- DIALOG BASE PARA CADASTROS ---
 class CadastroBaseDialog(QDialog):
@@ -912,7 +1070,6 @@ class CadastroImovelDialog(CadastroBaseDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erro", str(e))
 
-
 # --- DIALOG CADASTRO CONTA BANCÁRIA ---
 class CadastroContaDialog(CadastroBaseDialog):
     def __init__(self, parent=None, conta_id=None):
@@ -978,7 +1135,6 @@ class CadastroContaDialog(CadastroBaseDialog):
             QMessageBox.information(self, "Sucesso", msg); self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Erro ao Salvar", f"Não foi possível salvar a conta bancária:\n{e}")
-
 
 class CadastroParticipanteDialog(QDialog):
     def __init__(self, parent=None, participante_id=None):
@@ -1100,7 +1256,6 @@ class CadastroParticipanteDialog(QDialog):
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Erro ao Salvar", f"Não foi possível salvar participante:\n{e}")
-
 
 class ParametrosDialog(QDialog):
     def __init__(self, parent=None):
@@ -1451,16 +1606,19 @@ class LancamentoDialog(QDialog):
                 QMessageBox.warning(self, "Campos Obrigatórios", "Preencha todos os campos obrigatórios!")
                 return
 
-            num = self.num_doc.text().strip()
+            # SUBSTITUA POR:
+            raw_num = (self.num_doc.text() or '').strip()
+            norm_num = re.sub(r'\s+', '', raw_num)   # remove todos os espaços p/ comparação
             part = self.participante.currentData()
 
+
             # Verifica duplicata: mesmo número de documento + mesmo participante
-            if num:
+            if norm_num:
                 sql = """
                     SELECT id FROM lancamento
-                    WHERE num_doc = ? AND id_participante = ?
+                    WHERE REPLACE(COALESCE(num_doc,''),' ','') = ? AND id_participante = ?
                 """
-                params = [num, part]
+                params = [norm_num, part]
                 if self.lanc_id:
                     sql += " AND id != ?"
                     params.append(self.lanc_id)
@@ -1469,7 +1627,7 @@ class LancamentoDialog(QDialog):
                     QMessageBox.warning(
                         self, "Lançamento Duplicado",
                         f"Já existe um lançamento (ID {existente[0]})\n"
-                        f"com nota nº {num} para este participante."
+                        f"com nota nº {raw_num} para este participante."
                     )
                     return
 
@@ -1507,7 +1665,7 @@ class LancamentoDialog(QDialog):
                 data_str,
                 self.imovel.currentData(),
                 self.conta.currentData(),
-                num or None,
+                raw_num or None,
                 self.tipo_doc.currentIndex() + 1,
                 self.historico.text().strip(),
                 part,
@@ -1533,7 +1691,7 @@ class LancamentoDialog(QDialog):
                     historico, id_participante, tipo_lanc,
                     valor_entrada, valor_saida, saldo_final,
                     natureza_saldo, usuario, data_ord
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """
                 self.db.execute_query(sql, params)
 
@@ -1564,6 +1722,7 @@ class LancamentoDialog(QDialog):
             self.tabela.item(r, 0).setData(Qt.UserRole, id_)
 
             ListAccelerator.build_cache(self.tabela)
+            ListCounter.refresh(self.tabela)
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -1702,7 +1861,6 @@ class GerenciamentoContasWidget(QWidget):
     def _filter_contas(self, text: str):
         ListAccelerator.filter(self.tabela, text, delay_ms=0)
 
-
     def importar_contas(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Importar Contas", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
@@ -1840,7 +1998,7 @@ class GerenciamentoContasWidget(QWidget):
         self.btn_excluir.setEnabled(False)
 
         ListAccelerator.build_cache(self.tabela)
-
+        ListCounter.refresh(self.tabela)
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -2012,7 +2170,6 @@ class GerenciamentoImoveisWidget(QWidget):
     def _filter_imoveis(self, text: str):
         ListAccelerator.filter(self.tabela, text, delay_ms=0)
 
-
     def importar_imoveis(self):
         path, _ = QFileDialog.getOpenFileName(
             self, "Importar Imóveis", "", "TXT (*.txt);;Excel (*.xlsx *.xls)"
@@ -2044,7 +2201,6 @@ class GerenciamentoImoveisWidget(QWidget):
 
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", str(e))
-
 
     def _import_imoveis_txt(self, path: str):
         # conta linhas para o progresso
@@ -2089,7 +2245,6 @@ class GerenciamentoImoveisWidget(QWidget):
             GlobalProgress.set_value(total)
         finally:
             GlobalProgress.end()
-
 
     def _import_imoveis_excel(self, path: str):
         df = pd.read_excel(path, dtype=str)
@@ -2188,7 +2343,6 @@ class GerenciamentoImoveisWidget(QWidget):
                 QMessageBox.critical(self, "Erro", f"Erro ao excluir imóvel ID {id_}: {e}")
         self.carregar_imoveis()
 
-            
 class GerenciamentoParticipantesWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2224,7 +2378,6 @@ class GerenciamentoParticipantesWidget(QWidget):
         hdr = self.tabela.horizontalHeader(); hdr.setHighlightSections(False); hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch); hdr.sectionDoubleClicked.connect(self._toggle_sort_participantes)
         self.layout.addWidget(self.tabela)
-
 
     def _toggle_sort_participantes(self, index: int):
         state = self._participantes_sort_state.get(index, 0)
@@ -2264,7 +2417,6 @@ class GerenciamentoParticipantesWidget(QWidget):
             if isinstance(chk, QCheckBox):
                 idx = self._participantes_labels.index(chk.text())
                 chk.setChecked(not self.tabela.isColumnHidden(idx))
-
 
     def _filter_participantes(self, text: str):
         # usa cache por linha e aplica já (delay=0)
@@ -2306,7 +2458,7 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.btn_editar.setEnabled(False); self.btn_excluir.setEnabled(False)
 
         ListAccelerator.build_cache(self.tabela)
-
+        ListCounter.refresh(self.tabela)
 
     def _select_row(self, row, _):
         self.selected_row = row
@@ -2334,7 +2486,6 @@ class GerenciamentoParticipantesWidget(QWidget):
             except Exception as e: QMessageBox.critical(self, "Erro", f"Erro ao excluir participante ID {pid}: {e}")
         self.carregar_participantes()
 
-
 # --- WIDGET CADASTROS COM ABAS ---
 class CadastrosWidget(QTabWidget):
     def __init__(self, parent=None):
@@ -2358,6 +2509,9 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(STYLE_SHEET)
         self._lanc_labels = ["ID","Data","Imóvel","Documento","Participante","Histórico","Tipo","Entrada","Saída","Saldo","Usuário"]
         self._setup_ui(); self._lanc_sort_state = {}
+        self._create_profile_banner()
+
+        install_counters_for_all_tables(self)
 
     def _setup_ui(self):
         self.setWindowIcon(QIcon(APP_ICON))
@@ -2403,6 +2557,8 @@ class MainWindow(QMainWindow):
         self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows); self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tab_lanc.cellClicked.connect(lambda r,_: (self.btn_edit_lanc.setEnabled(True), self.btn_del_lanc.setEnabled(True)))
         l_l.addWidget(self.tab_lanc)
+        # contador no layout (sem sobrepor a barra de filtros)
+        attach_counter_in_layout(self.tab_lanc, self.lanc_filter_layout)
 
         config_file = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lanc_columns.json')
         if os.path.exists(config_file):
@@ -2483,7 +2639,6 @@ class MainWindow(QMainWindow):
                         continue
                     chk.setChecked(not self.tab_lanc.isColumnHidden(idx))
     
-    
     def toggle_sort_lanc(self, index: int):
         state = self._lanc_sort_state.get(index, 0)
         if state == 0: self.tab_lanc.sortItems(index, Qt.AscendingOrder); new = 1
@@ -2540,10 +2695,34 @@ class MainWindow(QMainWindow):
         self.profile_selector.currentTextChanged.connect(self.switch_profile)
         tb.addWidget(self.profile_selector)
 
+    def _create_profile_banner(self):
+        tb = QToolBar("Topo")
+        tb.setMovable(False)
+        tb.setIconSize(QSize(1, 1))  # sem ícones
+        tb.setStyleSheet("QToolBar{background:#1B1D1E;border:0px;}")
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+
+        self._profile_banner = QLabel()
+        self._profile_banner.setStyleSheet("color:#E0E0E0; font-weight:bold; padding:4px 10px;")
+        self._profile_banner.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        tb.addWidget(self._profile_banner)
+
+        self.addToolBar(Qt.TopToolBarArea, tb)
+        self._update_profile_banner()
+
+    def _update_profile_banner(self):
+        user = CURRENT_USER or "—"
+        self._profile_banner.setText(f"Perfil: {CURRENT_PROFILE}  |  Usuário: {user}")
+
     def switch_profile(self, profile: str):
         global CURRENT_PROFILE
         if profile == CURRENT_PROFILE: return
         CURRENT_PROFILE = profile
+        self._update_profile_banner()
+
         self.db.conn.close(); self.db = Database()
         self.dashboard.db.conn.close(); self.dashboard.db = Database(); self.dashboard.load_data()
         self.carregar_lancamentos(); self.carregar_planejamento()
@@ -2594,7 +2773,6 @@ class MainWindow(QMainWindow):
         LEFT JOIN participante p  ON l.id_participante = p.id
         WHERE l.data_ord BETWEEN ? AND ?
         ORDER BY l.data_ord DESC, l.id DESC
-        LIMIT 2000
         """
         rows = self.db.fetch_all(q, [d1_ord, d2_ord])
     
@@ -2632,8 +2810,9 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, lambda: tbl.resizeColumnToContents(idx))
             except Exception:
                 pass
+            ListCounter.refresh(tbl)  # <<< COLOQUE ESTA LINHA AQUI
             return
-    
+
         # Evita sinais e repaints desnecessários
         model = tbl.model()
         blocker = QSignalBlocker(model)
@@ -2671,7 +2850,6 @@ class MainWindow(QMainWindow):
         # Continua no próximo “tick” até completar tudo
         QTimer.singleShot(0, self._fill_lanc_async)
     
-
     def _warm_lanc_cache_async(self, chunk=400):
         tbl = self.tab_lanc
         total = tbl.rowCount()
@@ -2744,7 +2922,6 @@ class MainWindow(QMainWindow):
     def cad_conta(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(1)
     def cad_participante(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(2)
 
-
     def exportar_dados(self):
         path, _ = QFileDialog.getSaveFileName(self, "Exportar Dados", "", "CSV (*.csv)")
         if not path: return
@@ -2815,7 +2992,6 @@ class MainWindow(QMainWindow):
 
         save_last_txt_path(path)
         QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
-
 
     def _exportar_planilha_lcdpr(self):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
@@ -3115,17 +3291,15 @@ class MainWindow(QMainWindow):
                         saldos[id_conta] = saldo_f  # atualiza para próxima linha dessa conta
                         nat = 'P' if saldo_f >= 0 else 'N'
 
-                        # INSERT (sem autocommit, estamos dentro do bulk)
                         self.db.execute_query(
                             """INSERT INTO lancamento (
                                    data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
                                    id_participante, tipo_lanc, valor_entrada, valor_saida,
                                    saldo_final, natureza_saldo, usuario, categoria, data_ord
                                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            [data_str, id_imovel, id_conta, (num_doc or None), tipo_doc, historico,
+                            [data_str, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
                              id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
                         )
-
                         if lineno % 200 == 0:
                             GlobalProgress.set_value(lineno)
 
@@ -3135,7 +3309,6 @@ class MainWindow(QMainWindow):
 
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
-
 
     def _import_lancamentos_excel(self, path):
         import re
@@ -3242,17 +3415,15 @@ class MainWindow(QMainWindow):
                     dd, mm, yyyy = str(row.data).split("/")
                     data_ord = int(f"{yyyy}{mm}{dd}")  # AAAAMMDD
 
-                    # INSERT (sem autocommit, estamos no bulk)
                     self.db.execute_query(
-                        """INSERT INTO lancamento
-                           (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                            id_participante, tipo_lanc, valor_entrada, valor_saida,
-                            saldo_final, natureza_saldo, usuario, categoria, data_ord)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (row.data, id_imovel, id_conta, (row.num_doc or None), tipo_doc, row.historico,
-                         pid, tipo_lanc, ent, sai, abs(saldo_f), nat, usuario_ts, row.categoria, data_ord)
+                        """INSERT INTO lancamento (
+                               data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                               id_participante, tipo_lanc, valor_entrada, valor_saida,
+                               saldo_final, natureza_saldo, usuario, categoria, data_ord
+                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        [data_str, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
+                         id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
                     )
-
                     if (lineno - 1) % 200 == 0:
                         GlobalProgress.set_value(lineno - 1)
 
@@ -3262,8 +3433,6 @@ class MainWindow(QMainWindow):
 
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
-
-
 
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":
