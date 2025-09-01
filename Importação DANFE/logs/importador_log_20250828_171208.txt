@@ -1,2 +1,0 @@
-ℹ️ [28/08/2025 17:12:07] Log limpo.
-✅ [28/08/2025 17:12:08] Log salvo em: c:\Users\conta\OneDrive\Documentos\CODIGOS\Trabalho\LIVRO CAIXA\NFE DESPESAS\logs\importador_log_20250828_171208.txt

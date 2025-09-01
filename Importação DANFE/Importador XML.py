@@ -645,6 +645,34 @@ class RuralXmlImporter(QWidget):
         if exit_code == 0:
             self.log_msg("Varredura finalizada com sucesso.", "success")
             self.lbl_last_status.setText("3423 NOTAS ASSOCIADAS AO PAGAMENTO✅")
+
+            # Integração com Sistema.py: perguntar e importar PAGAMENTOS.txt
+            try:
+                from pathlib import Path as _Path
+                main_win = self.window()
+                # Apenas se estivermos embutidos dentro da janela principal
+                if main_win and hasattr(main_win, "_import_lancamentos_txt"):
+                    resp = QMessageBox.question(
+                        self,
+                        "Gerar Lançamentos",
+                        "Gerar Lançamentos para o sistema?",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+                    if resp == QMessageBox.Yes:
+                        # O script 'Varredura NFE.py' roda com diretório de trabalho no mesmo local do arquivo
+                        pag_file = _Path(__file__).parent / "PAGAMENTOS.txt"
+                        if pag_file.exists():
+                            try:
+                                main_win._import_lancamentos_txt(str(pag_file))
+                                main_win.carregar_lancamentos()
+                                main_win.dashboard.load_data()
+                                QMessageBox.information(self, "Concluído", "Lançamentos importados com sucesso.")
+                            except Exception as _e:
+                                QMessageBox.critical(self, "Erro ao importar", f"Falha ao importar PAGAMENTOS.txt:\n{_e}")
+                        else:
+                            QMessageBox.warning(self, "Arquivo não encontrado", f"Não encontrei o arquivo:\n{pag_file}")
+            except Exception:
+                pass
         else:
             self.log_msg(f"Varredura finalizada com código {exit_code}.", "error")
             self.lbl_last_status.setText("ERRO POR CONTA DISSO E DAQUILO")

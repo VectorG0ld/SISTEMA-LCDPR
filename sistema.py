@@ -22,6 +22,9 @@ from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from contextlib import contextmanager
 import shiboken6
 
+from pathlib import Path
+import importlib.util
+
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
     nums = re.sub(r'\D', '', cpf)
@@ -2567,8 +2570,10 @@ class MainWindow(QMainWindow):
         self.lanc_filter_layout.addWidget(self.btn_edit_lanc)
         self.btn_del_lanc = QPushButton("Excluir Lançamento"); self.btn_del_lanc.setEnabled(False); self.btn_del_lanc.clicked.connect(self.excluir_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_del_lanc)
-        self.btn_import_lanc = QPushButton("Importar Lançamentos"); self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
-        self.btn_import_lanc.clicked.connect(self.importar_lancamentos); self.lanc_filter_layout.addWidget(self.btn_import_lanc)
+        self.btn_importacao = QPushButton("Importação"); 
+        self.btn_importacao.setIcon(QIcon.fromTheme("document-import"))
+        self.btn_importacao.clicked.connect(self.show_import_dialog)
+        self.lanc_filter_layout.addWidget(self.btn_importacao)
         self.search_lanc = QLineEdit(); self.search_lanc.setPlaceholderText("Pesquisar…"); self.search_lanc.textChanged.connect(self._filter_lancamentos)
         self.lanc_filter_layout.addWidget(self.search_lanc)
         self.btn_filter = QToolButton(); self.btn_filter.setText("⚙️"); self.btn_filter.setAutoRaise(True); self.btn_filter.setPopupMode(QToolButton.InstantPopup)
@@ -3489,6 +3494,77 @@ class MainWindow(QMainWindow):
 
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
+
+    # =====================
+    # Importação (modal)
+    # =====================
+    def show_import_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Importação")
+        lay = QVBoxLayout(dlg)
+
+        # Botões
+        btn_danfe = QPushButton("Importar DANFE (Fiscal.io)")
+        btn_folha = QPushButton("Importar folha de pagamento")
+        btn_cte   = QPushButton("Importar CTe")
+        btn_talao = QPushButton("Importar Talão")
+        btn_scan  = QPushButton("Importar notas digitalizadas")
+
+        # Ações
+        def _open_danfe():
+            dlg.accept()
+            self.open_importador_danfe_tab()
+
+        def _placeholder(msg):
+            QMessageBox.information(self, "Em breve", f"{msg} — funcionalidade em desenvolvimento.")
+
+        btn_danfe.clicked.connect(_open_danfe)
+        btn_folha.clicked.connect(lambda: _placeholder("Folha de pagamento"))
+        btn_cte.clicked.connect(lambda: _placeholder("CTe"))
+        btn_talao.clicked.connect(lambda: _placeholder("Talão"))
+        btn_scan.clicked.connect(lambda: _placeholder("Notas digitalizadas"))
+
+        for b in (btn_danfe, btn_folha, btn_cte, btn_talao, btn_scan):
+            b.setFixedHeight(34)
+            lay.addWidget(b)
+
+        dlg.exec()
+
+    def open_importador_danfe_tab(self):
+        # Evita duplicar a aba
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if w and getattr(w, 'objectName', lambda: '')() == 'tab_import_danfe':
+                self.tabs.setCurrentIndex(i)
+                return
+
+        try:
+            mod = self._load_importador_danfe_module()
+            importer_widget = mod.RuralXmlImporter()
+            importer_widget.setObjectName('tab_import_danfe')
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao carregar Importador DANFE:\n{e}")
+            return
+
+        self.tabs.addTab(importer_widget, "Importar DANFE (Fiscal.io)")
+        self.tabs.setCurrentWidget(importer_widget)
+
+    def _load_importador_danfe_module(self):
+        import importlib.util, os
+        # Caminho padrão solicitado: ./Importação DANFE/Importador XML.py
+        base = PROJECT_DIR
+        preferred = os.path.join(base, "Importação DANFE", "Importador XML.py")
+        fallback = os.path.join(base, "Importador XML.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'Importador XML.py' (ou 'Importador XML.py').")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("importador_xml", filepath)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
 
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":

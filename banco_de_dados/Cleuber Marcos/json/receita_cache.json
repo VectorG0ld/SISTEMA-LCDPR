@@ -8427,5 +8427,2230 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:48242343000199": {
+    "abertura": "10/10/2022",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "BRAVE MARBLE LTDA",
+    "fantasia": "BRAVE MARBLE",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.79-6-02",
+        "text": "Comércio atacadista de mármores e granitos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "23.91-5-03",
+        "text": "Aparelhamento de placas e execução de trabalhos em mármore, granito, ardósia e outras pedras"
+      },
+      {
+        "code": "46.42-7-02",
+        "text": "Comércio atacadista de roupas e acessórios para uso profissional e de segurança do trabalho"
+      },
+      {
+        "code": "46.49-4-01",
+        "text": "Comércio atacadista de equipamentos elétricos de uso pessoal e doméstico"
+      },
+      {
+        "code": "46.49-4-02",
+        "text": "Comércio atacadista de aparelhos eletrônicos de uso pessoal e doméstico"
+      },
+      {
+        "code": "46.49-4-05",
+        "text": "Comércio atacadista de artigos de tapeçaria; persianas e cortinas"
+      },
+      {
+        "code": "46.49-4-06",
+        "text": "Comércio atacadista de lustres, luminárias e abajures"
+      },
+      {
+        "code": "46.49-4-08",
+        "text": "Comércio atacadista de produtos de higiene, limpeza e conservação domiciliar"
+      },
+      {
+        "code": "46.49-4-99",
+        "text": "Comércio atacadista de outros equipamentos e artigos de uso pessoal e doméstico não especificados anteriormente"
+      },
+      {
+        "code": "46.72-9-00",
+        "text": "Comércio atacadista de ferragens e ferramentas"
+      },
+      {
+        "code": "46.73-7-00",
+        "text": "Comércio atacadista de material elétrico"
+      },
+      {
+        "code": "46.79-6-01",
+        "text": "Comércio atacadista de tintas, vernizes e similares"
+      },
+      {
+        "code": "46.79-6-03",
+        "text": "Comércio atacadista de vidros, espelhos e vitrais"
+      },
+      {
+        "code": "46.79-6-04",
+        "text": "Comércio atacadista especializado de materiais de construção não especificados anteriormente"
+      },
+      {
+        "code": "46.79-6-99",
+        "text": "Comércio atacadista de materiais de construção em geral"
+      },
+      {
+        "code": "47.41-5-00",
+        "text": "Comércio varejista de tintas e materiais para pintura"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "47.43-1-00",
+        "text": "Comércio varejista de vidros"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.44-0-05",
+        "text": "Comércio varejista de materiais de construção não especificados anteriormente"
+      },
+      {
+        "code": "47.44-0-06",
+        "text": "Comércio varejista de pedras para revestimento"
+      },
+      {
+        "code": "47.44-0-99",
+        "text": "Comércio varejista de materiais de construção em geral"
+      },
+      {
+        "code": "47.52-1-00",
+        "text": "Comércio varejista especializado de equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "47.54-7-03",
+        "text": "Comércio varejista de artigos de iluminação"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      },
+      {
+        "code": "77.32-2-01",
+        "text": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "AGNALDO ALVES ARRUDA DOS SANTOS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA SEBASTIAO JULIO DE AGUIAR",
+    "numero": "135",
+    "complemento": "QUADRA09 LOTE 34",
+    "municipio": "GOIANIA",
+    "bairro": "PRQ OESTE INDUSTRIAL",
+    "uf": "GO",
+    "cep": "74.375-620",
+    "email": "bravestonepedras@gmail.com",
+    "telefone": "(62) 9505-3620",
+    "data_situacao": "10/10/2022",
+    "cnpj": "48.242.343/0001-99",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:01125282001945": {
+    "abertura": "24/11/2021",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "PETROBAHIA S/A",
+    "porte": "DEMAIS",
+    "natureza_juridica": "205-4 - Sociedade Anônima Fechada",
+    "atividade_principal": [
+      {
+        "code": "46.81-8-01",
+        "text": "Comércio atacadista de álcool carburante, biodiesel, gasolina e demais derivados de petróleo, exceto lubrificantes, não realizado por transportador retalhista (TRR)"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "06.00-0-01",
+        "text": "Extração de petróleo e gás natural"
+      },
+      {
+        "code": "19.21-7-00",
+        "text": "Fabricação de produtos do refino de petróleo"
+      },
+      {
+        "code": "35.20-4-01",
+        "text": "Produção de gás; processamento de gás natural"
+      },
+      {
+        "code": "35.20-4-02",
+        "text": "Distribuição de combustíveis gasosos por redes urbanas"
+      },
+      {
+        "code": "46.81-8-05",
+        "text": "Comércio atacadista de lubrificantes"
+      },
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      },
+      {
+        "code": "52.11-7-99",
+        "text": "Depósitos de mercadorias para terceiros, exceto armazéns gerais e guarda-móveis"
+      }
+    ],
+    "logradouro": "RUA PROJETADA",
+    "numero": "S/N",
+    "complemento": "SETOR 19 QUADRA02 LOTE 12",
+    "municipio": "BALSAS",
+    "bairro": "DISTRITRO INDUSTRIAL",
+    "uf": "MA",
+    "cep": "65.800-000",
+    "email": "registroslegais@petrobahia.com.br",
+    "telefone": "(71) 3339-5900 / (71) 8851-4063",
+    "data_situacao": "24/11/2021",
+    "cnpj": "01.125.282/0019-45",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "68000000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:37404241000106": {
+    "abertura": "14/09/1992",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "JVC DISTRIBUIDORA LTDA",
+    "fantasia": "JVC DISTRIBUIDORA",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.86-9-01",
+        "text": "Comércio atacadista de papel e papelão em bruto"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "18.11-3-02",
+        "text": "Impressão de livros, revistas e outras publicações periódicas"
+      },
+      {
+        "code": "18.13-0-01",
+        "text": "Impressão de material para uso publicitário"
+      },
+      {
+        "code": "18.21-1-00",
+        "text": "Serviços de pré-impressão"
+      },
+      {
+        "code": "18.22-9-99",
+        "text": "Serviços de acabamentos gráficos, exceto encadernação e plastificação"
+      },
+      {
+        "code": "33.14-7-13",
+        "text": "Manutenção e reparação de máquinas-ferramenta"
+      },
+      {
+        "code": "43.29-1-01",
+        "text": "Instalação de painéis publicitários"
+      },
+      {
+        "code": "43.29-1-04",
+        "text": "Montagem e instalação de sistemas e equipamentos de iluminação e sinalização em vias públicas, portos e aeroportos"
+      },
+      {
+        "code": "43.99-1-02",
+        "text": "Montagem e desmontagem de andaimes e outras estruturas temporárias"
+      },
+      {
+        "code": "43.99-1-03",
+        "text": "Obras de alvenaria"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "46.41-9-01",
+        "text": "Comércio atacadista de tecidos"
+      },
+      {
+        "code": "46.41-9-02",
+        "text": "Comércio atacadista de artigos de cama, mesa e banho"
+      },
+      {
+        "code": "46.41-9-03",
+        "text": "Comércio atacadista de artigos de armarinho"
+      },
+      {
+        "code": "46.42-7-02",
+        "text": "Comércio atacadista de roupas e acessórios para uso profissional e de segurança do trabalho"
+      },
+      {
+        "code": "46.45-1-01",
+        "text": "Comércio atacadista de instrumentos e materiais para uso médico, cirúrgico, hospitalar e de laboratórios"
+      },
+      {
+        "code": "46.46-0-02",
+        "text": "Comércio atacadista de produtos de higiene pessoal"
+      },
+      {
+        "code": "46.47-8-01",
+        "text": "Comércio atacadista de artigos de escritório e de papelaria"
+      },
+      {
+        "code": "46.49-4-01",
+        "text": "Comércio atacadista de equipamentos elétricos de uso pessoal e doméstico"
+      },
+      {
+        "code": "46.49-4-08",
+        "text": "Comércio atacadista de produtos de higiene, limpeza e conservação domiciliar"
+      },
+      {
+        "code": "46.52-4-00",
+        "text": "Comércio atacadista de componentes eletrônicos e equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "46.69-9-01",
+        "text": "Comércio atacadista de bombas e compressores; partes e peças"
+      },
+      {
+        "code": "46.69-9-99",
+        "text": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente; partes e peças"
+      },
+      {
+        "code": "46.81-8-05",
+        "text": "Comércio atacadista de lubrificantes"
+      },
+      {
+        "code": "46.86-9-02",
+        "text": "Comércio atacadista de embalagens"
+      },
+      {
+        "code": "46.93-1-00",
+        "text": "Comércio atacadista de mercadorias em geral, sem predominância de alimentos ou de insumos agropecuários"
+      },
+      {
+        "code": "47.23-7-00",
+        "text": "Comércio varejista de bebidas"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.41-5-00",
+        "text": "Comércio varejista de tintas e materiais para pintura"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-02",
+        "text": "Comércio varejista de madeira e artefatos"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.44-0-05",
+        "text": "Comércio varejista de materiais de construção não especificados anteriormente"
+      },
+      {
+        "code": "47.51-2-01",
+        "text": "Comércio varejista especializado de equipamentos e suprimentos de informática"
+      },
+      {
+        "code": "47.52-1-00",
+        "text": "Comércio varejista especializado de equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "47.55-5-01",
+        "text": "Comércio varejista de tecidos"
+      },
+      {
+        "code": "47.55-5-02",
+        "text": "Comercio varejista de artigos de armarinho"
+      },
+      {
+        "code": "47.55-5-03",
+        "text": "Comercio varejista de artigos de cama, mesa e banho"
+      },
+      {
+        "code": "47.59-8-99",
+        "text": "Comércio varejista de outros artigos de uso doméstico não especificados anteriormente"
+      },
+      {
+        "code": "47.61-0-03",
+        "text": "Comércio varejista de artigos de papelaria"
+      },
+      {
+        "code": "47.63-6-02",
+        "text": "Comércio varejista de artigos esportivos"
+      },
+      {
+        "code": "47.72-5-00",
+        "text": "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal"
+      },
+      {
+        "code": "47.73-3-00",
+        "text": "Comércio varejista de artigos médicos e ortopédicos"
+      },
+      {
+        "code": "47.81-4-00",
+        "text": "Comércio varejista de artigos do vestuário e acessórios"
+      },
+      {
+        "code": "47.89-0-01",
+        "text": "Comércio varejista de suvenires, bijuterias e artesanatos"
+      },
+      {
+        "code": "47.89-0-03",
+        "text": "Comércio varejista de objetos de arte"
+      },
+      {
+        "code": "47.89-0-08",
+        "text": "Comércio varejista de artigos fotográficos e para filmagem"
+      },
+      {
+        "code": "77.29-2-01",
+        "text": "Aluguel de aparelhos de jogos eletrônicos"
+      },
+      {
+        "code": "77.33-1-00",
+        "text": "Aluguel de máquinas e equipamentos para escritório"
+      },
+      {
+        "code": "80.20-0-01",
+        "text": "Atividades de monitoramento de sistemas de segurança eletrônico"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALICE ANDREA BORGES",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA JARAGUA",
+    "numero": "491",
+    "complemento": "QDA. 95 LOTE 05",
+    "municipio": "GOIANIA",
+    "bairro": "SETOR CAMPINAS",
+    "uf": "GO",
+    "cep": "74.515-040",
+    "telefone": "(062) 2564-363 / (062) 2470-730",
+    "data_situacao": "08/04/2005",
+    "cnpj": "37.404.241/0001-06",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "300000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:04097294000172": {
+    "abertura": "20/09/2000",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ARCON RADIADORES E PECAS LTDA",
+    "fantasia": "ARCON RADIADORES E PECAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-01",
+        "text": "Comércio por atacado de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "TELMA AZELIONE VENANCIO VIEIRA RODRIGUES",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "JAYME MARCIANO RODRIGUES NETO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA DO CRISTAL",
+    "numero": "13",
+    "complemento": "QUADRA03 LOTE 18",
+    "municipio": "GOIANIA",
+    "bairro": "BRO RODOVIARIO",
+    "uf": "GO",
+    "cep": "74.430-150",
+    "email": "compras@aarcon.com.br",
+    "telefone": "(62) 3295-6466 / (62) 2956-466",
+    "data_situacao": "03/11/2005",
+    "cnpj": "04.097.294/0001-72",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": "31/12/2014",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:37314846000106": {
+    "abertura": "13/04/1992",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ACACIO JOSE DE OLIVEIRA",
+    "fantasia": "POSTO DE MOLAS DO PARAIBA",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      }
+    ],
+    "logradouro": "AV TRANSBRASILIANA",
+    "numero": "816",
+    "municipio": "PARAISO DO TOCANTINS",
+    "bairro": "SERRANO",
+    "uf": "TO",
+    "cep": "77.600-000",
+    "data_situacao": "05/03/2005",
+    "cnpj": "37.314.846/0001-06",
+    "ultima_atualizacao": "2025-08-06T11:48:03.177Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:13198082000172": {
+    "abertura": "02/02/2011",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MAXIMA HIGIENIZACAO E CONSERVACAO LTDA",
+    "fantasia": "MAXIMA HIGIENIZACAO",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.49-4-08",
+        "text": "Comércio atacadista de produtos de higiene, limpeza e conservação domiciliar"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.46-0-01",
+        "text": "Comércio atacadista de cosméticos e produtos de perfumaria"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.59-8-99",
+        "text": "Comércio varejista de outros artigos de uso doméstico não especificados anteriormente"
+      },
+      {
+        "code": "47.72-5-00",
+        "text": "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal"
+      },
+      {
+        "code": "47.89-0-05",
+        "text": "Comércio varejista de produtos saneantes domissanitários"
+      },
+      {
+        "code": "81.21-4-00",
+        "text": "Limpeza em prédios e em domicílios"
+      },
+      {
+        "code": "81.22-2-00",
+        "text": "Imunização e controle de pragas urbanas"
+      },
+      {
+        "code": "81.29-0-00",
+        "text": "Atividades de limpeza não especificadas anteriormente"
+      },
+      {
+        "code": "82.99-7-99",
+        "text": "Outras atividades de serviços prestados principalmente às empresas não especificadas anteriormente"
+      },
+      {
+        "code": "95.21-5-00",
+        "text": "Reparação e manutenção de equipamentos eletroeletrônicos de uso pessoal e doméstico"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "DENILSON DE AQUINO FERREIRA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "NARA CRISTINA DE AQUINO FERREIRA OLIVEIRA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA JAMEL CECILIO",
+    "numero": "SN",
+    "complemento": "QUADRA61 LOTE 10",
+    "municipio": "ANAPOLIS",
+    "bairro": "JK NOVA CAPITAL",
+    "uf": "GO",
+    "cep": "75.114-275",
+    "telefone": "(62) 3314-1829",
+    "data_situacao": "02/02/2011",
+    "cnpj": "13.198.082/0001-72",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "02/02/2011",
+      "data_exclusao": "31/08/2024",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:40770143000105": {
+    "abertura": "09/02/2021",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "CONSTRUNOVA LTDA",
+    "fantasia": "CONSTRUNOVA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.44-0-99",
+        "text": "Comércio varejista de materiais de construção em geral"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.41-5-00",
+        "text": "Comércio varejista de tintas e materiais para pintura"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "47.43-1-00",
+        "text": "Comércio varejista de vidros"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.44-0-04",
+        "text": "Comércio varejista de cal, areia, pedra britada, tijolos e telhas"
+      },
+      {
+        "code": "47.54-7-01",
+        "text": "Comércio varejista de móveis"
+      },
+      {
+        "code": "47.54-7-02",
+        "text": "Comércio varejista de artigos de colchoaria"
+      },
+      {
+        "code": "47.54-7-03",
+        "text": "Comércio varejista de artigos de iluminação"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "JANIMARIA VILA NOVA TAVARES",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "JOSE CARMINO SILVA VILA NOVA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA 20",
+    "numero": "8",
+    "complemento": "LOTE 8 QUADRA447",
+    "municipio": "BALSAS",
+    "bairro": "SAO CAETANO",
+    "uf": "MA",
+    "cep": "65.800-000",
+    "email": "carmino8@hotmail.com",
+    "telefone": "(99) 9882-1248",
+    "data_situacao": "09/02/2021",
+    "cnpj": "40.770.143/0001-05",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:60719611000116": {
+    "abertura": "07/05/2025",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MPTE - STC RIANAPOLIS LTDA",
+    "fantasia": "SANTEC PNEUS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "22.12-9-00",
+        "text": "Reforma de pneumáticos usados"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-06",
+        "text": "Serviços de borracharia para veículos automotores"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "TIAGO CUNHA DOS SANTOS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "ROD BR 153",
+    "numero": "S/N",
+    "complemento": "SALA 02 KM 323",
+    "municipio": "RIANAPOLIS",
+    "bairro": "ZONA RURAL",
+    "uf": "GO",
+    "cep": "76.315-000",
+    "email": "santec.gestor@gmail.com",
+    "telefone": "(62) 9249-1895/ (0000) 0000-0000",
+    "data_situacao": "07/05/2025",
+    "cnpj": "60.719.611/0001-16",
+    "ultima_atualizacao": "2025-07-22T19:45:08.136Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:19635694000161": {
+    "abertura": "31/01/2014",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ADORNO ENERGIA LTDA.",
+    "fantasia": "ADEEL",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.73-7-00",
+        "text": "Comércio atacadista de material elétrico"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "25.32-2-01",
+        "text": "Produção de artefatos estampados de metal"
+      },
+      {
+        "code": "27.31-7-00",
+        "text": "Fabricação de aparelhos e equipamentos para distribuição e controle de energia elétrica"
+      },
+      {
+        "code": "43.21-5-00",
+        "text": "Instalações elétricas"
+      },
+      {
+        "code": "46.13-3-00",
+        "text": "Representantes comerciais e agentes do comércio de madeira, material de construção e ferragens"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "71.12-0-00",
+        "text": "Serviços de engenharia"
+      },
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "FELIPE GUILHERME ADORNO",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "RAFAEL GUILHERME ADORNO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA INDEPENDENCIA",
+    "numero": "2734",
+    "complemento": "QUADRA: E; LOTE: 08;",
+    "municipio": "GOIANIA",
+    "bairro": "SETOR LESTE VILA NOVA",
+    "uf": "GO",
+    "cep": "74.645-010",
+    "email": "felipeadorno@gmail.com",
+    "telefone": "(62) 3092-1414",
+    "data_situacao": "31/01/2014",
+    "cnpj": "19.635.694/0001-61",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "1800000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:03633516000919": {
+    "abertura": "08/08/2019",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "TCHE PRODUTOS AGRICOLAS LTDA",
+    "fantasia": "TCHE PRODUTOS AGRICOLAS LTDA",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.83-4-00",
+        "text": "Comércio atacadista de defensivos agrícolas, adubos, fertilizantes e corretivos do solo"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      },
+      {
+        "code": "46.23-1-09",
+        "text": "Comércio atacadista de alimentos para animais"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "47.24-5-00",
+        "text": "Comércio varejista de hortifrutigranjeiros"
+      },
+      {
+        "code": "52.11-7-99",
+        "text": "Depósitos de mercadorias para terceiros, exceto armazéns gerais e guarda-móveis"
+      },
+      {
+        "code": "74.90-1-03",
+        "text": "Serviços de agronomia e de consultoria às atividades agrícolas e pecuárias"
+      }
+    ],
+    "logradouro": "AVENIDA JK",
+    "numero": "6",
+    "complemento": "QUADRA53",
+    "municipio": "URUACU",
+    "bairro": "SETOR SUL",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "loraine@tcheagricola.com.br",
+    "telefone": "(61) 3642-3090 / (61) 9926-1597",
+    "data_situacao": "08/08/2019",
+    "cnpj": "03.633.516/0009-19",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "23909690.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:26677742000654": {
+    "abertura": "05/08/2020",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "GRAO DE OURO MAQUINAS AGRICOLAS LTDA",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-12",
+        "text": "Manutenção e reparação de tratores agrícolas"
+      },
+      {
+        "code": "46.14-1-00",
+        "text": "Representantes comerciais e agentes do comércio de máquinas, equipamentos, embarcações e aeronaves"
+      },
+      {
+        "code": "46.81-8-05",
+        "text": "Comércio atacadista de lubrificantes"
+      },
+      {
+        "code": "47.81-4-00",
+        "text": "Comércio varejista de artigos do vestuário e acessórios"
+      },
+      {
+        "code": "47.89-0-01",
+        "text": "Comércio varejista de suvenires, bijuterias e artesanatos"
+      },
+      {
+        "code": "66.19-3-99",
+        "text": "Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente"
+      },
+      {
+        "code": "77.31-4-00",
+        "text": "Aluguel de máquinas e equipamentos agrícolas sem operador"
+      },
+      {
+        "code": "77.39-0-99",
+        "text": "Aluguel de outras máquinas e equipamentos comerciais e industriais não especificados anteriormente, sem operador"
+      }
+    ],
+    "logradouro": "AVENIDA GOVERNADOR LUIZ ROCHA (BR-230)",
+    "numero": "03",
+    "complemento": "QUADRA75",
+    "municipio": "BALSAS",
+    "bairro": "CIDADE MARAVILHA",
+    "uf": "MA",
+    "cep": "65.800-000",
+    "email": "compsys@compsys.com.br",
+    "telefone": "(19) 3651-7989",
+    "data_situacao": "05/08/2020",
+    "cnpj": "26.677.742/0006-54",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "93535980.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:00004674434831": {
+    "status": "ERROR",
+    "message": "CNPJ inválido"
+  },
+  "cnpj:03368977000154": {
+    "abertura": "14/08/1999",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "PARNAIBA MATERIAIS DE CONSTRUCOES LTDA",
+    "fantasia": "PARNAIBA CONSTRUCOES",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.44-0-05",
+        "text": "Comércio varejista de materiais de construção não especificados anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ANTONIO OLIVEIRA DE MACEDO",
+        "qual": "22-Sócio"
+      },
+      {
+        "nome": "ANA OLIVEIRA DE MACEDO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA SANTOS DUMONT",
+    "numero": "S/N",
+    "municipio": "TASSO FRAGOSO",
+    "bairro": "CENTRO",
+    "uf": "MA",
+    "cep": "65.820-000",
+    "data_situacao": "03/11/2005",
+    "cnpj": "03.368.977/0001-54",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "20000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2022",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:18862523000102": {
+    "abertura": "12/09/2013",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "CENTROBELT PRODUTOS E COMERCIO DE BORRACHAS LTDA",
+    "fantasia": "CENTROBELT",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.19-8-00",
+        "text": "Manutenção e reparação de equipamentos e produtos não especificados anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "AVACI ALVES VITORIA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA AFONSO PENA",
+    "numero": "409",
+    "complemento": "QUADRA09 LOTE 01",
+    "municipio": "GOIANIA",
+    "bairro": "PRQ ANHANGUERA",
+    "uf": "GO",
+    "cep": "74.340-030",
+    "email": "financeiro@centrobelt.com.br",
+    "telefone": "(62) 9243-5357",
+    "data_situacao": "12/09/2013",
+    "cnpj": "18.862.523/0001-02",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:05283031000110": {
+    "abertura": "18/07/1977",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "LAVRONORTE MAQUINAS LTDA",
+    "fantasia": "LAVRONORTE",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-11",
+        "text": "Manutenção e reparação de máquinas e equipamentos para agricultura e pecuária"
+      },
+      {
+        "code": "41.20-4-00",
+        "text": "Construção de edifícios"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "46.19-2-00",
+        "text": "Representantes comerciais e agentes do comércio de mercadorias em geral não especializado"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal."
+      },
+      {
+        "code": "62.03-1-00",
+        "text": "Desenvolvimento e licenciamento de programas de computador não-customizáveis"
+      },
+      {
+        "code": "62.09-1-00",
+        "text": "Suporte técnico, manutenção e outros serviços em tecnologia da informação"
+      },
+      {
+        "code": "63.11-9-00",
+        "text": "Tratamento de dados, provedores de serviços de aplicação e serviços de hospedagem na internet"
+      },
+      {
+        "code": "63.99-2-00",
+        "text": "Outras atividades de prestação de serviços de informação não especificadas anteriormente"
+      },
+      {
+        "code": "74.90-1-04",
+        "text": "Atividades de intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários"
+      },
+      {
+        "code": "85.99-6-04",
+        "text": "Treinamento em desenvolvimento profissional e gerencial"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "DH PARTICIPACOES LTDA",
+        "qual": "22-Sócio",
+        "nome_rep_legal": "DEISE HONAISER",
+        "qual_rep_legal": "05-Administrador"
+      },
+      {
+        "nome": "RENAN FRANCISCO HONAISER",
+        "qual": "05-Administrador"
+      },
+      {
+        "nome": "LN HOLDING PARTICIPACOES LTDA",
+        "qual": "22-Sócio",
+        "nome_rep_legal": "DEISE HONAISER",
+        "qual_rep_legal": "05-Administrador"
+      },
+      {
+        "nome": "DEISE HONAISER",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "MH PARTICIPACOES LTDA",
+        "qual": "22-Sócio",
+        "nome_rep_legal": "ERNANI SOUZA TORELLA",
+        "qual_rep_legal": "05-Administrador"
+      },
+      {
+        "nome": "LISIANE HONAISER",
+        "qual": "05-Administrador"
+      }
+    ],
+    "logradouro": "AV GOVERNADOR LUIZ ROCHA",
+    "numero": "47",
+    "complemento": "LOTE 02",
+    "municipio": "BALSAS",
+    "bairro": "SETOR INDUSTRIAL",
+    "uf": "MA",
+    "cep": "65.800-000",
+    "email": "contabilidade@lavronorte.com.br",
+    "telefone": "(99) 3542-7100",
+    "data_situacao": "03/11/2005",
+    "cnpj": "05.283.031/0001-10",
+    "ultima_atualizacao": "2025-08-28T04:37:08.388Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "150000000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:09058794000119": {
+    "abertura": "10/09/2007",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "REAL TRATORES LTDA",
+    "fantasia": "REAL TRATORES",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "VALNEI MENGONI",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RODOVIA BR 153",
+    "numero": "SN",
+    "complemento": "KM 72 CHACARA APAE",
+    "municipio": "PORANGATU",
+    "bairro": "ZONA SUBURBANA",
+    "uf": "GO",
+    "cep": "76.550-000",
+    "telefone": "(62) 3362-2070",
+    "data_situacao": "10/09/2007",
+    "cnpj": "09.058.794/0001-19",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "103900.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2018",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:26742569000116": {
+    "abertura": "12/10/1990",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "SUPERMERCADO MERCACERES LTDA",
+    "fantasia": "MERCAFRUTAS",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.11-3-02",
+        "text": "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - supermercados"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.91-5-00",
+        "text": "Comércio atacadista de mercadorias em geral, com predominância de produtos alimentícios"
+      },
+      {
+        "code": "47.21-1-02",
+        "text": "Padaria e confeitaria com predominância de revenda"
+      },
+      {
+        "code": "47.22-9-01",
+        "text": "Comércio varejista de carnes - açougues"
+      },
+      {
+        "code": "47.23-7-00",
+        "text": "Comércio varejista de bebidas"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.53-9-00",
+        "text": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo"
+      },
+      {
+        "code": "47.61-0-03",
+        "text": "Comércio varejista de artigos de papelaria"
+      },
+      {
+        "code": "47.63-6-04",
+        "text": "Comércio varejista de artigos de caça, pesca e camping"
+      },
+      {
+        "code": "47.72-5-00",
+        "text": "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal"
+      },
+      {
+        "code": "47.89-0-01",
+        "text": "Comércio varejista de suvenires, bijuterias e artesanatos"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal."
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "56.11-2-01",
+        "text": "Restaurantes e similares"
+      },
+      {
+        "code": "56.11-2-03",
+        "text": "Lanchonetes, casas de chá, de sucos e similares"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "WANDERLEY BATISTA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "SIDNEY INACIO DE SOUSA FILHO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "R ALFREDO DE PADUA",
+    "numero": "451",
+    "municipio": "CERES",
+    "bairro": "CENTRO",
+    "uf": "GO",
+    "cep": "76.300-000",
+    "data_situacao": "26/11/2004",
+    "cnpj": "26.742.569/0001-16",
+    "ultima_atualizacao": "2025-08-21T01:35:01.312Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "1492670.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:24452734000170": {
+    "abertura": "24/03/2016",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MEGA FROTAS COMERCIO E DISTRIBUICAO DE PRODUTOS PARA PINTURA LTDA",
+    "fantasia": "MEGA FROTAS",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.79-6-01",
+        "text": "Comércio atacadista de tintas, vernizes e similares"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.41-5-00",
+        "text": "Comércio varejista de tintas e materiais para pintura"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MARGARETE DIAS DA CRUZ",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA ALIPIO MENDES",
+    "numero": "748",
+    "complemento": "QUADRA09 LOTE 09",
+    "municipio": "GOIANIA",
+    "bairro": "SET CIDADE JARDIM",
+    "uf": "GO",
+    "cep": "74.425-320",
+    "email": "adm@csmcontabilidade.com.br",
+    "telefone": "(62) 3595-4036",
+    "data_situacao": "24/03/2016",
+    "cnpj": "24.452.734/0001-70",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "50500.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:07359208000140": {
+    "abertura": "03/05/2005",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "SANTEC RECAPAGEM DE PNEUS LTDA",
+    "fantasia": "SANTEC PNEUS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "22.12-9-00",
+        "text": "Reforma de pneumáticos usados"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-06",
+        "text": "Serviços de borracharia para veículos automotores"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "RONEY SILVIO CESAR DOS SANTOS",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "LIA PINTO CUNHA BORGES DOS SANTOS",
+        "qual": "22-Sócio"
+      }
+    ],
+    "logradouro": "RODOVIA BR 153",
+    "numero": "S/N",
+    "complemento": "KM. 1.102",
+    "municipio": "RIANAPOLIS",
+    "bairro": "ZONA RURAL",
+    "uf": "GO",
+    "cep": "76.315-000",
+    "data_situacao": "03/05/2005",
+    "cnpj": "07.359.208/0001-40",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "10000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "01/01/2017",
+      "data_exclusao": "31/12/2023",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:06370443000150": {
+    "abertura": "22/06/2004",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "J N DE JESUS - AUTO ELETRICA",
+    "fantasia": "REI DAS BATERIAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "logradouro": "RUA PIAUI ESQ C/ RUA 04",
+    "numero": "S/N",
+    "complemento": "QUADRA03 LOTE 01",
+    "municipio": "URUACU",
+    "bairro": "VILA NOVA II",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "exatauruacu@uol.com.br",
+    "telefone": "(62) 3357-6435 / (62) 3357-2164 / (62) 3357-4335",
+    "data_situacao": "22/06/2004",
+    "cnpj": "06.370.443/0001-50",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "100000.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:28634879000142": {
+    "abertura": "13/09/2017",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "NOVA ELETRICA MATERIAIS ELETRICOS E HIDRAULICOS LTDA",
+    "fantasia": "NOVA ELETRICA MATERIAS ELETRICOS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.43-1-00",
+        "text": "Comércio varejista de vidros"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.44-0-04",
+        "text": "Comércio varejista de cal, areia, pedra britada, tijolos e telhas"
+      },
+      {
+        "code": "47.44-0-05",
+        "text": "Comércio varejista de materiais de construção não especificados anteriormente"
+      },
+      {
+        "code": "47.44-0-99",
+        "text": "Comércio varejista de materiais de construção em geral"
+      },
+      {
+        "code": "47.54-7-03",
+        "text": "Comércio varejista de artigos de iluminação"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ADRIANA CARREIRO GUIMARAES AGUIAR",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA AMAZONAS",
+    "numero": "1808",
+    "complemento": "QUADRA81 LOTE 11",
+    "municipio": "GURUPI",
+    "bairro": "CENTRO",
+    "uf": "TO",
+    "cep": "77.403-030",
+    "email": "graciomarm@gmail.com",
+    "telefone": "(63) 9212-5604",
+    "data_situacao": "13/09/2017",
+    "cnpj": "28.634.879/0001-42",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "30000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:34584848000127": {
+    "abertura": "19/08/2019",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MY FARM AGRODIGITAL LTDA",
+    "fantasia": "MY FARM AGRO EDUCACAO",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "85.99-6-04",
+        "text": "Treinamento em desenvolvimento profissional e gerencial"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.13-0-02",
+        "text": "Lojas de variedades, exceto lojas de departamentos ou magazines"
+      },
+      {
+        "code": "47.61-0-01",
+        "text": "Comércio varejista de livros"
+      },
+      {
+        "code": "58.11-5-00",
+        "text": "Edição de livros"
+      },
+      {
+        "code": "62.02-3-00",
+        "text": "Desenvolvimento e licenciamento de programas de computador customizáveis"
+      },
+      {
+        "code": "62.03-1-00",
+        "text": "Desenvolvimento e licenciamento de programas de computador não-customizáveis"
+      },
+      {
+        "code": "62.09-1-00",
+        "text": "Suporte técnico, manutenção e outros serviços em tecnologia da informação"
+      },
+      {
+        "code": "63.19-4-00",
+        "text": "Portais, provedores de conteúdo e outros serviços de informação na internet"
+      },
+      {
+        "code": "64.63-8-00",
+        "text": "Outras sociedades de participação, exceto holdings"
+      },
+      {
+        "code": "70.20-4-00",
+        "text": "Atividades de consultoria em gestão empresarial, exceto consultoria técnica específica"
+      },
+      {
+        "code": "73.19-0-02",
+        "text": "Promoção de vendas"
+      },
+      {
+        "code": "73.19-0-03",
+        "text": "Marketing direto"
+      },
+      {
+        "code": "73.19-0-04",
+        "text": "Consultoria em publicidade"
+      },
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      },
+      {
+        "code": "82.19-9-99",
+        "text": "Preparação de documentos e serviços especializados de apoio administrativo não especificados anteriormente"
+      },
+      {
+        "code": "82.30-0-01",
+        "text": "Serviços de organização de feiras, congressos, exposições e festas"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "PROSPER GROUP HOLDING LTDA",
+        "qual": "22-Sócio",
+        "nome_rep_legal": "BIBIANA DA ROZA CAPORAL",
+        "qual_rep_legal": "05-Administrador"
+      },
+      {
+        "nome": "BIBIANA DA ROZA CAPORAL",
+        "qual": "05-Administrador"
+      }
+    ],
+    "logradouro": "AL RIO NEGRO",
+    "numero": "500",
+    "complemento": "ANDAR 5 SALA 501 A 508 TORRE B",
+    "municipio": "BARUERI",
+    "bairro": "ALPHAVILLE CENTRO INDUSTRIAL E EMPRESARIAL/ALPHAV",
+    "uf": "SP",
+    "cep": "06.454-000",
+    "email": "financeiro@myfarmagro.com",
+    "telefone": "(65) 3051-1833",
+    "data_situacao": "19/08/2019",
+    "cnpj": "34.584.848/0001-27",
+    "ultima_atualizacao": "2025-08-30T12:01:30.354Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "119760.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:32157709000191": {
+    "abertura": "03/12/2018",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "B SOUSA DOS REIS",
+    "fantasia": "LIMA MOTOPECAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.43-9-00",
+        "text": "Manutenção e reparação de motocicletas"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.41-2-06",
+        "text": "Comércio a varejo de peças e acessórios novos para motocicletas e motonetas"
+      }
+    ],
+    "logradouro": "RUA PAULO MACALAO",
+    "numero": "SN",
+    "municipio": "TASSO FRAGOSO",
+    "bairro": "CENTRO",
+    "uf": "MA",
+    "cep": "65.820-000",
+    "email": "saladoempreendedortasso@gmail.com",
+    "telefone": "(99) 8209-6317",
+    "data_situacao": "03/12/2018",
+    "cnpj": "32.157.709/0001-91",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "5000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:01581193000265": {
+    "abertura": "16/08/2002",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "FORMULA PRODUTOS AUTOMOTIVOS LTDA",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-01",
+        "text": "Comércio por atacado de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.30-7-06",
+        "text": "Representantes comerciais e agentes do comércio de peças e acessórios novos e usados para veículos automotores"
+      },
+      {
+        "code": "46.81-8-01",
+        "text": "Comércio atacadista de álcool carburante, biodiesel, gasolina e demais derivados de petróleo, exceto lubrificantes, não realizado por transportador retalhista (TRR)"
+      },
+      {
+        "code": "47.31-8-00",
+        "text": "Comércio varejista de combustíveis para veículos automotores"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "52.50-8-04",
+        "text": "Organização logística do transporte de carga"
+      }
+    ],
+    "logradouro": "RUA PADRE PELAGIO",
+    "numero": "307",
+    "complemento": "QD 156 LTES 03 E 04",
+    "municipio": "PARAISO DO TOCANTINS",
+    "bairro": "SETOR SERRANO",
+    "uf": "TO",
+    "cep": "77.600-000",
+    "telefone": "(63) 6021-924",
+    "data_situacao": "16/08/2002",
+    "cnpj": "01.581.193/0002-65",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "4950000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:36543307000186": {
+    "abertura": "04/03/2020",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "TERRAFER MAQUINAS E MOTORES LTDA",
+    "fantasia": "TERRAFER MAQUINAS E MOTORES",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.19-8-00",
+        "text": "Manutenção e reparação de equipamentos e produtos não especificados anteriormente"
+      },
+      {
+        "code": "47.63-6-04",
+        "text": "Comércio varejista de artigos de caça, pesca e camping"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "CARLOS HENRIQUE FERNANDES",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA DOM EMANUEL",
+    "numero": "263",
+    "complemento": "QUADRA19 LOTE 01",
+    "municipio": "GOIANIA",
+    "bairro": "BRO RODOVIARIO",
+    "uf": "GO",
+    "cep": "74.430-180",
+    "email": "crffernandes29@gmail.com",
+    "telefone": "(62) 3661-5910 / (62) 9386-5813",
+    "data_situacao": "04/03/2020",
+    "cnpj": "36.543.307/0001-86",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "120000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }
