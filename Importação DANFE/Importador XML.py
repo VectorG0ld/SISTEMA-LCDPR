@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMessageBox, QCheckBox, QLabel, QFrame, QHBoxLayout,
     QProgressDialog, QDialog, QLineEdit, QDialogButtonBox,
     QFormLayout, QGroupBox, QSplitter, QSizePolicy, QToolButton,
-    QStyle, QSpacerItem, QGraphicsDropShadowEffect
+    QStyle, QSpacerItem, QGraphicsDropShadowEffect, QTabWidget
 )
 from PySide6.QtGui import (
     QFont, QColor, QPalette, QIcon, QTextCursor, QPixmap, QAction
@@ -373,7 +373,7 @@ class RuralXmlImporter(QWidget):
         
         lay.addLayout(title_box, 1)
 
-        # Ações rápidas à direita (Config / Ajuda)
+        # Ações rápidas à direita (Config / Ajuda / Fechar)
         btn_cfg = QToolButton()
         btn_cfg.setText("⚙️ Configurar")
         btn_cfg.clicked.connect(self.open_config)
@@ -382,20 +382,36 @@ class RuralXmlImporter(QWidget):
         btn_help.setText("❓ Ajuda")
         btn_help.clicked.connect(lambda: QMessageBox.information(
             self, "Ajuda",
-            "1) Clique em ⚙️ Configurar para definir planilha e pasta ISENTO.\n"
+            "1) Clique em ⚙️ Configurar para definir planilha e parâmetros.\n"
             "2) Use 🔗 Associar Pagamentos para gerar relatórios e TXT.\n"
             "3) Use 📤 Importar XMLs para lançar notas na planilha.\n"
             "4) Acompanhe os logs e use 'Salvar Log' para guardar o histórico."
         ))
 
-        row = QHBoxLayout()
+        btn_close = QToolButton()
+        btn_close.setText("✖ Fechar")
+        btn_close.clicked.connect(self._close_self_tab)
+
+        row = QHBoxLayout()          # <-- CRIA O ROW ANTES DE USAR
         row.setSpacing(8)
         row.addWidget(btn_cfg)
         row.addWidget(btn_help)
+        row.addWidget(btn_close)     # <-- AGORA PODE ADICIONAR O FECHAR
         lay.addLayout(row, 0)
 
         self._add_shadow(header, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
         return header
+
+    def _close_self_tab(self):
+        parent = self.parent()
+        while parent and not isinstance(parent, QTabWidget):
+            parent = parent.parent()
+        if parent:  # está dentro de um QTabWidget
+            idx = parent.indexOf(self)
+            if idx != -1:
+                parent.removeTab(idx)
+        else:       # janela solta
+            self.close()
 
     def _build_controls_card(self) -> QFrame:
         card = QFrame()
