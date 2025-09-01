@@ -14,16 +14,13 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
-    QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy, QCompleter
+    QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy
 )
 from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries
 from contextlib import contextmanager
 import shiboken6
-
-from pathlib import Path
-import importlib.util
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -1390,20 +1387,17 @@ class DashboardWidget(QWidget):
     def _build_filter_ui(self):
         hl = QHBoxLayout()
         hl.addWidget(QLabel("De:"))
-
-        # pega menor/maior data existentes no banco
-        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
-        if row and row[0] and row[1]:
-            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
-            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
-        else:
-            _ini = QDate.currentDate().addMonths(-1)
-            _fim = QDate.currentDate()
-
-        self.dt_dash_ini = QDateEdit(_ini); self.dt_dash_ini.setCalendarPopup(True); self.dt_dash_ini.setDisplayFormat("dd/MM/yyyy"); hl.addWidget(self.dt_dash_ini)
+        ini = self.settings.value("dashFilterIni", QDate.currentDate().addMonths(-1), type=QDate)
+        self.dt_dash_ini = QDateEdit(ini)
+        self.dt_dash_ini.setCalendarPopup(True)
+        self.dt_dash_ini.setDisplayFormat("dd/MM/yyyy")
+        hl.addWidget(self.dt_dash_ini)
         hl.addWidget(QLabel("Até:"))
-        self.dt_dash_fim = QDateEdit(_fim); self.dt_dash_fim.setCalendarPopup(True); self.dt_dash_fim.setDisplayFormat("dd/MM/yyyy"); hl.addWidget(self.dt_dash_fim)
-
+        fim = self.settings.value("dashFilterFim", QDate.currentDate(), type=QDate)
+        self.dt_dash_fim = QDateEdit(fim)
+        self.dt_dash_fim.setCalendarPopup(True)
+        self.dt_dash_fim.setDisplayFormat("dd/MM/yyyy")
+        hl.addWidget(self.dt_dash_fim)
         btn = QPushButton("Aplicar filtro"); btn.clicked.connect(self.on_dash_filter_changed)
         hl.addWidget(btn)
         hl.addStretch()
@@ -1499,20 +1493,13 @@ class LancamentoDialog(QDialog):
 
     def _build_ui(self):
         form = QFormLayout()
-        # pega menor/maior data existentes
-        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
-        if row and row[0] and row[1]:
-            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
-            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
-        else:
-            _ini = QDate.currentDate().addMonths(-1)
-            _fim = QDate.currentDate()
-        
-        self.dt_ini = QDateEdit(_ini); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
-        self.lanc_filter_layout.addWidget(self.dt_ini)
-        self.lanc_filter_layout.addWidget(QLabel("Até:"))
-        self.dt_fim = QDateEdit(_fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
-        self.lanc_filter_layout.addWidget(self.dt_fim)
+        # Data
+        self.data = QDateEdit(QDate.currentDate())
+        self.data.setCalendarPopup(True)
+        form.addRow("Data:", self.data)
+        self.data = QDateEdit(QDate.currentDate())
+        self.data.setCalendarPopup(True)
+        self.data.setDisplayFormat("dd/MM/yyyy")
         # Imóvel
         self.imovel = QComboBox()
         self.imovel.addItem("Selecione...", None)
@@ -1526,27 +1513,11 @@ class LancamentoDialog(QDialog):
             self.conta.addItem(nome, id_)
         form.addRow("Conta Bancária:", self.conta)
         # Participante
-        self.participante = QComboBox(self)
-        self.participante.setEditable(True)
-        self.participante.setInsertPolicy(QComboBox.NoInsert)
-
-        self.participante.clear()
-        self.participante.setCurrentIndex(-1)
-        self.participante.setPlaceholderText("Selecione participante (nome ou CNPJ)")
-        self.participante.lineEdit().setPlaceholderText("Selecione participante (nome ou CNPJ)")
-        _opcoes = []
-        for id_, nome, doc in self.db.fetch_all("SELECT id, nome, cpf_cnpj FROM participante ORDER BY nome"):
-            txt = f"{nome} — {doc}"
-            self.participante.addItem(txt, id_)
-            _opcoes.append(txt)
-
-        comp = QCompleter(_opcoes, self.participante)
-        comp.setCaseSensitivity(Qt.CaseInsensitive)
-        comp.setFilterMode(Qt.MatchContains)
-        self.participante.setCompleter(comp)
-
+        self.participante = QComboBox()
+        self.participante.addItem("Selecione...", None)
+        for id_, nome in self.db.fetch_all("SELECT id, nome FROM participante"):
+            self.participante.addItem(nome, id_)
         form.addRow("Participante:", self.participante)
-
         # Documento
         hl = QHBoxLayout()
         hl.addWidget(QLabel("Número:"))
@@ -1771,8 +1742,11 @@ class LancamentoDialog(QDialog):
 
     def excluir_imovel(self):
         id_ = self.tabela.item(self.selected_row, 0).data(Qt.UserRole)
-        resp = QMessageBox.question(self, "Confirmar Exclusão", "Deseja excluir 1 registro?", QMessageBox.Yes | QMessageBox.No)
-        if resp == QMessageBox.Yes:
+        nome = self.tabela.item(self.selected_row, 1).text()
+        ans = QMessageBox.question(self, "Confirmar Exclusão",
+                                   f"Excluir imóvel '{nome}'?",
+                                   QMessageBox.Yes | QMessageBox.No)
+        if ans == QMessageBox.Yes:
             try:
                 self.db.execute_query("DELETE FROM imovel_rural WHERE id=?", (id_,))
                 QMessageBox.information(self, "Sucesso", "Imóvel excluído!")
@@ -2046,10 +2020,9 @@ class GerenciamentoContasWidget(QWidget):
         rows = self.tabela.selectionModel().selectedRows()
         if not rows:
             return
-        qtd = len(rows)
-        if QMessageBox.question(self, "Confirmar Exclusão", f"Deseja excluir {qtd} registro(s)?", QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        cods = [self.tabela.item(r.row(),1).text() for r in rows]
+        if QMessageBox.question(self, "Excluir", f"Excluir contas: {', '.join(cods)}?") != QMessageBox.Yes:
             return
-        
         for r in rows:
             cid = self.tabela.item(r.row(),0).data(Qt.UserRole)
             self.db.execute_query("DELETE FROM conta_bancaria WHERE id=?", (cid,))
@@ -2354,9 +2327,12 @@ class GerenciamentoImoveisWidget(QWidget):
         indices = self.tabela.selectionModel().selectedRows()
         if not indices:
             return
-        qtd = len(indices)
-        resp = QMessageBox.question(self, "Confirmar Exclusão", f"Deseja excluir {qtd} registro(s)?", QMessageBox.Yes | QMessageBox.No)
-
+        nomes = [self.tabela.item(idx.row(), 1).text() for idx in indices]
+        resp = QMessageBox.question(
+            self, "Confirmar Exclusão",
+            f"Excluir imóveis: {', '.join(nomes)}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
         if resp != QMessageBox.Yes:
             return
         for idx in indices:
@@ -2550,19 +2526,10 @@ class MainWindow(QMainWindow):
         w_l = QWidget(); l_l = QVBoxLayout(w_l); l_l.setContentsMargins(10,10,10,10)
         self.lanc_filter_layout = QHBoxLayout()
         self.lanc_filter_layout.addWidget(QLabel("De:"))
-
-        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
-        if row and row[0] and row[1]:
-            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
-            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
-        else:
-            _ini = QDate.currentDate().addMonths(-1)
-            _fim = QDate.currentDate()
-
-        self.dt_ini = QDateEdit(_ini); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
+        self.dt_ini = QDateEdit(QDate.currentDate().addMonths(-1)); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
         self.lanc_filter_layout.addWidget(self.dt_ini)
         self.lanc_filter_layout.addWidget(QLabel("Até:"))
-        self.dt_fim = QDateEdit(_fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
+        self.dt_fim = QDateEdit(QDate.currentDate()); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
         self.lanc_filter_layout.addWidget(self.dt_fim)
 
         btn_filtrar = QPushButton("Filtrar"); btn_filtrar.clicked.connect(self.carregar_lancamentos); self.lanc_filter_layout.addWidget(btn_filtrar)
@@ -2570,16 +2537,8 @@ class MainWindow(QMainWindow):
         self.lanc_filter_layout.addWidget(self.btn_edit_lanc)
         self.btn_del_lanc = QPushButton("Excluir Lançamento"); self.btn_del_lanc.setEnabled(False); self.btn_del_lanc.clicked.connect(self.excluir_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_del_lanc)
-        self.btn_importacao = QPushButton("Importação"); 
-        self.btn_importacao.setIcon(QIcon.fromTheme("document-import"))
-        self.btn_importacao.clicked.connect(self.show_import_dialog)
-        self.lanc_filter_layout.addWidget(self.btn_importacao)
-        # Botão para importar lançamentos (TXT/XLSX)
-        self.btn_import_lanc = QPushButton("Importar Lançamentos")
-        self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
-        self.btn_import_lanc.clicked.connect(self.importar_lancamentos)
-        self.lanc_filter_layout.addWidget(self.btn_import_lanc)
-        
+        self.btn_import_lanc = QPushButton("Importar Lançamentos"); self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
+        self.btn_import_lanc.clicked.connect(self.importar_lancamentos); self.lanc_filter_layout.addWidget(self.btn_import_lanc)
         self.search_lanc = QLineEdit(); self.search_lanc.setPlaceholderText("Pesquisar…"); self.search_lanc.textChanged.connect(self._filter_lancamentos)
         self.lanc_filter_layout.addWidget(self.search_lanc)
         self.btn_filter = QToolButton(); self.btn_filter.setText("⚙️"); self.btn_filter.setAutoRaise(True); self.btn_filter.setPopupMode(QToolButton.InstantPopup)
@@ -2598,9 +2557,6 @@ class MainWindow(QMainWindow):
         self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows); self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tab_lanc.cellClicked.connect(lambda r,_: (self.btn_edit_lanc.setEnabled(True), self.btn_del_lanc.setEnabled(True)))
         l_l.addWidget(self.tab_lanc)
-        # aplica filtro inicial ao abrir
-        self.carregar_lancamentos()
-        self.dashboard.load_data()
         # contador no layout (sem sobrepor a barra de filtros)
         attach_counter_in_layout(self.tab_lanc, self.lanc_filter_layout)
 
@@ -2763,37 +2719,15 @@ class MainWindow(QMainWindow):
 
     def switch_profile(self, profile: str):
         global CURRENT_PROFILE
-        if profile == CURRENT_PROFILE:
-            return
+        if profile == CURRENT_PROFILE: return
         CURRENT_PROFILE = profile
         self._update_profile_banner()
 
-        # reabrir conexões
         self.db.conn.close(); self.db = Database()
-        self.dashboard.db.conn.close(); self.dashboard.db = Database()
-
-        # menor/maior data do novo perfil
-        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
-        if row and row[0] and row[1]:
-            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
-            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
-        else:
-            _ini = QDate.currentDate().addMonths(-1)
-            _fim = QDate.currentDate()
-
-        # aplica datas nos filtros do dashboard e lançamentos
-        self.dashboard.dt_dash_ini.setDate(_ini); self.dashboard.dt_dash_fim.setDate(_fim)
-        self.dt_ini.setDate(_ini); self.dt_fim.setDate(_fim)
-
-        # recarrega telas
-        self.dashboard.load_data()
-        self.carregar_lancamentos()
-        self.carregar_planejamento()
-
-        # reatualiza cadastros
+        self.dashboard.db.conn.close(); self.dashboard.db = Database(); self.dashboard.load_data()
+        self.carregar_lancamentos(); self.carregar_planejamento()
         im_w = self.cadw.widget(0); im_w.db.conn.close(); im_w.db = Database(); im_w.carregar_imoveis()
         ct_w = self.cadw.widget(1); ct_w.db.conn.close(); ct_w.db = Database(); ct_w.carregar_contas()
-
         QMessageBox.information(self, "Perfil alterado", f"Perfil Trocado para: '{profile}'.")
 
     def arquivo_lcdpr(self):
@@ -2955,8 +2889,7 @@ class MainWindow(QMainWindow):
         indices = self.tab_lanc.selectionModel().selectedRows()
         if not indices: return
         ids = [int(self.tab_lanc.item(idx.row(), 0).text()) for idx in indices]
-        qtd = len(ids)
-        resp = QMessageBox.question(self, "Confirmar Exclusão", f"Deseja excluir {qtd} lançamento(s)?", QMessageBox.Yes | QMessageBox.No)
+        resp = QMessageBox.question(self, "Confirmar Exclusão", f"Excluir lançamentos IDs: {', '.join(map(str, ids))}?", QMessageBox.Yes | QMessageBox.No)
         if resp != QMessageBox.Yes: return
         for id_ in ids:
             try: self.db.execute_query("DELETE FROM lancamento WHERE id=?", (id_,))
@@ -3500,77 +3433,6 @@ class MainWindow(QMainWindow):
 
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
-
-    # =====================
-    # Importação (modal)
-    # =====================
-    def show_import_dialog(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Importação")
-        lay = QVBoxLayout(dlg)
-
-        # Botões
-        btn_danfe = QPushButton("Importar DANFE (Fiscal.io)")
-        btn_folha = QPushButton("Importar folha de pagamento")
-        btn_cte   = QPushButton("Importar CTe")
-        btn_talao = QPushButton("Importar Talão")
-        btn_scan  = QPushButton("Importar notas digitalizadas")
-
-        # Ações
-        def _open_danfe():
-            dlg.accept()
-            self.open_importador_danfe_tab()
-
-        def _placeholder(msg):
-            QMessageBox.information(self, "Em breve", f"{msg} — funcionalidade em desenvolvimento.")
-
-        btn_danfe.clicked.connect(_open_danfe)
-        btn_folha.clicked.connect(lambda: _placeholder("Folha de pagamento"))
-        btn_cte.clicked.connect(lambda: _placeholder("CTe"))
-        btn_talao.clicked.connect(lambda: _placeholder("Talão"))
-        btn_scan.clicked.connect(lambda: _placeholder("Notas digitalizadas"))
-
-        for b in (btn_danfe, btn_folha, btn_cte, btn_talao, btn_scan):
-            b.setFixedHeight(34)
-            lay.addWidget(b)
-
-        dlg.exec()
-
-    def open_importador_danfe_tab(self):
-        # Evita duplicar a aba
-        for i in range(self.tabs.count()):
-            w = self.tabs.widget(i)
-            if w and getattr(w, 'objectName', lambda: '')() == 'tab_import_danfe':
-                self.tabs.setCurrentIndex(i)
-                return
-
-        try:
-            mod = self._load_importador_danfe_module()
-            importer_widget = mod.RuralXmlImporter()
-            importer_widget.setObjectName('tab_import_danfe')
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao carregar Importador DANFE:\n{e}")
-            return
-
-        self.tabs.addTab(importer_widget, "Importar DANFE (Fiscal.io)")
-        self.tabs.setCurrentWidget(importer_widget)
-
-    def _load_importador_danfe_module(self):
-        import importlib.util, os
-        # Caminho padrão solicitado: ./Importação DANFE/Importador XML.py
-        base = PROJECT_DIR
-        preferred = os.path.join(base, "Importação DANFE", "Importador XML.py")
-        fallback = os.path.join(base, "Importador XML.py")
-
-        if not os.path.exists(preferred) and not os.path.exists(fallback):
-            raise FileNotFoundError("Não encontrei o arquivo 'Importador XML.py' (ou 'Importador XML.py').")
-
-        filepath = preferred if os.path.exists(preferred) else fallback
-        spec = importlib.util.spec_from_file_location("importador_xml", filepath)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
 
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":

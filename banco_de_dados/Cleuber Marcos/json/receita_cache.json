@@ -10652,5 +10652,1266 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:15403420000196": {
+    "abertura": "12/04/2012",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "M C BARREIRO & CIA LTDA",
+    "fantasia": "ELETROMAQUINAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.57-1-00",
+        "text": "Comércio varejista especializado de peças e acessórios para aparelhos eletroeletrônicos para uso doméstico, exceto informática e comunicação"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.13-9-01",
+        "text": "Manutenção e reparação de geradores, transformadores e motores elétricos"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MARIANO CLARO BARREIRO",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "ELIZABETE DOURADO DE SOUSA",
+        "qual": "22-Sócio"
+      }
+    ],
+    "logradouro": "RUA ADELMO AIRES NEGRE",
+    "numero": "1695",
+    "complemento": "QD-20 LT-18",
+    "municipio": "GURUPI",
+    "bairro": "CENTRO",
+    "uf": "TO",
+    "cep": "77.405-080",
+    "telefone": "(63) 3312-4856 / (63) 3312-4856 / (63) 3312-4856",
+    "data_situacao": "12/04/2012",
+    "cnpj": "15.403.420/0001-96",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "60000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:27818252000189": {
+    "abertura": "25/05/2017",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "LIMP LAR PRODUTOS E MATERIAIS PARA HIGIENE E LIMPEZA LTDA",
+    "fantasia": "LIMP LAR",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-05",
+        "text": "Comércio varejista de produtos saneantes domissanitários"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "81.21-4-00",
+        "text": "Limpeza em prédios e em domicílios"
+      },
+      {
+        "code": "77.32-2-01",
+        "text": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes"
+      },
+      {
+        "code": "43.99-1-02",
+        "text": "Montagem e desmontagem de andaimes e outras estruturas temporárias"
+      },
+      {
+        "code": "77.32-2-02",
+        "text": "Aluguel de andaimes"
+      },
+      {
+        "code": "43.30-4-01",
+        "text": "Impermeabilização em obras de engenharia civil"
+      },
+      {
+        "code": "43.30-4-05",
+        "text": "Aplicação de revestimentos e de resinas em interiores e exteriores"
+      },
+      {
+        "code": "43.21-5-00",
+        "text": "Instalações elétricas"
+      },
+      {
+        "code": "47.54-7-01",
+        "text": "Comércio varejista de móveis"
+      },
+      {
+        "code": "80.20-0-01",
+        "text": "Atividades de monitoramento de sistemas de segurança eletrônico"
+      },
+      {
+        "code": "47.21-1-03",
+        "text": "Comércio varejista de laticínios e frios"
+      },
+      {
+        "code": "81.29-0-00",
+        "text": "Atividades de limpeza não especificadas anteriormente"
+      },
+      {
+        "code": "47.52-1-00",
+        "text": "Comércio varejista especializado de equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "47.53-9-00",
+        "text": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ENZIO DE SENA FERNANDES",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA GOIAS",
+    "numero": "2844",
+    "complemento": "QUADRAG LOTE 01 A 05 PAVMTOSUPERIOR SALA 11",
+    "municipio": "GURUPI",
+    "bairro": "LOT. NOSSA SENHORA DABADIA",
+    "uf": "TO",
+    "cep": "77.402-970",
+    "telefone": "(63) 9208-0835",
+    "data_situacao": "25/05/2017",
+    "cnpj": "27.818.252/0001-89",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:11120651000131": {
+    "abertura": "03/09/2009",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MECANICA E TORNEADORA PRECISAO LTDA",
+    "fantasia": "MECANICA E TORNAEDORA PRECISAO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "25.39-0-01",
+        "text": "Serviços de usinagem, torneiria e solda"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-11",
+        "text": "Manutenção e reparação de máquinas e equipamentos para agricultura e pecuária"
+      },
+      {
+        "code": "33.14-7-12",
+        "text": "Manutenção e reparação de tratores agrícolas"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-07",
+        "text": "Serviços de instalação, manutenção e reparação de acessórios para veículos automotores"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ADRIANO DE OLIVEIRA PONCE",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA ALZIRA MONTECELLI",
+    "numero": "SN",
+    "complemento": "QUADRAA-5 LOTE 09",
+    "municipio": "URUACU",
+    "bairro": "RESIDENCIAL MONTECELLI",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "mtprecisao@hotmail.com",
+    "telefone": "(62) 8427-3406",
+    "data_situacao": "03/09/2009",
+    "cnpj": "11.120.651/0001-31",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "300000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2020",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:10883396000116": {
+    "abertura": "25/05/2009",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "A.PEREIRA CAVALCANTE",
+    "fantasia": "FOX MOTOPECAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.41-2-06",
+        "text": "Comércio a varejo de peças e acessórios novos para motocicletas e motonetas"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.43-9-00",
+        "text": "Manutenção e reparação de motocicletas"
+      },
+      {
+        "code": "47.63-6-03",
+        "text": "Comércio varejista de bicicletas e triciclos; peças e acessórios"
+      },
+      {
+        "code": "95.29-1-04",
+        "text": "Reparação de bicicletas, triciclos e outros veículos não motorizados"
+      }
+    ],
+    "logradouro": "AVENIDA VICENTE BARBOSA ESQ. COM RUA 12 DE MAIO",
+    "numero": "SN",
+    "complemento": "QUADRA06 LOTE 09-A",
+    "municipio": "LAGOA DA CONFUSAO",
+    "bairro": "PRAIA ALTA",
+    "uf": "TO",
+    "cep": "77.493-000",
+    "email": "foxmoto10@hotmail.com",
+    "telefone": "(63) 3364-1111",
+    "data_situacao": "25/05/2009",
+    "cnpj": "10.883.396/0001-16",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "40000.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "25/05/2009",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:43315406000176": {
+    "abertura": "27/08/2021",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "FEMAPEC PECAS PARA MOTORES E ACESSORIOS LTDA",
+    "fantasia": "FEMAPEC PECAS PARA MOTORES E ACESSORIOS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "29.50-6-00",
+        "text": "Recondicionamento e recuperação de motores para veículos automotores"
+      },
+      {
+        "code": "45.12-9-01",
+        "text": "Representantes comerciais e agentes do comércio de veículos automotores"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-07",
+        "text": "Serviços de instalação, manutenção e reparação de acessórios para veículos automotores"
+      },
+      {
+        "code": "45.30-7-01",
+        "text": "Comércio por atacado de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-06",
+        "text": "Representantes comerciais e agentes do comércio de peças e acessórios novos e usados para veículos automotores"
+      },
+      {
+        "code": "45.41-2-02",
+        "text": "Comércio por atacado de peças e acessórios para motocicletas e motonetas"
+      },
+      {
+        "code": "45.41-2-06",
+        "text": "Comércio a varejo de peças e acessórios novos para motocicletas e motonetas"
+      },
+      {
+        "code": "45.42-1-01",
+        "text": "Representantes comerciais e agentes do comércio de motocicletas e motonetas, peças e acessórios"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "46.62-1-00",
+        "text": "Comércio atacadista de máquinas, equipamentos para terraplenagem, mineração e construção; partes e peças"
+      },
+      {
+        "code": "46.63-0-00",
+        "text": "Comércio atacadista de máquinas e equipamentos para uso industrial; partes e peças"
+      },
+      {
+        "code": "46.65-6-00",
+        "text": "Comércio atacadista de máquinas e equipamentos para uso comercial; partes e peças"
+      },
+      {
+        "code": "46.69-9-01",
+        "text": "Comércio atacadista de bombas e compressores; partes e peças"
+      },
+      {
+        "code": "46.69-9-99",
+        "text": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente; partes e peças"
+      },
+      {
+        "code": "46.72-9-00",
+        "text": "Comércio atacadista de ferragens e ferramentas"
+      },
+      {
+        "code": "46.81-8-05",
+        "text": "Comércio atacadista de lubrificantes"
+      },
+      {
+        "code": "46.93-1-00",
+        "text": "Comércio atacadista de mercadorias em geral, sem predominância de alimentos ou de insumos agropecuários"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.51-2-01",
+        "text": "Comércio varejista especializado de equipamentos e suprimentos de informática"
+      },
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      },
+      {
+        "code": "82.30-0-01",
+        "text": "Serviços de organização de feiras, congressos, exposições e festas"
+      },
+      {
+        "code": "93.19-1-01",
+        "text": "Produção e promoção de eventos esportivos"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALINE DIAS LEAO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA DOS MISSIONARIOS",
+    "numero": "565",
+    "complemento": "QUADRA31 LOTE 1/28",
+    "municipio": "GOIANIA",
+    "bairro": "BRO RODOVIARIO",
+    "uf": "GO",
+    "cep": "74.430-360",
+    "email": "femapecmotores@hotmail.com",
+    "telefone": "(62) 3573-1142",
+    "data_situacao": "27/08/2021",
+    "cnpj": "43.315.406/0001-76",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "150000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:25451174000100": {
+    "abertura": "09/08/2016",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ALZIRA NETO DOS SANTOS ZAFANI LTDA",
+    "fantasia": "ACEFER",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.87-7-01",
+        "text": "Comércio atacadista de resíduos de papel e papelão"
+      },
+      {
+        "code": "46.87-7-02",
+        "text": "Comércio atacadista de resíduos e sucatas não metálicos, exceto de papel e papelão"
+      },
+      {
+        "code": "46.87-7-03",
+        "text": "Comércio atacadista de resíduos e sucatas metálicos"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALZIRA NETO DOS SANTOS ZAFANI",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA 4-A ESQUINA COM RUA EUZEBIO",
+    "numero": "SN",
+    "complemento": "QUADRA02 LOTE 09",
+    "municipio": "PORANGATU",
+    "bairro": "VILA DORNIL",
+    "uf": "GO",
+    "cep": "76.550-000",
+    "email": "acefer2@uol.com.br",
+    "telefone": "(62) 3368-1505 / (62) 3357-1495",
+    "data_situacao": "31/01/2020",
+    "cnpj": "25.451.174/0001-00",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "150000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:03396938000160": {
+    "abertura": "10/09/1999",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "CERRADO VERDE GOIAS - SISTEMAS DE IRRIGACAO LTDA",
+    "fantasia": "CERRADO VERDE",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "33.21-0-00",
+        "text": "Instalação de máquinas e equipamentos industriais"
+      },
+      {
+        "code": "43.21-5-00",
+        "text": "Instalações elétricas"
+      },
+      {
+        "code": "46.69-9-99",
+        "text": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente; partes e peças"
+      },
+      {
+        "code": "47.13-0-02",
+        "text": "Lojas de variedades, exceto lojas de departamentos ou magazines"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "RACHEL BARRETO DE MIRANDA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA CASTELO BRANCO",
+    "numero": "4180",
+    "complemento": "QUADRA20 LOTE 11",
+    "municipio": "GOIANIA",
+    "bairro": "BRO RODOVIARIO",
+    "uf": "GO",
+    "cep": "74.430-130",
+    "email": "cerradoverde@cerradoverde.com.br",
+    "telefone": "(61) 9975-8020 / (62) 3291-3877 / (62) 3941-2600",
+    "data_situacao": "03/11/2005",
+    "cnpj": "03.396.938/0001-60",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:13370125000155": {
+    "abertura": "24/02/2011",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "PLANA CORREIAS E BORRACHAS LTDA",
+    "fantasia": "PLANA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.59-8-99",
+        "text": "Comércio varejista de outros artigos de uso pessoal e doméstico não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "95.29-1-99",
+        "text": "Reparação e manutenção de outros objetos e equipamentos pessoais e domésticos não especificados anteriormente"
+      },
+      {
+        "code": "33.19-8-00",
+        "text": "Manutenção e reparação de equipamentos e produtos não especificados anteriormente"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "33.21-0-00",
+        "text": "Instalação de máquinas e equipamentos industriais"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "LEANDRO MACHADO",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "ELISEU ANTUNES DE MACEDO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AV CASTELO BRANCO",
+    "numero": "2.558",
+    "complemento": "QUADRA: 127-A; LOTE: 13;",
+    "municipio": "GOIANIA",
+    "bairro": "SETOR CAMPINAS",
+    "uf": "GO",
+    "cep": "74.513-050",
+    "email": "vendaplana@hotmail.com",
+    "telefone": "(62) 3208-2446/ (62) 3945-1100",
+    "data_situacao": "24/02/2011",
+    "cnpj": "13.370.125/0001-55",
+    "ultima_atualizacao": "2025-09-01T16:38:05.891Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "50000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "24/02/2011",
+      "data_exclusao": "31/05/2024",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:05795785000150": {
+    "abertura": "30/07/2003",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "EAGRI INDUSTRIA E COMERCIO DE MAQUINAS E EQUIPAMENTOS LTDA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "26.51-5-00",
+        "text": "Fabricação de aparelhos e equipamentos de medida, teste e controle"
+      },
+      {
+        "code": "33.12-1-02",
+        "text": "Manutenção e reparação de aparelhos e instrumentos de medida, teste e controle"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALINE KARIN DHEIN MACHADO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "R HAYEL BON FAKER",
+    "numero": "520",
+    "municipio": "DOURADOS",
+    "bairro": "JARDIM RASSLEM",
+    "uf": "MS",
+    "cep": "79.813-240",
+    "email": "eagri@eagri.com.br",
+    "telefone": "(67) 3425-2463",
+    "data_situacao": "04/06/2005",
+    "cnpj": "05.795.785/0001-50",
+    "ultima_atualizacao": "2025-09-01T15:48:01.638Z",
+    "status": "OK",
+    "fantasia": "",
+    "complemento": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "20000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:01982960000167": {
+    "abertura": "02/05/1997",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ACO ITALIA INDUSTRIA METALURGICA LTDA",
+    "fantasia": "ACO ITALIA",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "25.11-0-00",
+        "text": "Fabricação de estruturas metálicas"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "24.23-7-02",
+        "text": "Produção de laminados longos de aço, exceto tubos"
+      },
+      {
+        "code": "25.32-2-01",
+        "text": "Produção de artefatos estampados de metal"
+      },
+      {
+        "code": "25.99-3-01",
+        "text": "Serviços de confecção de armações metálicas para a construção"
+      },
+      {
+        "code": "25.99-3-02",
+        "text": "Serviço de corte e dobra de metais"
+      },
+      {
+        "code": "42.92-8-01",
+        "text": "Montagem de estruturas metálicas"
+      },
+      {
+        "code": "43.29-1-99",
+        "text": "Outras obras de instalações em construções não especificadas anteriormente"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-99",
+        "text": "Comércio varejista de materiais de construção em geral"
+      },
+      {
+        "code": "52.11-7-99",
+        "text": "Depósitos de mercadorias para terceiros, exceto armazéns gerais e guarda-móveis"
+      },
+      {
+        "code": "68.10-2-02",
+        "text": "Aluguel de imóveis próprios"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "AGDA VIRGINIA DE SOUZA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RODOVIA BR-153, ESQ C/ RUA 20 ESQ C/ RUA 19",
+    "numero": "S/N",
+    "complemento": "QUADRA75A LOTE 009E",
+    "municipio": "APARECIDA DE GOIANIA",
+    "bairro": "VILA BRASILIA",
+    "uf": "GO",
+    "cep": "74.911-410",
+    "email": "societario@lobeconsultoria.com.br",
+    "telefone": "(62) 3286-4638 / (62) 3282-0520",
+    "data_situacao": "27/08/2005",
+    "cnpj": "01.982.960/0001-67",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "300000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "01/01/2016",
+      "data_exclusao": "31/12/2020",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:29139777000113": {
+    "abertura": "24/11/2017",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "J. F. VIEIRA",
+    "fantasia": "ESTOPAS LIDER",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "13.59-6-00",
+        "text": "Fabricação de outros produtos têxteis não especificados anteriormente"
+      }
+    ],
+    "logradouro": "AVENIDA PORTUGAL",
+    "numero": "SN",
+    "complemento": "QUADRA231 LOTE 0033",
+    "municipio": "APARECIDA DE GOIANIA",
+    "bairro": "JARDIM BURITI SERENO",
+    "uf": "GO",
+    "cep": "74.942-210",
+    "email": "vectra@vectradistribuidora.com.br",
+    "telefone": "(62) 9679-4558",
+    "data_situacao": "24/11/2017",
+    "cnpj": "29.139.777/0001-13",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "25000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:01820331000130": {
+    "abertura": "24/03/1986",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "A SERINGUEIRA - COMERCIO DE BORRACHA E PLASTICO LTDA",
+    "fantasia": "A SERINGUEIRA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "46.69-9-01",
+        "text": "Comércio atacadista de bombas e compressores; partes e peças"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      },
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      },
+      {
+        "code": "82.19-9-99",
+        "text": "Preparação de documentos e serviços especializados de apoio administrativo não especificados anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "GUARACIABA ALVARES DE FARIA GURGEL",
+        "qual": "22-Sócio"
+      },
+      {
+        "nome": "MIGUEL FRANCISCO GURGEL",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AV GOIAS",
+    "numero": "2635",
+    "municipio": "GURUPI",
+    "bairro": "CENTRO",
+    "uf": "TO",
+    "cep": "77.410-010",
+    "data_situacao": "27/08/2005",
+    "cnpj": "01.820.331/0001-30",
+    "ultima_atualizacao": "2025-08-11T19:03:16.778Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "500000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2023",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:20089631001965": {
+    "abertura": "03/11/2022",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "SEEDCORP HO PRODUCAO E COMERCIALIZACAO DE SEMENTES S.A",
+    "fantasia": "SEEDCORP HO",
+    "porte": "DEMAIS",
+    "natureza_juridica": "205-4 - Sociedade Anônima Fechada",
+    "atividade_principal": [
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.11-7-00",
+        "text": "Representantes comerciais e agentes do comércio de matérias-primas agrícolas e animais vivos"
+      },
+      {
+        "code": "46.22-2-00",
+        "text": "Comércio atacadista de soja"
+      },
+      {
+        "code": "46.23-1-99",
+        "text": "Comércio atacadista de matérias-primas agrícolas não especificadas anteriormente"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "70.20-4-00",
+        "text": "Atividades de consultoria em gestão empresarial"
+      },
+      {
+        "code": "77.40-3-00",
+        "text": "Gestão de ativos intangíveis não-financeiros"
+      },
+      {
+        "code": "82.92-0-00",
+        "text": "Envasamento e empacotamento sob contrato"
+      }
+    ],
+    "logradouro": "AVENIDA SEBASTIAO LEMES VIANA",
+    "numero": "S/N",
+    "complemento": "QUADRA010 LOTE 07 ARMZ 1 E",
+    "municipio": "APARECIDA DE GOIANIA",
+    "bairro": "PARQUE INDUSTRIAL APARECIDA VICE-PRESIDENTE JOSE D",
+    "uf": "GO",
+    "cep": "74.993-550",
+    "email": "cadastro@seedcorpho.com",
+    "telefone": "(62) 3412-5400",
+    "data_situacao": "03/11/2022",
+    "cnpj": "20.089.631/0019-65",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "6915236.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:30641148000338": {
+    "abertura": "07/12/2020",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "STINE SEED SEMENTES DO BRASIL LTDA.",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "01.41-5-01",
+        "text": "Produção de sementes certificadas, exceto de forrageiras para pasto"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.22-2-00",
+        "text": "Comércio atacadista de soja"
+      },
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      },
+      {
+        "code": "46.23-1-99",
+        "text": "Comércio atacadista de matérias-primas agrícolas não especificadas anteriormente"
+      },
+      {
+        "code": "46.32-0-01",
+        "text": "Comércio atacadista de cereais e leguminosas beneficiados"
+      },
+      {
+        "code": "46.32-0-03",
+        "text": "Comércio atacadista de cereais e leguminosas beneficiados, farinhas, amidos e féculas, com atividade de fracionamento e acondicionamento associada"
+      },
+      {
+        "code": "72.10-0-00",
+        "text": "Pesquisa e desenvolvimento experimental em ciências físicas e naturais"
+      }
+    ],
+    "logradouro": "RUA 4",
+    "numero": "103",
+    "complemento": "GALPAO02 QUADRA0009 LOTE 06",
+    "municipio": "RIO VERDE",
+    "bairro": "SETOR INDUSTRIAL II",
+    "uf": "GO",
+    "cep": "75.905-015",
+    "email": "marcello.reis@capitalco.com.br",
+    "telefone": "(65) 9975-0821",
+    "data_situacao": "07/12/2020",
+    "cnpj": "30.641.148/0003-38",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "3000000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:03946067001000": {
+    "abertura": "21/11/2018",
+    "situacao": "BAIXADA",
+    "tipo": "FILIAL",
+    "nome": "GDM SEMENTES LTDA",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      }
+    ],
+    "logradouro": "RODOVIA GO 174 A MONTIVIDIU",
+    "numero": "S/N",
+    "complemento": "KM 08 SALA 02 A ESQUERDA",
+    "municipio": "RIO VERDE",
+    "bairro": "AREA RURAL DE RIO VERDE",
+    "uf": "GO",
+    "cep": "75.913-899",
+    "email": "inforkws@kws.com",
+    "telefone": "(34) 3818-2000",
+    "data_situacao": "30/05/2025",
+    "motivo_situacao": "Incorporação",
+    "cnpj": "03.946.067/0010-00",
+    "ultima_atualizacao": "2025-07-16T17:47:01.766Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }

@@ -433,6 +433,11 @@ class RuralXmlImporter(QWidget):
         self.btn_import.clicked.connect(self.import_xmls)
         actions.addWidget(self.btn_import)
 
+        # depois de actions.addWidget(self.btn_import)
+        self.btn_import_lanc = QPushButton("📥 Importar Lançamentos")
+        self.btn_import_lanc.clicked.connect(self.importar_lancamentos_simples)
+        actions.addWidget(self.btn_import_lanc)
+
         self.btn_cancel = QPushButton("⛔ Cancelar")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.setObjectName("danger")
@@ -805,6 +810,42 @@ class RuralXmlImporter(QWidget):
             self.log_msg(f"Erro ao iniciar importação: {e}", "error")
             QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao iniciar a importação:\n{e}")
 
+    def importar_lancamentos_simples(self):
+        # Abre o explorador para TXT/XLSX
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importar Lançamentos",
+            "",
+            "Textos (*.txt *.TXT);;Planilhas Excel (*.xlsx *.xls);;Todos os arquivos (*.*)"
+        )
+        if not path:
+            return
+    
+        try:
+            main_win = self.window()  # janela principal (MainWindow)
+            if not main_win or not hasattr(main_win, "_import_lancamentos_txt"):
+                QMessageBox.warning(self, "Aviso", "Janela principal não disponível para importar.")
+                return
+    
+            if path.lower().endswith(".txt"):
+                main_win._import_lancamentos_txt(path)
+            else:
+                main_win._import_lancamentos_excel(path)
+    
+            # Atualiza a UI principal após importar
+            if hasattr(main_win, "carregar_lancamentos"):
+                main_win.carregar_lancamentos()
+            if hasattr(main_win, "dashboard"):
+                try:
+                    main_win.dashboard.load_data()
+                except Exception:
+                    pass
+                
+            self.log_msg(f"Lançamentos importados de {os.path.basename(path)}", "success")
+        except Exception as e:
+            QMessageBox.warning(self, "Importação Falhou", f"{e}")
+    
+    
     # ---------- Config ----------
     def load_config(self):
         config_dir = Path(__file__).parent / "json"
