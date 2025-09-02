@@ -1499,20 +1499,12 @@ class LancamentoDialog(QDialog):
 
     def _build_ui(self):
         form = QFormLayout()
-        # pega menor/maior data existentes
-        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
-        if row and row[0] and row[1]:
-            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
-            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
-        else:
-            _ini = QDate.currentDate().addMonths(-1)
-            _fim = QDate.currentDate()
-        
-        self.dt_ini = QDateEdit(_ini); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
-        self.lanc_filter_layout.addWidget(self.dt_ini)
-        self.lanc_filter_layout.addWidget(QLabel("Até:"))
-        self.dt_fim = QDateEdit(_fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
-        self.lanc_filter_layout.addWidget(self.dt_fim)
+        # campo de data do lançamento
+        self.data = QDateEdit(QDate.currentDate())
+        self.data.setCalendarPopup(True)
+        self.data.setDisplayFormat("dd/MM/yyyy")
+        form.addRow("Data:", self.data)
+
         # Imóvel
         self.imovel = QComboBox()
         self.imovel.addItem("Selecione...", None)
@@ -1599,7 +1591,10 @@ class LancamentoDialog(QDialog):
         ) = row
     
         # data
-        self.data.setDate(QDate.fromString(data, "dd/MM/yyyy"))
+        _d = QDate.fromString(data or "", "dd/MM/yyyy")
+        if not _d.isValid():
+            _d = QDate.currentDate()
+        self.data.setDate(_d)
     
         # imóvel
         idx_im = self.imovel.findData(imovel_id)
@@ -1625,8 +1620,8 @@ class LancamentoDialog(QDialog):
         self.tipo_lanc.setCurrentIndex(tipo_lanc - 1)
     
         # valores
-        self.valor_entrada.setText(f"{ent:.2f}")
-        self.valor_saida.setText(f"{sai:.2f}")
+        self.valor_entrada.setText("" if ent is None else f"{float(ent):.2f}")
+        self.valor_saida.setText("" if sai is None else f"{float(sai):.2f}")
     
     def salvar(self):
         try:
@@ -1637,7 +1632,8 @@ class LancamentoDialog(QDialog):
 
             # SUBSTITUA POR:
             raw_num = (self.num_doc.text() or '').strip()
-            norm_num = re.sub(r'\s+', '', raw_num)   # remove todos os espaços p/ comparação
+            # normaliza removendo TUDO que não é dígito (ex.: "123/2025", "123-2025", "123 2025")
+            norm_num = re.sub(r'\D+', '', raw_num)
             part = self.participante.currentData()
 
 
@@ -1672,15 +1668,29 @@ class LancamentoDialog(QDialog):
             ent = parse_currency(self.valor_entrada.text())
             sai = parse_currency(self.valor_saida.text())
 
-            # Calcula saldo anterior e saldo final
-            row = self.db.fetch_one(
-                "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
-                "FROM lancamento WHERE cod_conta = ? ORDER BY id DESC LIMIT 1",
-                (self.conta.currentData(),)
-            )
-            saldo_ant = row[0] if row and row[0] is not None else 0.0
+            # Calcula o saldo anterior CORRETO (sem contar o próprio lançamento)
+            conta_id = self.conta.currentData()
+
+            # se estiver editando, pegue o saldo do lançamento ANTERIOR (id menor) da mesma conta
+            if self.lanc_id:
+                row_prev = self.db.fetch_one(
+                    "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                    "FROM lancamento WHERE cod_conta=? AND id < ? ORDER BY id DESC LIMIT 1",
+                    (conta_id, self.lanc_id),
+                )
+                saldo_ant = row_prev[0] if row_prev and row_prev[0] is not None else 0.0
+            else:
+                # inserção: usa o último saldo existente na conta
+                row_prev = self.db.fetch_one(
+                    "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
+                    "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
+                    (conta_id,),
+                )
+                saldo_ant = row_prev[0] if row_prev and row_prev[0] is not None else 0.0
+
             saldo_f = saldo_ant + ent - sai
             nat = 'P' if saldo_f >= 0 else 'N'
+
 
             # antes de tudo, capture data e hora atuais
             now = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -1704,6 +1714,7 @@ class LancamentoDialog(QDialog):
             ]
             
             if self.lanc_id:
+                # 1) Atualiza o registro editado
                 sql = """
                 UPDATE lancamento SET
                     data = ?, cod_imovel = ?, cod_conta = ?, num_doc = ?, tipo_doc = ?,
@@ -1713,6 +1724,24 @@ class LancamentoDialog(QDialog):
                 WHERE id = ?
                 """
                 self.db.execute_query(sql, params + [self.lanc_id])
+
+                # 2) Recalcula em CADEIA os lançamentos posteriores da mesma conta
+                saldo_atual = saldo_f
+                with self.db.bulk():
+                    rows = self.db.fetch_all(
+                        "SELECT id, valor_entrada, valor_saida "
+                        "FROM lancamento WHERE cod_conta=? AND id > ? ORDER BY id",
+                        (conta_id, self.lanc_id),
+                    )
+                    for rid, v_ent, v_sai in rows:
+                        saldo_atual = saldo_atual + float(v_ent or 0) - float(v_sai or 0)
+                        nat_r = 'P' if saldo_atual >= 0 else 'N'
+                        self.db.execute_query(
+                            "UPDATE lancamento SET saldo_final=?, natureza_saldo=? WHERE id=?",
+                            (abs(saldo_atual), nat_r, rid),
+                            autocommit=False
+                        )
+
             else:
                 sql = """
                 INSERT INTO lancamento (
@@ -3146,63 +3175,143 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro na exportação: {e}")
 
-    def gerar_txt(self, path: str = None):
-        if path is None:
-            last = load_last_txt_path(); path, _ = QFileDialog.getSaveFileName(self, "Salvar LCDPR", last, "TXT (*.txt)")
-            if not path: return
-
+    def gerar_txt(self, path: str):
+        from decimal import Decimal
+        import re
         settings = QSettings("Automatize Tech", "AgroApp")
-        ver = settings.value("param/version", "0013"); iden = settings.value("param/ident", ""); nome = settings.value("param/nome", "")
-        mov = settings.value("param/ind_mov", "0"); rec = settings.value("param/ind_rec", "0")
-        d1, d2 = self.dt_ini.date().toString("dd/MM/yyyy"), self.dt_fim.date().toString("dd/MM/yyyy")
-
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write(f"0000|LCDPR|{ver}|{iden}|{nome}|{mov}|{rec}||{self.dt_ini.date().toString('ddMMyyyy')}|{self.dt_fim.date().toString('ddMMyyyy')}\n")
-            f.write("0010|1\n")
-            log = settings.value("param/logradouro", ""); num = settings.value("param/numero", ""); comp = settings.value("param/complemento", "")
-            bai = settings.value("param/bairro", ""); uf = settings.value("param/uf", ""); mun = settings.value("param/cod_mun", "")
-            cep = settings.value("param/cep", ""); tel = settings.value("param/telefone", ""); em = settings.value("param/email", "")
-            f.write(f"0030|{log}|{num}|{comp}|{bai}|{uf}|{mun}|{cep}|{tel}|{em}\n")
-
-            for im in self.db.fetch_all("SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,tipo_exploracao,participacao,area_total,area_utilizada FROM imovel_rural"):
-                f.write("0040|" + "|".join(str(x or "") for x in im) + "\n")
-
-            for ct in self.db.fetch_all("SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria"):
-                cod, pais, ban, nom, ag, numcta, sal = ct
-                f.write(f"0050|{cod}|{pais}|{ban or ''}|{nom or ''}|{ag}|{numcta}|{sal:.2f}\n")
-
-            for cpf, nm, tp in self.db.fetch_all("SELECT cpf_cnpj,nome,tipo_contraparte FROM participante"):
-                f.write(f"0100|{cpf}|{nm}|{tp}\n")
-
-            for data, cod_im, cod_ct, doc, td, hist, pid, tl, ent, sai, sf, nat in self.db.fetch_all("""
-                SELECT l.data,
-                       im.cod_imovel,
-                       ct.cod_conta,
-                       l.num_doc, l.tipo_doc, l.historico, l.id_participante, l.tipo_lanc,
-                       l.valor_entrada, l.valor_saida, l.saldo_final, l.natureza_saldo
-                  FROM lancamento l
-                  JOIN imovel_rural  im ON im.id = l.cod_imovel
-                  JOIN conta_bancaria ct ON ct.id = l.cod_conta
-                 ORDER BY l.data, l.id
+    
+        # ===== helpers =====
+        NL = "\r\n"  # CRLF exigido pelo manual
+        def _digits(s): return re.sub(r"\D", "", str(s or ""))
+        def _ddmmyyyy(qdate_or_str):
+            if hasattr(qdate_or_str, "toString"):
+                return qdate_or_str.toString("ddMMyyyy")
+            # aceita 'aaaa-mm-dd'
+            m = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(qdate_or_str or ""))
+            return f"{m.group(3)}{m.group(2)}{m.group(1)}" if m else ""
+        def _cents(val):
+            q = Decimal(str(val or 0)).quantize(Decimal("0.01"))
+            return str(int(q * 100))
+        def _clean(s):
+            # remove pipes e controles
+            return re.sub(r"[|\r\n]+", " ", str(s or "")).strip()
+    
+        # ===== cabeçalho =====
+        versao = settings.value("param/version", "0013")
+        ident  = _digits(settings.value("param/ident", ""))
+        nome   = _clean(settings.value("param/nome", ""))
+        ind_mov = settings.value("param/ind_mov", "0")
+        ind_rec = settings.value("param/ind_rec", "0")
+    
+        dt_ini_txt = self.dt_ini.date().toString("ddMMyyyy")
+        dt_fim_txt = self.dt_fim.date().toString("ddMMyyyy")
+    
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            # 0000
+            f.write("0000|" + "|".join(["LCDPR", versao, ident, nome, ind_mov, ind_rec, "", dt_ini_txt, dt_fim_txt]) + NL)
+            # 0010 (sempre 1)
+            f.write("0010|1" + NL)
+    
+            # 0030 – endereço
+            logradouro = _clean(settings.value("param/logradouro", ""))
+            numero     = _clean(settings.value("param/numero", ""))
+            complemento= _clean(settings.value("param/complemento", ""))
+            bairro     = _clean(settings.value("param/bairro", ""))
+            uf         = _clean(settings.value("param/uf", ""))
+            cod_mun    = _digits(settings.value("param/cod_mun", ""))
+            cep        = _digits(settings.value("param/cep", ""))
+            telefone   = _digits(settings.value("param/telefone", ""))
+            email      = _clean(settings.value("param/email", ""))
+            f.write("0030|" + "|".join([logradouro, numero, complemento, bairro, uf, cod_mun, cep, telefone, email]) + NL)
+    
+            # 0040 – imóveis (sem transformar texto em centavos)
+            for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf_, mun, cep_, tipo_expl, part, area_tot, area_uti) in \
+                    self.db.fetch_all("""SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
+                                                nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
+                                                tipo_exploracao,participacao,area_total,area_utilizada
+                                           FROM imovel_rural"""):
+                f.write("0040|" + "|".join([
+                    _digits(cod).zfill(3), _clean(pais), _clean(moeda),
+                    _digits(cad_itr), _digits(caepf), _digits(ie),
+                    _clean(nome_imovel), _clean(end), _clean(num), _clean(comp),
+                    _clean(bai), _clean(uf_), _digits(mun), _digits(cep_),
+                    str(tipo_expl or ""),
+                    _cents(part or 0),                   # percentual (duas casas)
+                    _cents(area_tot or 0),               # N 19,2 em centavos
+                    _cents(area_uti or 0)
+                ]) + NL)
+    
+            # 0050 – contas (sem SALDO_INICIAL no 0050!)
+            for cod, pais_cta, banco, nome_bco, ag, num_cta in \
+                    self.db.fetch_all("""SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta
+                                           FROM conta_bancaria"""):
+                f.write("0050|" + "|".join([
+                    _digits(cod).zfill(3),
+                    _clean(pais_cta),
+                    _digits(banco).zfill(3) if banco else "",
+                    _clean(nome_bco),
+                    _digits(ag),
+                    _digits(num_cta)
+                ]) + NL)
+    
+            # 0100 – participantes
+            for cpf_cnpj, nm, tipo in self.db.fetch_all("""SELECT cpf_cnpj,nome,tipo_contraparte FROM participante"""):
+                f.write("0100|" + "|".join([_digits(cpf_cnpj), _clean(nm), str(tipo)]) + NL)
+    
+            # Q100 – lançamentos (ordem e numéricos no padrão)
+            for (data, cod_im, cod_ct, doc, td, hist, cpf_cnpj, tl, ent, sai, sf, nat) in self.db.fetch_all("""
+                    SELECT l.data,
+                           im.cod_imovel,
+                           ct.cod_conta,
+                           l.num_doc, l.tipo_doc, l.historico, p.cpf_cnpj, l.tipo_lanc,
+                           l.valor_entrada, l.valor_saida, l.saldo_final, l.natureza_saldo
+                      FROM lancamento l
+                      JOIN imovel_rural  im ON im.id = l.cod_imovel
+                      JOIN conta_bancaria ct ON ct.id = l.cod_conta
+                 LEFT JOIN participante      p ON p.id = l.id_participante
+                  ORDER BY l.data, l.id
             """):
-                f.write("Q100|" + "|".join([data, cod_im, cod_ct, str(doc or ''), str(td), hist or '', str(pid or ''), str(tl), f"{sai:.2f}", f"{ent:.2f}", f"{sf:.2f}", nat]) + "\n")
-
-
-            d1_str = self.dt_ini.date().toString("yyyy-MM-dd"); d2_str = self.dt_fim.date().toString("yyyy-MM-dd")
-            resumo = self.db.fetch_all("SELECT strftime('%m%Y', data), SUM(valor_entrada), SUM(valor_saida) FROM lancamento WHERE data BETWEEN ? AND ? GROUP BY strftime('%m%Y', data)", (d1_str, d2_str))
-
-            for mesano, total_ent, total_sai in resumo:
-                row = self.db.fetch_one("SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) FROM lancamento WHERE strftime('%m%Y', data)=? ORDER BY id DESC LIMIT 1", (mesano,))
-                saldo_mes = row[0] if row and row[0] is not None else 0.0
-                ent_ct, sai_ct = int(total_ent * 100), int(total_sai * 100); flag = 'P' if saldo_mes >= 0 else 'N'
-                f.write(f"Q200|{mesano}|000|{ent_ct}|{sai_ct}|{flag}\n")
-
-        total_linhas = sum(1 for _ in open(path, 'r', encoding='utf-8')) + 1
-        with open(path, 'a', encoding='utf-8') as f:
-            f.write(f"9999||||||{total_linhas}\n")
-
+                f.write("Q100|" + "|".join([
+                    _ddmmyyyy(data),                    # DATA (ddmmaaaa)
+                    _digits(cod_im).zfill(3),           # COD_IMÓVEL
+                    _digits(cod_ct).zfill(3),           # COD_CONTA
+                    _clean(doc),                        # NUM_DOC
+                    str(td or ""),                      # TIPO_DOC
+                    _clean(hist),                       # HISTÓRICO
+                    _digits(cpf_cnpj or ident),         # ID_PARTICIPANTE (fallback CPF declarante)
+                    str(tl or ""),
+                    _cents(ent or 0),                   # VL_ENTRADA
+                    _cents(sai or 0),                   # VL_SAIDA
+                    _cents(sf or 0),                    # SLD_FIN
+                    str(nat or "")
+                ]) + NL)
+    
+            # Q200 – por mês (mmaaaa), com saldo ACUMULADO
+            d1 = self.dt_ini.date().toString("yyyy-MM-dd")
+            d2 = self.dt_fim.date().toString("yyyy-MM-dd")
+            resumo = self.db.fetch_all("""
+                SELECT strftime('%Y%m', data) AS ym, SUM(valor_entrada), SUM(valor_saida)
+                  FROM lancamento
+                 WHERE data BETWEEN ? AND ?
+              GROUP BY ym ORDER BY ym
+            """, (d1, d2))
+    
+            saldo_acum = Decimal("0")
+            for ym, tot_ent, tot_sai in resumo:
+                mesano = ym[4:6] + ym[0:4]            # mmaaaa
+                tot_ent = Decimal(str(tot_ent or 0))
+                tot_sai = Decimal(str(tot_sai or 0))
+                saldo_acum += (tot_ent - tot_sai)
+                f.write(f"Q200|{mesano}|{_cents(tot_ent)}|{_cents(tot_sai)}|{_cents(saldo_acum)}|{'P' if saldo_acum >= 0 else 'N'}{NL}")
+    
+        # 9999 – total de linhas (inclui o próprio 9999)
+        total = sum(1 for _ in open(path, "r", encoding="utf-8")) + 1
+        with open(path, "a", encoding="utf-8", newline="") as f:
+            f.write(f"9999||||||{total}{NL}")
+    
         save_last_txt_path(path)
         QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
+    
 
     def _exportar_planilha_lcdpr(self):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
@@ -3225,7 +3334,7 @@ class MainWindow(QMainWindow):
         for im in self.db.fetch_all("SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,tipo_exploracao,participacao,area_total,area_utilizada FROM imovel_rural"):
             rows.append(dict(zip(["registro","cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"], ["0040"] + [str(x or "") for x in im])))
 
-        for ct in self.db.fetch_all("SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria"):
+        for ct in self.db.fetch_all("SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"):
             cod_cta, pais_cta, banco, nome_banco, agencia, num_cta, saldo = ct
             rows.append({"registro": "0050", "cod_conta": cod_cta, "pais_cta": pais_cta, "banco": banco or "", "nome_banco": nome_banco or "", "agencia": agencia, "num_conta": num_cta, "saldo_inicial": f"{saldo:.2f}"})
 
