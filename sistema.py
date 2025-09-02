@@ -1863,6 +1863,7 @@ class GerenciamentoContasWidget(QWidget):
 
         # ===== Tabela de Contas =====
         self.tabela = QTableWidget(0, len(self._contas_labels))
+        self.tabela.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tabela.setHorizontalHeaderLabels(self._contas_labels)
         # evita edição direta
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -1876,7 +1877,7 @@ class GerenciamentoContasWidget(QWidget):
         hdr = self.tabela.horizontalHeader()
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
-        hdr.setSectionResizeMode(QHeaderView.Interactive)  # largura manual / scroll
+        hdr.setSectionResizeMode(QHeaderView.Stretch)  # ocupa toda a largura (sem “sobras”)
 
         # ordenação cíclica
         hdr.sectionDoubleClicked.connect(self._toggle_sort)
@@ -2374,7 +2375,7 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.db = Database()
         self._participantes_labels = ["CPF/CNPJ","Nome","Tipo","Cadastro"]
         self._participantes_sort_state = {}
-        self.layout = QVBoxLayout(self); self.layout.setContentsMargins(10,10,10,10)
+        self.layout = QVBoxLayout(self); self.layout.setContentsMargins(0,0,0,0)
         self._build_ui(); self._load_participantes_column_filter(); self.carregar_participantes()
 
     def _build_ui(self):
