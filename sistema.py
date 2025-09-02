@@ -24,6 +24,7 @@ import shiboken6
 
 from pathlib import Path
 import importlib.util
+from decimal import Decimal, ROUND_HALF_UP
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -3195,7 +3196,15 @@ class MainWindow(QMainWindow):
         def _clean(s):
             # remove pipes e controles
             return re.sub(r"[|\r\n]+", " ", str(s or "")).strip()
-    
+
+        def _perc5(v):
+            try:
+                d = Decimal(str(v).replace(',', '.'))
+            except Exception:
+                d = Decimal('0')
+            # formato N 5,2 -> 5 dígitos, 2 casas sem separador (ex.: 5,2% => 00520)
+            return f"{int((d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) * 100).to_integral_value()):05d}"
+
         # ===== cabeçalho =====
         versao = settings.value("param/version", "0013")
         ident  = _digits(settings.value("param/ident", ""))
@@ -3224,27 +3233,27 @@ class MainWindow(QMainWindow):
             email      = _clean(settings.value("param/email", ""))
             f.write("0030|" + "|".join([logradouro, numero, complemento, bairro, uf, cod_mun, cep, telefone, email]) + NL)
     
-            # 0040 – imóveis (sem transformar texto em centavos)
+            # 0040 – imóveis (inclui áreas conforme leiaute)
             for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf_, mun, cep_, tipo_expl, part, area_tot, area_uti) in \
                     self.db.fetch_all("""SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
-                                                nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
-                                                tipo_exploracao,participacao,area_total,area_utilizada
-                                           FROM imovel_rural"""):
+                                            nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
+                                            tipo_exploracao,participacao,area_total,area_utilizada
+                                       FROM imovel_rural"""):
                 f.write("0040|" + "|".join([
                     _digits(cod).zfill(3), _clean(pais), _clean(moeda),
                     _digits(cad_itr), _digits(caepf), _digits(ie),
                     _clean(nome_imovel), _clean(end), _clean(num), _clean(comp),
                     _clean(bai), _clean(uf_), _digits(mun), _digits(cep_),
                     str(tipo_expl or ""),
-                    _cents(part or 0),                   # percentual (duas casas)
-                    _cents(area_tot or 0),               # N 19,2 em centavos
-                    _cents(area_uti or 0)
+                    _perc5(part or 0),            # PARTICIPACAO N 5,2
+                    _cents(area_tot or 0),        # AREA_TOTAL  N 19,2
+                    _cents(area_uti or 0)         # AREA_UTILIZADA N 19,2
                 ]) + NL)
-    
+
             # 0050 – contas (sem SALDO_INICIAL no 0050!)
-            for cod, pais_cta, banco, nome_bco, ag, num_cta in \
-                    self.db.fetch_all("""SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta
-                                           FROM conta_bancaria"""):
+            for cod, pais_cta, banco, nome_bco, ag, num_cta in self.db.fetch_all(
+                "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"
+            ):
                 f.write("0050|" + "|".join([
                     _digits(cod).zfill(3),
                     _clean(pais_cta),
@@ -3253,11 +3262,7 @@ class MainWindow(QMainWindow):
                     _digits(ag),
                     _digits(num_cta)
                 ]) + NL)
-    
-            # 0100 – participantes
-            for cpf_cnpj, nm, tipo in self.db.fetch_all("""SELECT cpf_cnpj,nome,tipo_contraparte FROM participante"""):
-                f.write("0100|" + "|".join([_digits(cpf_cnpj), _clean(nm), str(tipo)]) + NL)
-    
+
             # Q100 – lançamentos (ordem e numéricos no padrão)
             for (data, cod_im, cod_ct, doc, td, hist, cpf_cnpj, tl, ent, sai, sf, nat) in self.db.fetch_all("""
                     SELECT l.data,
@@ -3269,7 +3274,7 @@ class MainWindow(QMainWindow):
                       JOIN imovel_rural  im ON im.id = l.cod_imovel
                       JOIN conta_bancaria ct ON ct.id = l.cod_conta
                  LEFT JOIN participante      p ON p.id = l.id_participante
-                  ORDER BY l.data, l.id
+                  ORDER BY l.data_ord, l.id
             """):
                 f.write("Q100|" + "|".join([
                     _ddmmyyyy(data),                    # DATA (ddmmaaaa)
@@ -3285,17 +3290,18 @@ class MainWindow(QMainWindow):
                     _cents(sf or 0),                    # SLD_FIN
                     str(nat or "")
                 ]) + NL)
-    
+
             # Q200 – por mês (mmaaaa), com saldo ACUMULADO
-            d1 = self.dt_ini.date().toString("yyyy-MM-dd")
-            d2 = self.dt_fim.date().toString("yyyy-MM-dd")
+            d1 = int(self.dt_ini.date().toString("yyyyMMdd"))
+            d2 = int(self.dt_fim.date().toString("yyyyMMdd"))
             resumo = self.db.fetch_all("""
-                SELECT strftime('%Y%m', data) AS ym, SUM(valor_entrada), SUM(valor_saida)
+                SELECT substr(CAST(data_ord AS TEXT),1,6) AS ym,
+                       SUM(valor_entrada), SUM(valor_saida)
                   FROM lancamento
-                 WHERE data BETWEEN ? AND ?
+                 WHERE data_ord BETWEEN ? AND ?
               GROUP BY ym ORDER BY ym
             """, (d1, d2))
-    
+
             saldo_acum = Decimal("0")
             for ym, tot_ent, tot_sai in resumo:
                 mesano = ym[4:6] + ym[0:4]            # mmaaaa
@@ -3303,7 +3309,7 @@ class MainWindow(QMainWindow):
                 tot_sai = Decimal(str(tot_sai or 0))
                 saldo_acum += (tot_ent - tot_sai)
                 f.write(f"Q200|{mesano}|{_cents(tot_ent)}|{_cents(tot_sai)}|{_cents(saldo_acum)}|{'P' if saldo_acum >= 0 else 'N'}{NL}")
-    
+
         # 9999 – total de linhas (inclui o próprio 9999)
         total = sum(1 for _ in open(path, "r", encoding="utf-8")) + 1
         with open(path, "a", encoding="utf-8", newline="") as f:
@@ -3311,7 +3317,7 @@ class MainWindow(QMainWindow):
     
         save_last_txt_path(path)
         QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
-    
+
 
     def _exportar_planilha_lcdpr(self):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
@@ -3331,15 +3337,39 @@ class MainWindow(QMainWindow):
         rows.append({"registro": "0030", "logradouro": logradouro, "numero": numero, "complemento": complemento, "bairro": bairro,
                      "uf": uf, "cod_mun": cod_mun, "cep": cep, "telefone": telefone, "email": email})
 
-        for im in self.db.fetch_all("SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,tipo_exploracao,participacao,area_total,area_utilizada FROM imovel_rural"):
-            rows.append(dict(zip(["registro","cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"], ["0040"] + [str(x or "") for x in im])))
+        cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf, mun, cep, tipo_expl, part, *_ = im
+        rows.append({
+            "registro": "0040",
+            "cod_imovel": str(cod or ""),
+            "pais": str(pais or ""),
+            "moeda": str(moeda or ""),
+            "cad_itr": str(cad_itr or ""),
+            "caepf": str(caepf or ""),
+            "insc_estadual": str(ie or ""),
+            "nome_imovel": str(nome_imovel or ""),
+            "endereco": str(end or ""),
+            "num": str(num or ""),
+            "compl": str(comp or ""),
+            "bairro": str(bai or ""),
+            "uf": str(uf or ""),
+            "cod_mun": str(mun or ""),
+            "cep": str(cep or ""),
+            "tipo_exploracao": str(tipo_expl or ""),
+            "participacao": f"{int(Decimal(str(part or 0)).quantize(Decimal('0.01'))*100):05d}"
+        })
 
-        for ct in self.db.fetch_all("SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"):
-            cod_cta, pais_cta, banco, nome_banco, agencia, num_cta, saldo = ct
-            rows.append({"registro": "0050", "cod_conta": cod_cta, "pais_cta": pais_cta, "banco": banco or "", "nome_banco": nome_banco or "", "agencia": agencia, "num_conta": num_cta, "saldo_inicial": f"{saldo:.2f}"})
-
-        for cpf, nm, tp in self.db.fetch_all("SELECT cpf_cnpj,nome,tipo_contraparte FROM participante"):
-            rows.append({"registro": "0100", "cpf_cnpj": cpf, "nome": nm, "tipo": str(tp)})
+        for cod_cta, pais_cta, banco, nome_banco, agencia, num_cta in self.db.fetch_all(
+            "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"
+        ):
+            rows.append({
+                "registro": "0050",
+                "cod_conta": str(cod_cta or ""),
+                "pais_cta": str(pais_cta or ""),
+                "banco": str(banco or ""),
+                "nome_banco": str(nome_banco or ""),
+                "agencia": str(agencia or ""),
+                "num_conta": str(num_cta or "")
+            })
 
         for (data, im_id, ct_id, num_doc, tipo_doc, historico, part_id, tipo_lanc, ent, sai, saldo_f, nat) in self.db.fetch_all("SELECT data,cod_imovel,cod_conta,num_doc,tipo_doc,historico,id_participante,tipo_lanc,valor_entrada,valor_saida,saldo_final,natureza_saldo FROM lancamento"):
             rows.append({"registro": "Q100", "data": data, "cod_imovel": str(im_id), "cod_conta": str(ct_id), "num_doc": num_doc or "", "tipo_doc": str(tipo_doc),
