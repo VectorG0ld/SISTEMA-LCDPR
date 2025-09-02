@@ -71,40 +71,43 @@ def parse_layout_pagamentos_line(line: str):
     nome = extract_name_from_historico(historico).upper()
     return doc, nome, t
 
-def read_pagamentos_file():
-    """Procura 'PAGAMENTOS' dentro da pasta 'Importação DANFE' (mesmo nível de layout importacao)."""
-    # Pega a pasta atual (onde está o script)
+def read_pagamentos_file(pagamentos_path: str | None = None):
+    """
+    Lê 'PAGAMENTOS' do caminho informado.
+    Se None, mantém o comportamento antigo (procura em 'Importação DANFE').
+    """
+    if pagamentos_path:
+        if os.path.exists(pagamentos_path) and os.path.isfile(pagamentos_path):
+            with open(pagamentos_path, "r", encoding="utf-8") as f:
+                return f.read().splitlines()
+        sys.stderr.write(f"Arquivo 'PAGAMENTOS' não encontrado em {pagamentos_path}.\n")
+        sys.exit(1)
+
     base = os.path.dirname(os.path.abspath(__file__))
-
-    # Sobe dois níveis: sai de participantes -> layout importacao -> SISTEMA LCDPR
     root = os.path.dirname(os.path.dirname(base))
-
-    # Caminho da pasta Importação DANFE (irmã de layout importacao)
     import_dir = os.path.join(root, "Importação DANFE")
-
-    # Possíveis nomes do arquivo
     candidates = ["PAGAMENTOS", "PAGAMENTOS.txt", "pagamentos", "pagamentos.txt"]
-
     for name in candidates:
         path = os.path.join(import_dir, name)
         if os.path.exists(path) and os.path.isfile(path):
             with open(path, "r", encoding="utf-8") as f:
                 return f.read().splitlines()
-
     sys.stderr.write(f"Arquivo 'PAGAMENTOS' não encontrado em {import_dir}.\n")
     sys.exit(1)
 
-def find_participantes_path():
-    """Retorna o caminho do arquivo de saída e quais já existem (por doc)."""
-    base = os.path.dirname(os.path.abspath(__file__))
-    path_a = os.path.join(base, "participantes")
-    path_b = os.path.join(base, "participantes.txt")
-    path = path_a
-    if os.path.exists(path_b) and os.path.isfile(path_b):
-        path = path_b
-    elif os.path.exists(path_a) and os.path.isfile(path_a):
-        path = path_a
-    # Coleta docs já existentes
+def find_participantes_path(participantes_path: str | None = None):
+    """
+    Retorna o caminho do arquivo de saída e quais já existem (por doc).
+    Se 'participantes_path' for informado, usa-o diretamente.
+    """
+    if participantes_path and participantes_path.strip():
+        path = participantes_path
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+        path_a = os.path.join(base, "participantes")
+        path_b = os.path.join(base, "participantes.txt")
+        path = path_b if os.path.exists(path_b) and os.path.isfile(path_b) else (path_a if os.path.exists(path_a) and os.path.isfile(path_a) else path_a)
+
     existing_docs = set()
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -117,15 +120,12 @@ def find_participantes_path():
     return path, existing_docs
 
 # ----------------- Main -----------------
-def main():
-    lines = read_pagamentos_file()
+def main(participantes_path: str | None = None, pagamentos_path: str | None = None):
+    lines = read_pagamentos_file(pagamentos_path)
 
-    # Dedup interno do arquivo PAGAMENTOS por documento.
-    # Mantém o primeiro, mas substitui se aparecer um nome mais “rico” (mais longo).
-    dedup = OrderedDict()  # doc -> (nome, tipo)
+    dedup = OrderedDict()
     for line in lines:
-        if not line.strip():
-            continue
+        if not line.strip(): continue
         parsed = parse_layout_pagamentos_line(line)
         if not parsed:
             continue

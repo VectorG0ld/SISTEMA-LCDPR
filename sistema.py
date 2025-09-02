@@ -2383,6 +2383,7 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.btn_editar = QPushButton("Editar"); self.btn_editar.setEnabled(False); self.btn_editar.setIcon(QIcon.fromTheme("document-edit")); self.btn_editar.clicked.connect(self.editar_participante); tl.addWidget(self.btn_editar)
         self.btn_excluir = QPushButton("Excluir"); self.btn_excluir.setEnabled(False); self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete")); self.btn_excluir.clicked.connect(self.excluir_participante); tl.addWidget(self.btn_excluir)
         self.btn_importar = QPushButton("Importar"); self.btn_importar.setIcon(QIcon.fromTheme("document-import")); self.btn_importar.clicked.connect(self.importar_participantes); tl.addWidget(self.btn_importar)
+        self.btn_cadastrar_novos = QPushButton("Cadastrar novos participantes"); self.btn_cadastrar_novos.setIcon(QIcon.fromTheme("list-add")); self.btn_cadastrar_novos.clicked.connect(self.cadastrar_novos_participantes); tl.addWidget(self.btn_cadastrar_novos)
         self.search_part = QLineEdit(); self.search_part.setPlaceholderText("Pesquisar participantes…"); self.search_part.textChanged.connect(self._filter_participantes); tl.addWidget(self.search_part)
 
         btn_filter = QToolButton(); btn_filter.setText("⚙️"); btn_filter.setAutoRaise(True); btn_filter.setPopupMode(QToolButton.InstantPopup)
@@ -2448,13 +2449,106 @@ class GerenciamentoParticipantesWidget(QWidget):
         ListAccelerator.filter(self.tabela, text, delay_ms=0)
 
     def importar_participantes(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Importar Participantes", "", "TXT (*.txt);;Excel (*.xlsx *.xls)")
+        path, _ = QFileDialog.getOpenFileName(self, "Importar Participantes", "", "TXT (*.txt);Excel (*.xlsx *.xls)")
         if not path: return
         try:
             self._import_participantes_txt(path) if path.lower().endswith('.txt') else self._import_participantes_excel(path)
             self.carregar_participantes()
         except Exception:
             QMessageBox.warning(self, "Importação Falhou", "Arquivo não segue o layout esperado e não foi importado.")
+    
+    def cadastrar_novos_participantes(self):
+        import importlib.util, json, os
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Cadastrar novos participantes")
+        form = QFormLayout(dlg)
+
+        # Arquivo participantes (TXT)
+        w1 = QWidget(); h1 = QHBoxLayout(w1); h1.setContentsMargins(0,0,0,0)
+
+        # Arquivo participantes (TXT)
+        w1 = QWidget(); h1 = QHBoxLayout(w1); h1.setContentsMargins(0,0,0,0)
+        ed_part = QLineEdit(); btn1 = QToolButton(); btn1.setText("…")
+        def _pick_part():
+            p, _ = QFileDialog.getOpenFileName(self, "Selecionar lista de participantes (TXT)", "", "TXT (*.txt)")
+            if p: ed_part.setText(p)
+        btn1.clicked.connect(_pick_part)
+        h1.addWidget(ed_part); h1.addWidget(btn1)
+        form.addRow("Lista de participantes (TXT):", w1)
+        
+        # Arquivo PAGAMENTOS (TXT)
+        w2 = QWidget(); h2 = QHBoxLayout(w2); h2.setContentsMargins(0,0,0,0)
+        ed_pag = QLineEdit(); btn2 = QToolButton(); btn2.setText("…")
+        def _pick_pag():
+            p, _ = QFileDialog.getOpenFileName(self, "Selecionar PAGAMENTOS.txt", "", "TXT (*.txt)")
+            if p: ed_pag.setText(p)
+        btn2.clicked.connect(_pick_pag)
+        h2.addWidget(ed_pag); h2.addWidget(btn2)
+        form.addRow("PAGAMENTOS.txt:", w2)
+        
+        # 🔹 Agora sim: carrega valores salvos em JSON (se existirem)
+        try:
+            cfg_dir  = os.path.join(PROJECT_DIR, "layout importacao", "participantes")
+            cfg_file = os.path.join(cfg_dir, "novos_participantes_paths.json")
+            if os.path.exists(cfg_file):
+                import json
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if "participantes_path" in data:
+                        ed_part.setText(data["participantes_path"])
+                    if "pagamentos_path" in data:
+                        ed_pag.setText(data["pagamentos_path"])
+        except Exception:
+            pass
+
+        # 🔹 Ajusta a largura dos campos de acordo com o texto
+        font_metrics = ed_part.fontMetrics()
+        ed_part.setMinimumWidth(font_metrics.horizontalAdvance(ed_part.text()) + 50)
+        ed_pag.setMinimumWidth(font_metrics.horizontalAdvance(ed_pag.text()) + 50)
+        
+        # 🔹 Redimensiona automaticamente a janela para caber nos campos
+        dlg.adjustSize()
+        
+        # Botões OK/Cancelar
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addWidget(bb); bb.accepted.connect(dlg.accept); bb.rejected.connect(dlg.reject)
+
+        if not dlg.exec():
+            return
+
+        part_path = ed_part.text().strip()
+        pag_path  = ed_pag.text().strip()
+        if not part_path or not pag_path:
+            QMessageBox.warning(self, "Caminhos inválidos", "Preencha os dois caminhos (TXT).")
+            return
+
+        # Salva os caminhos escolhidos em JSON dentro de layout importacao/participantes
+        try:
+            cfg_dir  = os.path.join(PROJECT_DIR, "layout importacao", "participantes")
+            os.makedirs(cfg_dir, exist_ok=True)
+            cfg_file = os.path.join(cfg_dir, "novos_participantes_paths.json")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                json.dump({"participantes_path": part_path, "pagamentos_path": pag_path}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            QMessageBox.warning(self, "Aviso", f"Não foi possível salvar o JSON de caminhos:\n{e}")
+
+        # Executa o gerador de novos participantes com os caminhos escolhidos
+        try:
+            mod_path = os.path.join(PROJECT_DIR, "layout importacao", "participantes", "novos_participantes.py")
+            spec = importlib.util.spec_from_file_location("novos_participantes", mod_path)
+            np = importlib.util.module_from_spec(spec); spec.loader.exec_module(np)
+            np.main(part_path, pag_path)  # gera/atualiza o TXT de participantes a partir do PAGAMENTOS
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao executar novos_participantes.py:\n{e}")
+            return
+
+        # Importa APENAS o TXT de participantes (igual ao botão Importar)
+        try:
+            self._import_participantes_txt(part_path)
+            self.carregar_participantes()
+            QMessageBox.information(self, "Concluído", "Participantes atualizados com sucesso.")
+        except Exception as e:
+            QMessageBox.warning(self, "Importação Falhou", f"Não foi possível importar o TXT informado.\n{e}")
 
     def _import_participantes_txt(self, path):
         with open(path, encoding='utf-8') as f:
