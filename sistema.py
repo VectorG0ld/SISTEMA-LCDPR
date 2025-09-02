@@ -1876,7 +1876,8 @@ class GerenciamentoContasWidget(QWidget):
         hdr = self.tabela.horizontalHeader()
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
-        hdr.setSectionResizeMode(QHeaderView.Stretch)
+        hdr.setSectionResizeMode(QHeaderView.Interactive)  # largura manual / scroll
+
         # ordenação cíclica
         hdr.sectionDoubleClicked.connect(self._toggle_sort)
         # clique ativa botões
@@ -2574,11 +2575,6 @@ class MainWindow(QMainWindow):
         self.btn_importacao.setIcon(QIcon.fromTheme("document-import"))
         self.btn_importacao.clicked.connect(self.show_import_dialog)
         self.lanc_filter_layout.addWidget(self.btn_importacao)
-        # Botão para importar lançamentos (TXT/XLSX)
-        self.btn_import_lanc = QPushButton("Importar Lançamentos")
-        self.btn_import_lanc.setIcon(QIcon.fromTheme("document-import"))
-        self.btn_import_lanc.clicked.connect(self.importar_lancamentos)
-        self.lanc_filter_layout.addWidget(self.btn_import_lanc)
         
         self.search_lanc = QLineEdit(); self.search_lanc.setPlaceholderText("Pesquisar…"); self.search_lanc.textChanged.connect(self._filter_lancamentos)
         self.lanc_filter_layout.addWidget(self.search_lanc)
@@ -2595,9 +2591,23 @@ class MainWindow(QMainWindow):
 
         l_l.addLayout(self.lanc_filter_layout)
         self.tab_lanc = QTableWidget(0, len(self._lanc_labels)); self.tab_lanc.setHorizontalHeaderLabels(self._lanc_labels)
+
+        hdr = self.tab_lanc.horizontalHeader()
+        hdr.setSectionsMovable(True)
+        hdr.setStretchLastSection(False)
+
+        # Não quebra linha nem corta texto
+        self.tab_lanc.setWordWrap(False)
+        self.tab_lanc.setTextElideMode(Qt.ElideNone)
+
+        # Scroll horizontal se passar do limite
+        self.tab_lanc.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
+        self.tab_lanc.setSizeAdjustPolicy(QTableWidget.AdjustToContents)
+
         self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows); self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tab_lanc.cellClicked.connect(lambda r,_: (self.btn_edit_lanc.setEnabled(True), self.btn_del_lanc.setEnabled(True)))
         l_l.addWidget(self.tab_lanc)
+        
         # aplica filtro inicial ao abrir
         self.carregar_lancamentos()
         self.dashboard.load_data()
@@ -2614,8 +2624,18 @@ class MainWindow(QMainWindow):
         hdr = self.tab_lanc.horizontalHeader()
         hdr.sectionDoubleClicked.connect(self._sort_lanc_by_column)
         hdr.setSortIndicatorShown(True)  # opcional (mostra a setinha)
+
         for i, _ in enumerate(self._lanc_labels):
-            hdr.setSectionResizeMode(i, QHeaderView.ResizeToContents if self._lanc_labels[i]=="Usuário" else QHeaderView.Stretch)
+            hdr.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+
+        # Reajusta sempre que o modelo mudar (ocultar/exibir colunas etc.)
+        m = self.tab_lanc.model()
+        m.layoutChanged.connect(lambda *_: self._ajustar_colunas_lanc())
+        m.modelReset.connect(lambda *_: self._ajustar_colunas_lanc())
+
+        # Ativa stretch na última coluna para ocupar sobra
+        hdr.setStretchLastSection(True)
+
         self.tab_lanc.setAlternatingRowColors(True); self.tab_lanc.setShowGrid(False); self.tab_lanc.verticalHeader().setVisible(False)
         hdr.setHighlightSections(False); hdr.setDefaultAlignment(Qt.AlignCenter)
         self.tab_lanc.setStyleSheet("QTableWidget::item { padding: 8px; } QHeaderView::section { padding: 8px; font-weight: bold; }")
@@ -2647,6 +2667,34 @@ class MainWindow(QMainWindow):
         self.carregar_lancamentos(); self.profile_selector.setCurrentText("Cleuber Marcos")
         self.carregar_planejamento(); self._load_lanc_filter_settings()
 
+    def _ajustar_colunas_lanc(self):
+        """Cada coluna respeita seu conteúdo mínimo, e a sobra é dividida igualmente entre todas as visíveis."""
+        try:
+            hdr = self.tab_lanc.horizontalHeader()
+            self.tab_lanc.resizeColumnsToContents()
+
+            total_width = self.tab_lanc.viewport().width()
+            visiveis = [i for i in range(self.tab_lanc.columnCount()) if not self.tab_lanc.isColumnHidden(i)]
+            if not visiveis:
+                return
+
+            # largura mínima exigida pelo conteúdo
+            min_widths = {i: self.tab_lanc.columnWidth(i) for i in visiveis}
+            used_width = sum(min_widths.values())
+
+            sobra = total_width - used_width
+            if sobra > 0:
+                extra = sobra // len(visiveis)
+                for i in visiveis:
+                    self.tab_lanc.setColumnWidth(i, min_widths[i] + extra)
+
+            # garante que nunca sobre espaço vazio na direita
+            hdr.setStretchLastSection(True)
+
+        except Exception as e:
+            print("Erro ao ajustar colunas:", e)
+
+    
     def _toggle_lanc_column(self, col: int, visible: bool):
         self.tab_lanc.setColumnHidden(col, not visible); self._save_lanc_filter_settings()
 
@@ -2877,6 +2925,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             ListCounter.refresh(tbl)  # <<< COLOQUE ESTA LINHA AQUI
+            QTimer.singleShot(0, self.tab_lanc.resizeRowsToContents)
             return
 
         # Evita sinais e repaints desnecessários
@@ -3582,5 +3631,5 @@ if __name__ == "__main__":
         sys.exit(0)
     # só então a janela principal
     window = MainWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())

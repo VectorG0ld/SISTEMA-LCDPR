@@ -72,15 +72,26 @@ def parse_layout_pagamentos_line(line: str):
     return doc, nome, t
 
 def read_pagamentos_file():
-    """Procura 'PAGAMENTOS' no mesmo diretório (também tenta .txt e minúsculo)."""
+    """Procura 'PAGAMENTOS' dentro da pasta 'Importação DANFE' (mesmo nível de layout importacao)."""
+    # Pega a pasta atual (onde está o script)
     base = os.path.dirname(os.path.abspath(__file__))
+
+    # Sobe dois níveis: sai de participantes -> layout importacao -> SISTEMA LCDPR
+    root = os.path.dirname(os.path.dirname(base))
+
+    # Caminho da pasta Importação DANFE (irmã de layout importacao)
+    import_dir = os.path.join(root, "Importação DANFE")
+
+    # Possíveis nomes do arquivo
     candidates = ["PAGAMENTOS", "PAGAMENTOS.txt", "pagamentos", "pagamentos.txt"]
+
     for name in candidates:
-        path = os.path.join(base, name)
+        path = os.path.join(import_dir, name)
         if os.path.exists(path) and os.path.isfile(path):
             with open(path, "r", encoding="utf-8") as f:
                 return f.read().splitlines()
-    sys.stderr.write("Arquivo 'PAGAMENTOS' não encontrado no mesmo diretório.\n")
+
+    sys.stderr.write(f"Arquivo 'PAGAMENTOS' não encontrado em {import_dir}.\n")
     sys.exit(1)
 
 def find_participantes_path():

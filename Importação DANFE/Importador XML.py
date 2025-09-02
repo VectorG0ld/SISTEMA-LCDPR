@@ -297,18 +297,6 @@ class RuralXmlImporter(QWidget):
         self.splitter = QSplitter(Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
 
-        # Placeholder (poderia conter preview/ajuda futuramente)
-        self.placeholder = QFrame()
-        self.placeholder.setStyleSheet("QFrame{border:none;}")
-        ph_lay = QVBoxLayout(self.placeholder)
-        ph_lay.setContentsMargins(18, 18, 18, 18)
-        tip = QLabel("💡 Dica: utilize os botões acima para configurar, associar pagamentos ou importar XMLs.\n"
-                             "Use a barra de ações do Log para buscar, limpar ou salvar o histórico.")
-        tip.setStyleSheet("border:none;")
-        ph_lay.addWidget(tip)
-        self._add_shadow(self.placeholder)
-        self.splitter.addWidget(self.placeholder)
-
         # Log card
         log_card = self._build_log_card()
         self.splitter.addWidget(log_card)
