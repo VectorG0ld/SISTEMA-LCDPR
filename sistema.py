@@ -1169,7 +1169,7 @@ class CadastroParticipanteDialog(QDialog):
 
         self.cpf_cnpj = QLineEdit(); self.cpf_cnpj.setPlaceholderText("Digite CPF ou CNPJ")
         self.cpf_cnpj.editingFinished.connect(self._on_cpf_cnpj); form_layout.addRow("CPF/CNPJ:", self.cpf_cnpj)
-        self._ajustar_mask(self.tipo.currentIndex())
+        self._ajustar_mask()  # inicializa a máscara
 
         self.nome = QLineEdit(); form_layout.addRow("Nome:", self.nome)
 
@@ -1182,11 +1182,19 @@ class CadastroParticipanteDialog(QDialog):
             row = self.db.fetch_one("SELECT cpf_cnpj, nome, tipo_contraparte FROM participante WHERE id=?", (participante_id,))
             if row: self.tipo.setCurrentIndex(row[2] - 1); self.cpf_cnpj.setText(row[0]); self.nome.setText(row[1])
 
-    def _ajustar_mask(self, idx):
-        cur = self.cpf_cnpj.cursorPosition()
-        self.cpf_cnpj.setInputMask("00.000.000/0000-00;_" if idx == 0 else "000.000.000-00;_" if idx == 1 else "")
-        self.cpf_cnpj.setCursorPosition(cur)
-
+    def _ajustar_mask(self, *_):
+        # 0 = Pessoa Jurídica (CNPJ), 1 = Pessoa Física (CPF), demais = livre
+        idx = self.tipo.currentIndex()
+        if idx == 1:
+            self.cpf_cnpj.setInputMask("000.000.000-00;_")
+            self.cpf_cnpj.setPlaceholderText("CPF")
+        elif idx == 0:
+            self.cpf_cnpj.setInputMask("00.000.000/0000-00;_")
+            self.cpf_cnpj.setPlaceholderText("CNPJ")
+        else:
+            self.cpf_cnpj.setInputMask("")
+            self.cpf_cnpj.setPlaceholderText("Documento")
+    
     def _on_cpf_cnpj(self):
         import re
         raw = self.cpf_cnpj.text().strip()
@@ -1287,19 +1295,25 @@ class ParametrosDialog(QDialog):
         self.version = QLineEdit(self.settings.value("param/version", "0013"))
         layout.addRow("Versão do Leiaute:", self.version)
 
-        # Indicador de Movimentação
-        self.ind_mov = QComboBox()
-        self.ind_mov.addItems(["0 - Sem Movimento", "1 - Com Movimento"])
-        iv = self.settings.value("param/ind_mov", "0")
-        self.ind_mov.setCurrentText(f"{iv} - " + ("Sem Movimento" if iv=="0" else "Com Movimento"))
-        layout.addRow("Ind. de Movimentação:", self.ind_mov)
+        # Indicador de início do período (0000 campo 5)
+        self.ind_ini_per = QComboBox()
+        self.ind_ini_per.addItems(["0 - Regular (início em 01/01)", "1 - Início fora de 01/01"])
+        iip = self.settings.value("param/ind_ini_per", "0")
+        self.ind_ini_per.setCurrentText("0 - Regular (início em 01/01)" if iip=="0" else "1 - Início fora de 01/01")
+        layout.addRow("Ind. início do período:", self.ind_ini_per)
 
-        # Indicador de Recepção
-        self.ind_rec = QComboBox()
-        self.ind_rec.addItems(["0 - Original", "1 - Retificadora"])
-        ir = self.settings.value("param/ind_rec", "0")
-        self.ind_rec.setCurrentText(f"{ir} - " + ("Original" if ir=="0" else "Retificadora"))
-        layout.addRow("Ind. de Recepção:", self.ind_rec)
+        # Situação especial (0000 campo 6)
+        self.sit_especial = QComboBox()
+        self.sit_especial.addItems([
+            "0 - Normal (sem ocorrência)",
+            "1 - Falecimento",
+            "2 - Espólio",
+            "3 - Saída definitiva do país"
+        ])
+        se = self.settings.value("param/sit_especial", "0")
+        idx = int(se) if se in {"0","1","2","3"} else 0
+        self.sit_especial.setCurrentIndex(idx)
+        layout.addRow("Situação especial:", self.sit_especial)
 
         # ——— CNPJ/CPF (agora só CPF) ———
         self.ident = QLineEdit(self.settings.value("param/ident", ""))
@@ -1348,21 +1362,21 @@ class ParametrosDialog(QDialog):
 
     def salvar(self):
         s = self.settings
-        s.setValue("param/version",    self.version.text())
-        s.setValue("param/ind_mov",    self.ind_mov.currentText().split(" - ")[0])
-        s.setValue("param/ind_rec",    self.ind_rec.currentText().split(" - ")[0])
-        s.setValue("param/tipo",       self.tipo.currentText())
-        s.setValue("param/ident",      self.ident.text())
-        s.setValue("param/nome",       self.nome.text())
-        s.setValue("param/logradouro", self.logradouro.text())
-        s.setValue("param/numero",     self.numero.text())
-        s.setValue("param/complemento",self.complemento.text())
-        s.setValue("param/bairro",     self.bairro.text())
-        s.setValue("param/uf",         self.uf.text())
-        s.setValue("param/cod_mun",    self.cod_mun.text())
-        s.setValue("param/cep",        self.cep.text())
-        s.setValue("param/telefone",   self.telefone.text())
-        s.setValue("param/email",      self.email.text())
+        s = self.settings
+        s.setValue("param/version",     self.version.text())
+        s.setValue("param/ind_ini_per", self.ind_ini_per.currentText().split(" - ")[0])
+        s.setValue("param/sit_especial", self.sit_especial.currentText().split(" - ")[0])
+        s.setValue("param/ident",       self.ident.text())
+        s.setValue("param/nome",        self.nome.text())
+        s.setValue("param/logradouro",  self.logradouro.text())
+        s.setValue("param/numero",      self.numero.text())
+        s.setValue("param/complemento", self.complemento.text())
+        s.setValue("param/bairro",      self.bairro.text())
+        s.setValue("param/uf",          self.uf.text())
+        s.setValue("param/cod_mun",     self.cod_mun.text())
+        s.setValue("param/cep",         self.cep.text())
+        s.setValue("param/telefone",    self.telefone.text())
+        s.setValue("param/email",       self.email.text())
         s.sync()
         QMessageBox.information(self, "Sucesso", "Parâmetros salvos com sucesso!")
         self.accept()
@@ -1785,7 +1799,14 @@ class ReportCenterDialog(QDialog):
                 if atual != faz:
                     if atual is not None:
                         resultado = total_r - total_d
-                        html += f"<tr><th>Total</th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+                        html += (
+                            f"<tr>"
+                            f"<th>Total</th>"
+                            f"<th>{fmt_money(total_r)}</th>"
+                            f"<th>{fmt_money(total_d)}</th>"
+                            f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                            f"</tr></table></div>"
+                        )
                     html += f"<div class='card'><h2>{faz}</h2><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
                     atual = faz; total_r = total_d = 0
                 r = rec or 0; d = des or 0; res = r - d
@@ -1793,7 +1814,14 @@ class ReportCenterDialog(QDialog):
                 html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
             if atual is not None:
                 resultado = total_r - total_d
-                html += f"<tr><th>Total</th><th colspan='2'></th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+                html += (
+                    f"<tr>"
+                    f"<th>Total</th>"
+                    f"<th>{fmt_money(total_r)}</th>"
+                    f"<th>{fmt_money(total_d)}</th>"
+                    f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                    f"</tr></table></div>"
+                )
         else:
             # rows: (ym, rec, des)
             html += "<div class='card'><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
@@ -1803,7 +1831,14 @@ class ReportCenterDialog(QDialog):
                 total_r += r; total_d += d
                 html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
             resultado = total_r - total_d
-            html += f"<tr><th>Total</th><th colspan='2'></th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+            html += (
+                f"<tr>"
+                f"<th>Total</th>"
+                f"<th>{fmt_money(total_r)}</th>"
+                f"<th>{fmt_money(total_d)}</th>"
+                f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                f"</tr></table></div>"
+            )
         html += self._html_footer()
         return html
 
@@ -3575,11 +3610,17 @@ class MainWindow(QMainWindow):
         NL = "\r\n"  # CRLF exigido pelo manual
         def _digits(s): return re.sub(r"\D", "", str(s or ""))
         def _ddmmyyyy(qdate_or_str):
+            s = str(qdate_or_str or "")
             if hasattr(qdate_or_str, "toString"):
                 return qdate_or_str.toString("ddMMyyyy")
-            # aceita 'aaaa-mm-dd'
-            m = re.match(r"(\d{4})-(\d{2})-(\d{2})", str(qdate_or_str or ""))
-            return f"{m.group(3)}{m.group(2)}{m.group(1)}" if m else ""
+            m = re.match(r"(\d{4})-(\d{2})-(\d{2})$", s)  # aaaa-mm-dd
+            if m:
+                return f"{m.group(3)}{m.group(2)}{m.group(1)}"
+            m = re.match(r"(\d{2})/(\d{2})/(\d{4})$", s)  # dd/mm/aaaa
+            if m:
+                return f"{m.group(1)}{m.group(2)}{m.group(3)}"
+            return ""
+
         def _cents(val):
             q = Decimal(str(val or 0)).quantize(Decimal("0.01"))
             return str(int(q * 100))
@@ -3598,18 +3639,36 @@ class MainWindow(QMainWindow):
         # ===== cabeçalho =====
         versao = settings.value("param/version", "0013")
         ident  = _digits(settings.value("param/ident", ""))
+        if not ident:
+            # tenta pegar um CPF (11 dígitos) do cadastro de participantes
+            row = self.db.fetch_one(
+                "SELECT cpf_cnpj FROM participante "
+                "WHERE LENGTH(REPLACE(REPLACE(REPLACE(cpf_cnpj,'.',''),'-',''),'/',''))=11 "
+                "ORDER BY id LIMIT 1"
+            )
+            if row:
+                ident = _digits(row[0])
         nome   = _clean(settings.value("param/nome", ""))
-        ind_mov = settings.value("param/ind_mov", "0")
-        ind_rec = settings.value("param/ind_rec", "0")
+        ind_ini_per = settings.value("param/ind_ini_per", "0")
+        sit_especial = settings.value("param/sit_especial", "0")
     
         dt_ini_txt = self.dt_ini.date().toString("ddMMyyyy")
         dt_fim_txt = self.dt_fim.date().toString("ddMMyyyy")
     
+        # validações mínimas exigidas pelo leiaute
+        if not ident:
+            QMessageBox.warning(
+                self, "LCDPR",
+                "Informe o CPF do declarante em Configurações > Declarante ou cadastre um participante Pessoa Física."
+            )
+            return
+        
         with open(path, "w", encoding="utf-8", newline="") as f:
             # 0000
-            f.write("0000|" + "|".join(["LCDPR", versao, ident, nome, ind_mov, ind_rec, "", dt_ini_txt, dt_fim_txt]) + NL)
+            f.write("0000|" + "|".join(["LCDPR", versao, ident, nome, ind_ini_per, sit_especial, "", dt_ini_txt, dt_fim_txt]) + NL)
             # 0010 (sempre 1)
             f.write("0010|1" + NL)
+
     
             # 0030 – endereço
             logradouro = _clean(settings.value("param/logradouro", ""))
@@ -3621,7 +3680,12 @@ class MainWindow(QMainWindow):
             cep        = _digits(settings.value("param/cep", ""))
             telefone   = _digits(settings.value("param/telefone", ""))
             email      = _clean(settings.value("param/email", ""))
+            
+            if not logradouro:
+                raise ValueError("Endereço (logradouro) obrigatório para o registro 0030.")
+            
             f.write("0030|" + "|".join([logradouro, numero, complemento, bairro, uf, cod_mun, cep, telefone, email]) + NL)
+            
     
             # 0040 – imóveis (inclui áreas conforme leiaute)
             for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf_, mun, cep_, tipo_expl, part, area_tot, area_uti) in \
@@ -3635,9 +3699,7 @@ class MainWindow(QMainWindow):
                     _clean(nome_imovel), _clean(end), _clean(num), _clean(comp),
                     _clean(bai), _clean(uf_), _digits(mun), _digits(cep_),
                     str(tipo_expl or ""),
-                    _perc5(part or 0),            # PARTICIPACAO N 5,2
-                    _cents(area_tot or 0),        # AREA_TOTAL  N 19,2
-                    _cents(area_uti or 0)         # AREA_UTILIZADA N 19,2
+                    _perc5(part or 0)             # PARTICIPACAO N 5,2
                 ]) + NL)
 
             # 0050 – contas (sem SALDO_INICIAL no 0050!)
@@ -3715,10 +3777,11 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(('.xlsx', '.xls')): path += '.xlsx'
         import pandas as pd; rows = []; settings = QSettings("Automatize Tech", "AgroApp")
         ver = settings.value("param/version", "0013"); iden = settings.value("param/ident", "")
-        nome = settings.value("param/nome", ""); mov = settings.value("param/ind_mov", "0"); rec = settings.value("param/ind_rec", "0")
+        nome = settings.value("param/nome", ""); ind_ini = settings.value("param/ind_ini_per", "0"); sit_esp = settings.value("param/sit_especial", "0")
         dt1 = self.dt_ini.date().toString("ddMMyyyy"); dt2 = self.dt_fim.date().toString("ddMMyyyy")
 
-        rows.append({"registro":"0000","campo1":"LCDPR","versao":ver,"ident":iden,"nome":nome,"ind_mov":mov,"ind_rec":rec,"vazio":"","data_ini":dt1,"data_fim":dt2})
+        rows.append({"registro":"0000","campo1":"LCDPR","versao":ver,"ident":iden,"nome":nome,
+                     "ind_ini_per":ind_ini,"sit_especial":sit_esp,"vazio":"","data_ini":dt1,"data_fim":dt2})
         rows.append({"registro": "0010", "valor": "1"})
 
         logradouro = settings.value("param/logradouro", ""); numero = settings.value("param/numero", ""); complemento = settings.value("param/complemento", "")

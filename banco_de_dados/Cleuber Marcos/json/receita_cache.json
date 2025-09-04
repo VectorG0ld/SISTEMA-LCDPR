@@ -13298,5 +13298,535 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:07104718000339": {
+    "abertura": "06/06/2023",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "FENIX GERENCIAMENTO DE COMPRAS AGRICOLAS LTDA",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "82.99-7-99",
+        "text": "Outras atividades de serviços prestados principalmente às empresas não especificadas anteriormente"
+      }
+    ],
+    "logradouro": "RUA 08",
+    "numero": "8",
+    "complemento": "QUADRA8 LOTE 14",
+    "municipio": "URUACU",
+    "bairro": "SAO SEBASTIAO",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "lais.linhares@fenixempresas.com",
+    "telefone": "(64) 3631-0010",
+    "data_situacao": "06/06/2023",
+    "cnpj": "07.104.718/0003-39",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "900000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": "01/01/2013",
+      "data_exclusao": "31/12/2020",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:36128995000118": {
+    "abertura": "24/01/2020",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "GERAL TRATORES E SERVICOS LTDA",
+    "fantasia": "GERAL TRATORES E SERVICOS'",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "25.39-0-01",
+        "text": "Serviços de usinagem, torneiria e solda"
+      },
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "81.11-7-00",
+        "text": "Serviços combinados para apoio a edifícios, exceto condomínios prediais"
+      },
+      {
+        "code": "82.19-9-99",
+        "text": "Preparação de documentos e serviços especializados de apoio administrativo não especificados anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "LUZDALMA MENDES GONCALVES",
+        "qual": "22-Sócio"
+      },
+      {
+        "nome": "JULIA GONCALVES DE CARVALHO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA 2",
+    "numero": "96",
+    "municipio": "PORANGATU",
+    "bairro": "VILA SOARES",
+    "uf": "GO",
+    "cep": "76.550-162",
+    "email": "financeiro.geraltratores@gmail.com",
+    "telefone": "(62) 3367-1777",
+    "data_situacao": "24/01/2020",
+    "cnpj": "36.128.995/0001-18",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "20000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:29485248000171": {
+    "abertura": "19/01/2018",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "RC TRATORES E SERVICOS LTDA",
+    "fantasia": "RC SERVICOS E LOCACOES",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "33.14-7-11",
+        "text": "Manutenção e reparação de máquinas e equipamentos para agricultura e pecuária"
+      },
+      {
+        "code": "33.14-7-16",
+        "text": "Manutenção e reparação de tratores, exceto agrícolas"
+      },
+      {
+        "code": "33.14-7-99",
+        "text": "Manutenção e reparação de outras máquinas e equipamentos para usos industriais não especificados anteriormente"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "45.30-7-06",
+        "text": "Representantes comerciais e agentes do comércio de peças e acessórios novos e usados para veículos automotores"
+      },
+      {
+        "code": "46.14-1-00",
+        "text": "Representantes comerciais e agentes do comércio de máquinas, equipamentos, embarcações e aeronaves"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "46.62-1-00",
+        "text": "Comércio atacadista de máquinas, equipamentos para terraplenagem, mineração e construção; partes e peças"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      },
+      {
+        "code": "49.23-0-02",
+        "text": "Serviço de transporte de passageiros - locação de automóveis com motorista"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      },
+      {
+        "code": "77.11-0-00",
+        "text": "Locação de automóveis sem condutor"
+      },
+      {
+        "code": "77.31-4-00",
+        "text": "Aluguel de máquinas e equipamentos agrícolas sem operador"
+      },
+      {
+        "code": "77.32-2-01",
+        "text": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes"
+      },
+      {
+        "code": "77.32-2-02",
+        "text": "Aluguel de andaimes"
+      },
+      {
+        "code": "77.33-1-00",
+        "text": "Aluguel de máquinas e equipamentos para escritório"
+      },
+      {
+        "code": "77.39-0-99",
+        "text": "Aluguel de outras máquinas e equipamentos comerciais e industriais não especificados anteriormente, sem operador"
+      },
+      {
+        "code": "85.99-6-04",
+        "text": "Treinamento em desenvolvimento profissional e gerencial"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "OSMAR JOSE CORREIA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA 02",
+    "numero": "S/N",
+    "complemento": "QUADRA08 LOTE 06",
+    "municipio": "PORANGATU",
+    "bairro": "VILA SOARES",
+    "uf": "GO",
+    "cep": "76.550-000",
+    "email": "rctratores@hotmail.com",
+    "telefone": "(62) 3367-1909",
+    "data_situacao": "19/01/2018",
+    "cnpj": "29.485.248/0001-71",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:12550853000186": {
+    "abertura": "17/09/2010",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "AGROSERRA MAQUINAS E FERRAMENTAS LTDA.",
+    "fantasia": "AGROSERRA",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-13",
+        "text": "Manutenção e reparação de máquinas-ferramenta"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "JOAN HENRIQUE DA SILVA CALDEIRA",
+        "qual": "22-Sócio"
+      },
+      {
+        "nome": "ERNESTINA DOURADO MOURA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA RUI BARBOSA",
+    "numero": "80",
+    "municipio": "CERES",
+    "bairro": "CENTRO",
+    "uf": "GO",
+    "cep": "76.300-000",
+    "telefone": "(62) 3323-1505",
+    "data_situacao": "17/09/2010",
+    "cnpj": "12.550.853/0001-86",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "380000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "17/09/2010",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:14524112000156": {
+    "abertura": "26/10/2011",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "3A CENTRO AUTOMOTIVO LTDA",
+    "fantasia": "3A CENTRO AUTOMOTIVO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.11-1-01",
+        "text": "Comércio a varejo de automóveis, camionetas e utilitários novos"
+      },
+      {
+        "code": "45.11-1-02",
+        "text": "Comércio a varejo de automóveis, camionetas e utilitários usados"
+      },
+      {
+        "code": "45.20-0-07",
+        "text": "Serviços de instalação, manutenção e reparação de acessórios para veículos automotores"
+      },
+      {
+        "code": "66.22-3-00",
+        "text": "Corretores e agentes de seguros, de planos de previdência complementar e de saúde"
+      },
+      {
+        "code": "73.19-0-02",
+        "text": "Promoção de vendas"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "PEDRO FERNANDES DA BARRA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "CLEIBER ANTONIO DE MORAIS",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "NILSON ELIAS MEDEIROS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "R RODOLFO MARTINS DE ARAUJO",
+    "numero": "SN",
+    "complemento": "QUADRAM LOTE 8",
+    "municipio": "CERES",
+    "bairro": "CENTRO",
+    "uf": "GO",
+    "cep": "76.300-000",
+    "email": "3acentroautomotivoo@gmail.com",
+    "telefone": "(62) 2201-0030/ (62) 8428-3402",
+    "data_situacao": "26/10/2011",
+    "cnpj": "14.524.112/0001-56",
+    "ultima_atualizacao": "2025-08-28T15:12:30.920Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "30000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "26/10/2011",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": "26/10/2011",
+      "data_exclusao": "30/04/2022",
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:14762131000110": {
+    "abertura": "14/12/2011",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "EDMILSON ANTONIO DE LIMA 25225260225",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "95.12-6-00",
+        "text": "Reparação e manutenção de equipamentos de comunicação"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "47.57-1-00",
+        "text": "Comércio varejista especializado de peças e acessórios para aparelhos eletroeletrônicos para uso doméstico, exceto informática e comunicação"
+      },
+      {
+        "code": "47.52-1-00",
+        "text": "Comércio varejista especializado de equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "47.42-3-00",
+        "text": "Comércio varejista de material elétrico"
+      }
+    ],
+    "logradouro": "RUA 51",
+    "numero": "1456",
+    "complemento": "QD. 13 LT. 17",
+    "municipio": "PARAISO DO TOCANTINS",
+    "bairro": "POUSO ALEGRE",
+    "uf": "TO",
+    "cep": "77.600-000",
+    "telefone": "(63) 3602-2144",
+    "data_situacao": "05/09/2022",
+    "cnpj": "14.762.131/0001-10",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "1.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2024",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": "14/12/2011",
+      "data_exclusao": "31/12/2019",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }
