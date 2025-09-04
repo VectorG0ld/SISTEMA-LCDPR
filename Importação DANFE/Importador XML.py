@@ -305,7 +305,7 @@ class RuralXmlImporter(QWidget):
         root.addWidget(self.splitter)
 
         # Rodapé
-        footer = QLabel("🌱 Desenvolvido para produtores rurais — v2.3")
+        footer = QLabel("🌱 Desenvolvido para produtores rurais — v.1.0")
         footer.setAlignment(Qt.AlignCenter)
         footer.setStyleSheet("font-size:11px; color:#7F7F7F; padding-top:4px;")
         root.addWidget(footer)

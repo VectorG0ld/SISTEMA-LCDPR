@@ -28,6 +28,8 @@ import shiboken6
 from pathlib import Path
 import importlib.util
 from decimal import Decimal, ROUND_HALF_UP
+import unicodedata
+from decimal import Decimal
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -3304,9 +3306,9 @@ class MainWindow(QMainWindow):
         m1.addAction(QAction("Exportar Dados", self, triggered=self.exportar_dados)); m1.addSeparator()
         m1.addAction(QAction("Sair", self, triggered=self.close))
         m2 = mb.addMenu("&Cadastros")
-        for txt, fn in [("Imóvel Rural", lambda: self.tabs.setCurrentIndex(1)),
-                        ("Conta Bancária", lambda: self.tabs.setCurrentIndex(2)),
-                        ("Participante", lambda: self.tabs.setCurrentIndex(3)),
+        for txt, fn in [("Imóvel Rural", lambda: self.cad_imovel()),
+                        ("Conta Bancária", lambda: self.cad_conta()),
+                        ("Participante", lambda: self.cad_participante()),
                         ("Cultura", lambda: QMessageBox.information(self, "Cultura", "Em desenvolvimento"))]:
             m2.addAction(QAction(txt, self, triggered=fn))
         m2.addAction(QAction("Parâmetros", self, triggered=self.abrir_parametros))
@@ -3602,148 +3604,178 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Erro", f"Erro na exportação: {e}")
 
     def gerar_txt(self, path: str):
-        from decimal import Decimal
-        import re
+        import os, re, unicodedata
+        from decimal import Decimal, ROUND_HALF_UP
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMessageBox
+
         settings = QSettings("Automatize Tech", "AgroApp")
-    
+
         # ===== helpers =====
         NL = "\r\n"  # CRLF exigido pelo manual
+
         def _digits(s): return re.sub(r"\D", "", str(s or ""))
+
         def _ddmmyyyy(qdate_or_str):
             s = str(qdate_or_str or "")
             if hasattr(qdate_or_str, "toString"):
                 return qdate_or_str.toString("ddMMyyyy")
-            m = re.match(r"(\d{4})-(\d{2})-(\d{2})$", s)  # aaaa-mm-dd
-            if m:
-                return f"{m.group(3)}{m.group(2)}{m.group(1)}"
-            m = re.match(r"(\d{2})/(\d{2})/(\d{4})$", s)  # dd/mm/aaaa
-            if m:
-                return f"{m.group(1)}{m.group(2)}{m.group(3)}"
+            m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+            if m: return f"{m.group(3)}{m.group(2)}{m.group(1)}"
+            m = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", s)
+            if m: return f"{m.group(1)}{m.group(2)}{m.group(3)}"
             return ""
 
         def _cents(val):
+            # N 19,2 sem separador; para zero, emitir "000" (aceito pelo validador)
             q = Decimal(str(val or 0)).quantize(Decimal("0.01"))
-            return str(int(q * 100))
+            v = int(q * 100)
+            return "000" if v == 0 else str(v)
+
         def _clean(s):
-            # remove pipes e controles
-            return re.sub(r"[|\r\n]+", " ", str(s or "")).strip()
+            s = re.sub(r"[|\r\n]+", " ", str(s or "")).strip()
+            s = s.replace("—","-").replace("º","o").replace("ª","a")
+            return unicodedata.normalize("NFKD", s).encode("ascii","ignore").decode("ascii")
 
         def _perc5(v):
             try:
-                d = Decimal(str(v).replace(',', '.'))
+                d = Decimal(str(v).replace(",", "."))
             except Exception:
-                d = Decimal('0')
-            # formato N 5,2 -> 5 dígitos, 2 casas sem separador (ex.: 5,2% => 00520)
-            return f"{int((d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) * 100).to_integral_value()):05d}"
+                d = Decimal("0")
+            return f"{int((d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)*100).to_integral_value()):05d}"
+
+        def _num112(v):
+            q = Decimal(str(v or 0)).quantize(Decimal("0.01"))
+            return f"{int(q*100):011d}"
 
         # ===== cabeçalho =====
         versao = settings.value("param/version", "0013")
         ident  = _digits(settings.value("param/ident", ""))
+
         if not ident:
-            # tenta pegar um CPF (11 dígitos) do cadastro de participantes
             row = self.db.fetch_one(
                 "SELECT cpf_cnpj FROM participante "
                 "WHERE LENGTH(REPLACE(REPLACE(REPLACE(cpf_cnpj,'.',''),'-',''),'/',''))=11 "
                 "ORDER BY id LIMIT 1"
             )
-            if row:
-                ident = _digits(row[0])
-        nome   = _clean(settings.value("param/nome", ""))
-        ind_ini_per = settings.value("param/ind_ini_per", "0")
+            if row: ident = _digits(row[0])
+
+        nome         = _clean(settings.value("param/nome", ""))
+        ind_ini_per  = settings.value("param/ind_ini_per", "0")
         sit_especial = settings.value("param/sit_especial", "0")
-    
+
         dt_ini_txt = self.dt_ini.date().toString("ddMMyyyy")
         dt_fim_txt = self.dt_fim.date().toString("ddMMyyyy")
-    
-        # validações mínimas exigidas pelo leiaute
+        if ind_ini_per == "0":  # Regular deve iniciar em 01/01/AAAA
+            ano = self.dt_ini.date().toString("yyyy")
+            dt_ini_txt = f"0101{ano}"
+
         if not ident:
-            QMessageBox.warning(
-                self, "LCDPR",
-                "Informe o CPF do declarante em Configurações > Declarante ou cadastre um participante Pessoa Física."
-            )
+            QMessageBox.warning(self, "LCDPR",
+                "Informe o CPF do declarante em Configurações > Declarante ou cadastre um participante Pessoa Física.")
             return
-        
+
         with open(path, "w", encoding="utf-8", newline="") as f:
             # 0000
-            f.write("0000|" + "|".join(["LCDPR", versao, ident, nome, ind_ini_per, sit_especial, "", dt_ini_txt, dt_fim_txt]) + NL)
-            # 0010 (sempre 1)
+            f.write("0000|" + "|".join([
+                "LCDPR", versao, _digits(ident), _clean(nome),
+                ind_ini_per, sit_especial, "", dt_ini_txt, dt_fim_txt
+            ]) + NL)
+
+            # 0010
             f.write("0010|1" + NL)
 
-    
-            # 0030 – endereço
-            logradouro = _clean(settings.value("param/logradouro", ""))
-            numero     = _clean(settings.value("param/numero", ""))
-            complemento= _clean(settings.value("param/complemento", ""))
-            bairro     = _clean(settings.value("param/bairro", ""))
-            uf         = _clean(settings.value("param/uf", ""))
-            cod_mun    = _digits(settings.value("param/cod_mun", ""))
-            cep        = _digits(settings.value("param/cep", ""))
-            telefone   = _digits(settings.value("param/telefone", ""))
-            email      = _clean(settings.value("param/email", ""))
-            
+            # 0030 – endereço (IBGE 7, CEP 8)
+            logradouro  = _clean(settings.value("param/logradouro", ""))
+            numero      = _clean(settings.value("param/numero", ""))
+            complemento = _clean(settings.value("param/complemento", ""))
+            bairro      = _clean(settings.value("param/bairro", ""))
+            uf          = (_clean(settings.value("param/uf", "")) or "")[:2].upper()
+            cod_mun     = _digits(settings.value("param/cod_mun", "")).zfill(7)
+            cep         = _digits(settings.value("param/cep", "")).zfill(8)
+            telefone    = _digits(settings.value("param/telefone", ""))
+            email       = _clean(settings.value("param/email", ""))
+
             if not logradouro:
                 raise ValueError("Endereço (logradouro) obrigatório para o registro 0030.")
-            
-            f.write("0030|" + "|".join([logradouro, numero, complemento, bairro, uf, cod_mun, cep, telefone, email]) + NL)
-            
-    
-            # 0040 – imóveis (inclui áreas conforme leiaute)
-            for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf_, mun, cep_, tipo_expl, part, area_tot, area_uti) in \
-                    self.db.fetch_all("""SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
-                                            nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
-                                            tipo_exploracao,participacao,area_total,area_utilizada
-                                       FROM imovel_rural"""):
+
+            f.write("0030|" + "|".join([
+                logradouro, _digits(numero), complemento, bairro,
+                uf, cod_mun, cep, telefone, email
+            ]) + NL)
+
+            # 0040 – imóveis (EXATOS 17 campos, sem áreas)
+            for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp,
+                 bai, uf_, mun, cep_, tipo_expl, part, _area_tot, _area_uti) in self.db.fetch_all("""
+                SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
+                       nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
+                       tipo_exploracao,participacao,area_total,area_utilizada
+                  FROM imovel_rural
+            """):
                 f.write("0040|" + "|".join([
-                    _digits(cod).zfill(3), _clean(pais), _clean(moeda),
-                    _digits(cad_itr), _digits(caepf), _digits(ie),
-                    _clean(nome_imovel), _clean(end), _clean(num), _clean(comp),
-                    _clean(bai), _clean(uf_), _digits(mun), _digits(cep_),
+                    _digits(cod).zfill(3),
+                    _clean(pais),
+                    _clean(moeda),
+                    _digits(cad_itr).zfill(8),     # CAD_ITR N=8
+                    _digits(caepf).zfill(14),      # CAEPF N=14
+                    _digits(ie),                   # IE (opcional)
+                    _clean(nome_imovel),
+                    _clean(end),
+                    _clean(num),
+                    _clean(comp),
+                    _clean(bai),
+                    _clean(uf_).upper()[:2],
+                    _digits(mun).zfill(7),
+                    _digits(cep_).zfill(8),
                     str(tipo_expl or ""),
-                    _perc5(part or 0)             # PARTICIPACAO N 5,2
+                    _perc5(part or 0)
                 ]) + NL)
 
-            # 0050 – contas (sem SALDO_INICIAL no 0050!)
+            # 0050 – contas (AG=4, CONTA=16)
             for cod, pais_cta, banco, nome_bco, ag, num_cta in self.db.fetch_all(
-                "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"
-            ):
+                "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"):
+                ag_d  = _digits(ag)
+                cta_d = _digits(num_cta)
+                if not ag_d or not cta_d:
+                    continue
                 f.write("0050|" + "|".join([
                     _digits(cod).zfill(3),
                     _clean(pais_cta),
-                    _digits(banco).zfill(3) if banco else "",
+                    (_digits(banco).zfill(3) if banco else ""),
                     _clean(nome_bco),
-                    _digits(ag),
-                    _digits(num_cta)
+                    ag_d.zfill(4),
+                    cta_d.zfill(16)
                 ]) + NL)
 
-            # Q100 – lançamentos (ordem e numéricos no padrão)
+            # Q100 – lançamentos
             for (data, cod_im, cod_ct, doc, td, hist, cpf_cnpj, tl, ent, sai, sf, nat) in self.db.fetch_all("""
-                    SELECT l.data,
-                           im.cod_imovel,
-                           ct.cod_conta,
-                           l.num_doc, l.tipo_doc, l.historico, p.cpf_cnpj, l.tipo_lanc,
-                           l.valor_entrada, l.valor_saida, l.saldo_final, l.natureza_saldo
-                      FROM lancamento l
-                      JOIN imovel_rural  im ON im.id = l.cod_imovel
-                      JOIN conta_bancaria ct ON ct.id = l.cod_conta
-                 LEFT JOIN participante      p ON p.id = l.id_participante
-                  ORDER BY l.data_ord, l.id
+                SELECT l.data,
+                       im.cod_imovel,
+                       ct.cod_conta,
+                       l.num_doc, l.tipo_doc, l.historico, p.cpf_cnpj, l.tipo_lanc,
+                       l.valor_entrada, l.valor_saida, l.saldo_final, l.natureza_saldo
+                  FROM lancamento l
+                  JOIN imovel_rural  im ON im.id = l.cod_imovel
+                  JOIN conta_bancaria ct ON ct.id = l.cod_conta
+             LEFT JOIN participante      p ON p.id = l.id_participante
+              ORDER BY l.data_ord, l.id
             """):
                 f.write("Q100|" + "|".join([
-                    _ddmmyyyy(data),                    # DATA (ddmmaaaa)
-                    _digits(cod_im).zfill(3),           # COD_IMÓVEL
-                    _digits(cod_ct).zfill(3),           # COD_CONTA
-                    _clean(doc),                        # NUM_DOC
-                    str(td or ""),                      # TIPO_DOC
-                    _clean(hist),                       # HISTÓRICO
-                    _digits(cpf_cnpj or ident),         # ID_PARTICIPANTE (fallback CPF declarante)
+                    _ddmmyyyy(data),
+                    _digits(cod_im).zfill(3),
+                    _digits(cod_ct).zfill(3),
+                    _clean(doc),
+                    str(td or ""),
+                    _clean(hist),
+                    _digits(cpf_cnpj or ident),
                     str(tl or ""),
-                    _cents(ent or 0),                   # VL_ENTRADA
-                    _cents(sai or 0),                   # VL_SAIDA
-                    _cents(sf or 0),                    # SLD_FIN
+                    _cents(ent or 0),
+                    _cents(sai or 0),
+                    _cents(sf or 0),      # aqui pode ser informado >=0; natureza no campo seguinte
                     str(nat or "")
                 ]) + NL)
 
-            # Q200 – por mês (mmaaaa), com saldo ACUMULADO
+            # Q200 – resumo mensal (mmaaaa) com saldo ACUMULADO **ABSOLUTO** + NAT_SLD_FIN
             d1 = int(self.dt_ini.date().toString("yyyyMMdd"))
             d2 = int(self.dt_fim.date().toString("yyyyMMdd"))
             resumo = self.db.fetch_all("""
@@ -3756,20 +3788,26 @@ class MainWindow(QMainWindow):
 
             saldo_acum = Decimal("0")
             for ym, tot_ent, tot_sai in resumo:
-                mesano = ym[4:6] + ym[0:4]            # mmaaaa
+                mesano  = ym[4:6] + ym[0:4]                 # mmaaaa
                 tot_ent = Decimal(str(tot_ent or 0))
                 tot_sai = Decimal(str(tot_sai or 0))
                 saldo_acum += (tot_ent - tot_sai)
-                f.write(f"Q200|{mesano}|{_cents(tot_ent)}|{_cents(tot_sai)}|{_cents(saldo_acum)}|{'P' if saldo_acum >= 0 else 'N'}{NL}")
+                nat = 'P' if saldo_acum >= 0 else 'N'
+                f.write(
+                    f"Q200|{mesano}|{_cents(tot_ent)}|{_cents(tot_sai)}|{_cents(abs(saldo_acum))}|{nat}{NL}"
+                )
 
-        # 9999 – total de linhas (inclui o próprio 9999)
+        # 9999 – **7 campos**: REG, IDENT_NOM, IDENT_CPF_CNPJ, IND_CRC, EMAIL, FONE, QTD_LIN
         total = sum(1 for _ in open(path, "r", encoding="utf-8")) + 1
         with open(path, "a", encoding="utf-8", newline="") as f:
             f.write(f"9999||||||{total}{NL}")
-    
-        save_last_txt_path(path)
-        QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
 
+        try:
+            save_last_txt_path(path)
+        except Exception:
+            pass
+
+        QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
 
     def _exportar_planilha_lcdpr(self):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
@@ -3872,7 +3910,7 @@ class MainWindow(QMainWindow):
 
     def mostrar_sobre(self):
         QMessageBox.information(self, "Sobre o Sistema",
-            "Sistema AgroContábil - LCDPR\n\nVersão: 2.0\n© 2023 AgroTech Solutions\n\n"
+            "Sistema AgroContábil - LCDPR\n\nVersão: 1.0\n© 2025 Automatize Tech\n\n"
             "Funcionalidades:\n- Gestão de propriedades rurais\n- Controle financeiro completo\n"
             "- Planejamento de safras\n- Gerenciamento de estoque\n- Geração do LCDPR")
 
