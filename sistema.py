@@ -14,11 +14,14 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QDialog,
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
-    QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy, QCompleter
+    QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy, QCompleter,
+    QStackedWidget, QTextBrowser, QSplitter, QScrollArea
 )
 from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
-from PySide6.QtCharts import QChart, QChartView, QPieSeries
+from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
+from PySide6.QtPrintSupport import QPrinter
+
 from contextlib import contextmanager
 import shiboken6
 
@@ -516,6 +519,17 @@ QTabBar::tab { background: #2A2C2D; color: #E0E0E0; padding: 8px 16px; border: 1
 QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px solid #002a54; }
 QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
 """
+def fmt_money(v) -> str:
+    try:
+        d = Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except Exception:
+        d = Decimal("0.00")
+    s = f"{d:,.2f}"
+    return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+def qdate_to_ord(qd: QDate) -> int:
+    return int(qd.toString("yyyyMMdd"))
+
 # ==== PROGRESSO GLOBAL (UMA ÚNICA INSTÂNCIA) ==================================
 class GlobalProgress:
     """
@@ -1355,18 +1369,32 @@ class ParametrosDialog(QDialog):
 
 # --- DIALOG DE RELATÓRIO POR PERÍODO ---
 class RelatorioPeriodoDialog(QDialog):
-    def __init__(self, tipo, parent=None):
+    def __init__(self, titulo, parent=None, ini: QDate | None = None, fim: QDate | None = None):
         super().__init__(parent)
-        self.setWindowTitle(tipo)
-        self.setMinimumSize(300, 150)
+        self.setWindowTitle(titulo)
+        self.setMinimumSize(360, 160)
+
+        # defaults coerentes com os dados existentes
+        if not ini or not fim:
+            db = getattr(parent, "db", Database())
+            row = db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
+            if row and row[0] and row[1]:
+                ini = QDate.fromString(str(row[0]), "yyyyMMdd")
+                fim = QDate.fromString(str(row[1]), "yyyyMMdd")
+            else:
+                ini = QDate.currentDate().addMonths(-1)
+                fim = QDate.currentDate()
+
         layout = QFormLayout(self)
-        self.dt_fim = QDateEdit(QDate.currentDate())
-        self.dt_fim.setCalendarPopup(True)
-        self.dt_fim.setDisplayFormat("dd/MM/yyyy")
-        layout.addRow("Data final:", self.dt_fim)
+
+        self.dt_ini = QDateEdit(ini); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
+        self.dt_fim = QDateEdit(fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
+
+        layout.addRow("Data inicial:", self.dt_ini)
+        layout.addRow("Data final:",   self.dt_fim)
+
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
+        btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
         layout.addRow(btns)
 
     @property
@@ -1481,6 +1509,366 @@ class DashboardWidget(QWidget):
             pct = sl.percentage() * 100
             sl.setLabelVisible(True)
             sl.setLabel(f"{sl.label()} ({pct:.1f}%)")
+
+class ReportCenterDialog(QDialog):
+    """
+    Central de Relatórios – com filtros, opções e pré-visualização.
+    Relatórios:
+      1) Receitas x Despesas (Geral) [barras/mês]
+      2) Comparativo entre Fazendas [barras/fazenda]
+      3) DRE Simplificada mês a mês [tabela]
+      4) Comparativo Anual [barras/ano]
+      5) DRE por Fazenda (na mesma página) [tabela multi-seção]
+    """
+    def __init__(self, parent=None, d_ini=None, d_fim=None):
+        super().__init__(parent)
+        self.setWindowTitle("Central de Relatórios")
+        self.resize(1100, 700)
+        self.db = getattr(parent, "db", Database())
+
+        # ====== LADO ESQUERDO: filtros/opções ======
+        left = QWidget(); lf = QVBoxLayout(left)
+
+        self.cmb_tipo = QComboBox()
+        self.cmb_tipo.addItems([
+            "Receitas x Despesas (Geral)",
+            "Comparativo entre Fazendas",
+            "DRE Simplificada (mês a mês)",
+            "Comparativo Anual",
+            "DRE por Fazenda (multi-seção)"
+        ])
+
+        lf.addWidget(QLabel("Tipo de relatório:"))
+        lf.addWidget(self.cmb_tipo)
+
+        row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
+        if row and row[0] and row[1]:
+            _ini = QDate.fromString(str(row[0]), "yyyyMMdd")
+            _fim = QDate.fromString(str(row[1]), "yyyyMMdd")
+        else:
+            _ini = QDate.currentDate().addMonths(-1)
+            _fim = QDate.currentDate()
+        if isinstance(d_ini, QDate): _ini = d_ini
+        if isinstance(d_fim, QDate): _fim = d_fim
+
+        hl = QHBoxLayout()
+        self.dt_ini = QDateEdit(_ini); self.dt_ini.setCalendarPopup(True); self.dt_ini.setDisplayFormat("dd/MM/yyyy")
+        self.dt_fim = QDateEdit(_fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
+        hl.addWidget(QLabel("De:"));  hl.addWidget(self.dt_ini)
+        hl.addWidget(QLabel("Até:")); hl.addWidget(self.dt_fim)
+        lf.addLayout(hl)
+
+        self.chk_por_fazenda = QCheckBox("Separar por fazenda (quando aplicável)")
+        lf.addWidget(self.chk_por_fazenda)
+
+        btns = QHBoxLayout()
+        self.btn_preview = QPushButton("Pré-visualizar")
+        self.btn_export  = QPushButton("Salvar PDF/PNG")
+        self.btn_fechar  = QPushButton("Fechar")
+        btns.addWidget(self.btn_preview); btns.addStretch(); btns.addWidget(self.btn_export); btns.addWidget(self.btn_fechar)
+        lf.addStretch(); lf.addLayout(btns)
+
+        # ====== LADO DIREITO: Preview ======
+        self.stack = QStackedWidget()
+        self.chart_view = QChartView(); self.chart_view.setRenderHint(QPainter.Antialiasing)
+        self.text_view  = QTextBrowser()
+        self.text_view.setOpenExternalLinks(False)
+        self.text_view.setStyleSheet("QTextBrowser { background:#1B1D1E; color:#E0E0E0; border:1px solid #11398a; }")
+
+        self.stack.addWidget(self.chart_view)  # idx 0
+        self.stack.addWidget(self.text_view)   # idx 1
+
+        # ====== SPLITTER ======
+        split = QSplitter()
+        split.addWidget(left); split.addWidget(self.stack)
+        split.setStretchFactor(0, 0); split.setStretchFactor(1, 1)
+
+        root = QVBoxLayout(self); root.addWidget(split)
+
+        # sinais
+        self.btn_preview.clicked.connect(self.atualizar_preview)
+        self.btn_export.clicked.connect(self.exportar)
+        self.btn_fechar.clicked.connect(self.reject)
+        self.cmb_tipo.currentIndexChanged.connect(self._tipo_changed)
+
+        self._tipo_changed()
+
+    # ------------------------- DATA HELPERS -------------------------
+    def _rows(self, sql: str, params=()):
+        return self.db.fetch_all(sql, list(params))
+
+    def _mes_label(self, ym: str) -> str:
+        # ym = 'YYYYMM' -> 'MM/AAAA'
+        if len(ym) == 6:
+            return f"{ym[4:6]}/{ym[0:4]}"
+        return ym
+
+    def _serie_bar_dupla(self, categorias: list[str], rec: list[float], des: list[float], titulo: str) -> QChart:
+        s_rec = QBarSet("Receitas"); s_rec.append(rec)
+        s_des = QBarSet("Despesas"); s_des.append(des)
+        series = QBarSeries(); series.append(s_rec); series.append(s_des)
+
+        chart = QChart(); chart.addSeries(series); chart.setTitle(titulo)
+        axisX = QBarCategoryAxis(); axisX.append(categorias); chart.addAxis(axisX, Qt.AlignBottom); series.attachAxis(axisX)
+        axisY = QValueAxis(); axisY.setTitleText("R$"); chart.addAxis(axisY, Qt.AlignLeft); series.attachAxis(axisY)
+        chart.setAnimationOptions(QChart.SeriesAnimations)
+        return chart
+
+    # ------------------------- CONSULTAS -------------------------
+    def _dados_mes_geral(self, d1_ord: int, d2_ord: int):
+        sql = """
+        SELECT substr(CAST(data_ord AS TEXT),1,6) AS ym,
+               SUM(valor_entrada) AS rec, SUM(valor_saida) AS des
+        FROM lancamento
+        WHERE data_ord BETWEEN ? AND ?
+        GROUP BY ym ORDER BY ym
+        """
+        rows = self._rows(sql, (d1_ord, d2_ord))
+        cats, r, d = [], [], []
+        for ym, rec, des in rows:
+            cats.append(self._mes_label(ym)); r.append(rec or 0); d.append(des or 0)
+        return cats, r, d
+
+    def _dados_por_fazenda(self, d1_ord: int, d2_ord: int):
+        sql = """
+        SELECT i.nome_imovel,
+               SUM(l.valor_entrada) AS rec,
+               SUM(l.valor_saida)   AS des
+        FROM lancamento l
+        JOIN imovel_rural i ON i.id = l.cod_imovel
+        WHERE l.data_ord BETWEEN ? AND ?
+        GROUP BY i.nome_imovel
+        ORDER BY (rec - des) DESC
+        """
+        rows = self._rows(sql, (d1_ord, d2_ord))
+        cats, r, d = [], [], []
+        for nome, rec, des in rows:
+            cats.append(nome); r.append(rec or 0); d.append(des or 0)
+        return cats, r, d
+
+    def _dados_anual(self, d1_ord: int, d2_ord: int):
+        sql = """
+        SELECT substr(CAST(data_ord AS TEXT),1,4) AS ano,
+               SUM(valor_entrada) AS rec, SUM(valor_saida) AS des
+        FROM lancamento
+        WHERE data_ord BETWEEN ? AND ?
+        GROUP BY ano ORDER BY ano
+        """
+        rows = self._rows(sql, (d1_ord, d2_ord))
+        cats, r, d = [], [], []
+        for ano, rec, des in rows:
+            cats.append(str(ano)); r.append(rec or 0); d.append(des or 0)
+        return cats, r, d
+
+    def _dre_mes_a_mes(self, d1_ord: int, d2_ord: int, por_fazenda: bool):
+        if por_fazenda:
+            sql = """
+            SELECT i.nome_imovel,
+                   substr(CAST(l.data_ord AS TEXT),1,6) AS ym,
+                   SUM(l.valor_entrada) AS rec, SUM(l.valor_saida) AS des
+            FROM lancamento l JOIN imovel_rural i ON i.id = l.cod_imovel
+            WHERE l.data_ord BETWEEN ? AND ?
+            GROUP BY i.nome_imovel, ym ORDER BY i.nome_imovel, ym
+            """
+            return self._rows(sql, (d1_ord, d2_ord))
+        else:
+            sql = """
+            SELECT substr(CAST(data_ord AS TEXT),1,6) AS ym,
+                   SUM(valor_entrada) AS rec, SUM(valor_saida) AS des
+            FROM lancamento
+            WHERE data_ord BETWEEN ? AND ?
+            GROUP BY ym ORDER BY ym
+            """
+            return self._rows(sql, (d1_ord, d2_ord))
+
+    def _dre_por_fazenda(self, d1_ord: int, d2_ord: int):
+        sql = """
+        SELECT i.nome_imovel,
+               SUM(l.valor_entrada) AS rec,
+               SUM(l.valor_saida)   AS des
+        FROM lancamento l
+        JOIN imovel_rural i ON i.id = l.cod_imovel
+        WHERE l.data_ord BETWEEN ? AND ?
+        GROUP BY i.nome_imovel
+        ORDER BY i.nome_imovel
+        """
+        return self._rows(sql, (d1_ord, d2_ord))
+
+    # ------------------------- RENDER -------------------------
+    def _tipo_changed(self):
+        # Para relatórios de tabela: mostrar texto; para comparativos: gráfico
+        t = self.cmb_tipo.currentText()
+        self.stack.setCurrentIndex(1 if "DRE" in t else 0)
+
+    def atualizar_preview(self):
+        d1_ord = qdate_to_ord(self.dt_ini.date())
+        d2_ord = qdate_to_ord(self.dt_fim.date())
+        t = self.cmb_tipo.currentText()
+
+        if t == "Receitas x Despesas (Geral)":
+            cats, r, d = self._dados_mes_geral(d1_ord, d2_ord)
+            chart = self._serie_bar_dupla(cats, r, d, "Receitas x Despesas (Geral)")
+            self.chart_view.setChart(chart); self.stack.setCurrentIndex(0)
+
+        elif t == "Comparativo entre Fazendas":
+            cats, r, d = self._dados_por_fazenda(d1_ord, d2_ord)
+            chart = self._serie_bar_dupla(cats, r, d, "Comparativo entre Fazendas")
+            self.chart_view.setChart(chart); self.stack.setCurrentIndex(0)
+
+        elif t == "Comparativo Anual":
+            cats, r, d = self._dados_anual(d1_ord, d2_ord)
+            chart = self._serie_bar_dupla(cats, r, d, "Comparativo Anual")
+            self.chart_view.setChart(chart); self.stack.setCurrentIndex(0)
+
+        elif t == "DRE Simplificada (mês a mês)":
+            por_faz = self.chk_por_fazenda.isChecked()
+            rows = self._dre_mes_a_mes(d1_ord, d2_ord, por_faz)
+            html = self._html_dre_mes(rows, por_faz)
+            self.text_view.setHtml(html); self.stack.setCurrentIndex(1)
+
+        elif t == "DRE por Fazenda (multi-seção)":
+            rows = self._dre_por_fazenda(d1_ord, d2_ord)
+            html = self._html_dre_por_fazenda(rows)
+            self.text_view.setHtml(html); self.stack.setCurrentIndex(1)
+
+    def _html_header(self, titulo: str) -> str:
+        return f"""
+    <html><head>
+    <style>
+    @page {{ margin: 0; }}
+    html, body {{
+      margin: 0;
+      padding: 12mm;
+      background:#1B1D1E;
+      color:#E0E0E0;
+      font-family:'Segoe UI', Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }}
+    /* Cartões / seções */
+    .card {{
+      border:1px solid #11398a;
+      border-radius:10px;
+      padding:16px;
+      margin:14px 0;
+      background:#0d1b3d;
+      page-break-inside: avoid;
+    }}
+    /* Título */
+    h1 {{
+      margin:0 0 12px 0;
+      font-size:18pt;
+      font-weight:600;
+    }}
+    /* Tabelas */
+    table {{ width:100%; border-collapse:collapse; margin-top:8px; }}
+    th, td {{ padding:8px 10px; border-bottom:1px solid #11398a; text-align:center; }}
+    th {{ background:#11398a; color:#fff; }}
+    /* Resultado por sinal */
+    .ok  {{ color:#27AE60; font-weight:700; }}   /* lucro → verde */
+    .bad {{ color:#E74C3C; font-weight:700; }}   /* prejuízo → vermelho */
+    .muted {{ color:#9aa1b1; font-size:11px; margin-top:6px; }}
+    </style></head><body>
+    <h1>{titulo}</h1>
+    """    
+    
+    def _html_footer(self) -> str:
+        return "</body></html>"
+
+    def _html_dre_mes(self, rows, por_fazenda: bool) -> str:
+        title = "DRE Simplificada (mês a mês)" + (" — por Fazenda" if por_fazenda else "")
+        html = self._html_header(title)
+        if por_fazenda:
+            # rows: (fazenda, ym, rec, des)
+            atual = None; total_r=total_d=0
+            for faz, ym, rec, des in rows:
+                if atual != faz:
+                    if atual is not None:
+                        resultado = total_r - total_d
+                        html += f"<tr><th>Total</th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+                    html += f"<div class='card'><h2>{faz}</h2><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
+                    atual = faz; total_r = total_d = 0
+                r = rec or 0; d = des or 0; res = r - d
+                total_r += r; total_d += d
+                html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
+            if atual is not None:
+                resultado = total_r - total_d
+                html += f"<tr><th>Total</th><th colspan='2'></th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+        else:
+            # rows: (ym, rec, des)
+            html += "<div class='card'><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
+            total_r=total_d=0
+            for ym, rec, des in rows:
+                r = rec or 0; d = des or 0; res = r - d
+                total_r += r; total_d += d
+                html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
+            resultado = total_r - total_d
+            html += f"<tr><th>Total</th><th colspan='2'></th><th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th></tr></table></div>"
+        html += self._html_footer()
+        return html
+
+    def _html_dre_por_fazenda(self, rows) -> str:
+        # rows: (fazenda, rec, des)
+        html = self._html_header("DRE por Fazenda (multi-seção)")
+        for faz, rec, des in rows:
+            rec = rec or 0; des = des or 0; res = rec - des
+            html += f"""
+            <div class='card'>
+              <h2>{faz}</h2>
+              <table>
+                <tr><th>Indicador</th><th>Valor</th></tr>
+                <tr><td>Receitas</td><td>{fmt_money(rec)}</td></tr>
+                <tr><td>Despesas</td><td>{fmt_money(des)}</td></tr>
+                <tr><td><b>Resultado</b></td><td class='{ 'ok' if res>=0 else 'bad' }'><b>{fmt_money(res)}</b></td></tr>
+              </table>
+              <div class='muted'>Período: {self.dt_ini.date().toString("dd/MM/yyyy")} a {self.dt_fim.date().toString("dd/MM/yyyy")}</div>
+            </div>
+            """
+        html += self._html_footer()
+        return html
+
+    # ------------------------- EXPORTAR -------------------------
+    def exportar(self):
+        idx = self.stack.currentIndex()
+        if idx == 1:
+            # Exporta HTML -> PDF
+            path, _ = QFileDialog.getSaveFileName(self, "Salvar Relatório em PDF", "", "PDF (*.pdf)")
+            if not path: return
+            printer = QPrinter(QPrinter.HighResolution)
+            printer.setOutputFormat(QPrinter.PdfFormat)
+            printer.setOutputFileName(path)
+
+            # ▼ NOVO: margens 0 e página inteira
+            try:
+                from PySide6.QtGui import QPageLayout, QPageSize
+                from PySide6.QtCore import QMarginsF
+                layout = printer.pageLayout()
+                layout.setMode(QPageLayout.FullPage)
+                layout.setMargins(QMarginsF(0, 0, 0, 0))
+                printer.setPageLayout(layout)
+            except Exception:
+                try:
+                    printer.setFullPage(True)  # fallback para algumas builds
+                except Exception:
+                    pass
+                
+            doc = self.text_view.document()
+            try:
+                doc.setDocumentMargin(0)  # ▼ NOVO: remove margem interna do QTextDocument
+            except Exception:
+                pass
+            
+            (getattr(doc, "print_", None) or getattr(doc, "print"))(printer)
+
+
+            QMessageBox.information(self, "OK", "PDF gerado com sucesso.")
+        else:
+            # Exporta gráfico -> PNG
+            path, _ = QFileDialog.getSaveFileName(self, "Salvar Gráfico em PNG", "", "PNG (*.png)")
+            if not path: return
+            img = self.chart_view.grab()
+            img.save(path, "PNG")
+            QMessageBox.information(self, "OK", "Imagem salva com sucesso.")
 
 # --- DIALOG PARA LANÇAMENTOS CONTÁBEIS ---
 class LancamentoDialog(QDialog):
@@ -2888,6 +3276,8 @@ class MainWindow(QMainWindow):
             m2.addAction(QAction(txt, self, triggered=fn))
         m2.addAction(QAction("Parâmetros", self, triggered=self.abrir_parametros))
         m3 = mb.addMenu("&Relatórios")
+        m3.addAction(QAction("Central de Relatórios…", self, triggered=self.abrir_central_relatorios))
+        m3.addSeparator()
         m3.addAction(QAction("Balancete", self, triggered=self.abrir_balancete))
         m3.addAction(QAction("Razão", self, triggered=self.abrir_razao))
         m4 = mb.addMenu("&Ajuda")
@@ -2903,7 +3293,7 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "farm.png")), "Cad. Imóvel", self, triggered=self.cad_imovel))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "bank.png")), "Cad. Conta", self, triggered=self.cad_conta))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "users.png")), "Cad. Participante", self, triggered=self.cad_participante))
-        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")), "Relatórios", self, triggered=lambda: self.tabs.setCurrentIndex(4)))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")), "Relatórios", self, triggered=self.abrir_central_relatorios))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "txt.png")), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
         tb.addSeparator(); tb.addWidget(QLabel("Perfil:"))
         self.profile_selector = QComboBox()
@@ -3422,6 +3812,10 @@ class MainWindow(QMainWindow):
             "Sistema AgroContábil - LCDPR\n\nVersão: 2.0\n© 2023 AgroTech Solutions\n\n"
             "Funcionalidades:\n- Gestão de propriedades rurais\n- Controle financeiro completo\n"
             "- Planejamento de safras\n- Gerenciamento de estoque\n- Geração do LCDPR")
+
+    def abrir_central_relatorios(self):
+        dlg = ReportCenterDialog(self, d_ini=self.dt_ini.date(), d_fim=self.dt_fim.date())
+        dlg.exec()
 
     def importar_lancamentos(self):
         path, _ = QFileDialog.getOpenFileName(self, "Importar Lançamentos", "", "TXT (*.txt);;Excel (*.xlsx *.xls)")

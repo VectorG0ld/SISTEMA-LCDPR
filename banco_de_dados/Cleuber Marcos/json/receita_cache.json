@@ -11913,5 +11913,1390 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:97538497000138": {
+    "abertura": "11/07/2011",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "MUNDIAL REFRIGERACAO LTDA",
+    "fantasia": "MUNDIAL REFRIGERACAO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.57-1-00",
+        "text": "Comércio varejista especializado de peças e acessórios para aparelhos eletroeletrônicos para uso doméstico, exceto informática e comunicação"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "43.22-3-02",
+        "text": "Instalação e manutenção de sistemas centrais de ar condicionado, de ventilação e refrigeração"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "46.49-4-01",
+        "text": "Comércio atacadista de equipamentos elétricos de uso pessoal e doméstico"
+      },
+      {
+        "code": "46.49-4-02",
+        "text": "Comércio atacadista de aparelhos eletrônicos de uso pessoal e doméstico"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "46.63-0-00",
+        "text": "Comércio atacadista de Máquinas e equipamentos para uso industrial; partes e peças"
+      },
+      {
+        "code": "46.69-9-01",
+        "text": "Comércio atacadista de bombas e compressores; partes e peças"
+      },
+      {
+        "code": "46.72-9-00",
+        "text": "Comércio atacadista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      },
+      {
+        "code": "47.53-9-00",
+        "text": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo"
+      },
+      {
+        "code": "47.59-8-99",
+        "text": "Comércio varejista de outros artigos de uso pessoal e doméstico não especificados anteriormente"
+      },
+      {
+        "code": "71.12-0-00",
+        "text": "Serviços de engenharia"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "DJALMA MELO DA SILVA",
+        "qual": "22-Sócio"
+      },
+      {
+        "nome": "JACKSON DE MELO SANTOS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AV RIO VERDE",
+    "numero": "1246",
+    "complemento": "QUADRA08 LOTE 01E",
+    "municipio": "GOIANIA",
+    "bairro": "SET DOS AFONSOS",
+    "uf": "GO",
+    "cep": "74.843-710",
+    "email": "mundialrefri.financeiro@hotmail.com",
+    "telefone": "(62) 3548-2525",
+    "data_situacao": "11/07/2011",
+    "cnpj": "97.538.497/0001-38",
+    "ultima_atualizacao": "2025-09-01T12:27:34.020Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "3916436.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "11/07/2011",
+      "data_exclusao": "31/12/2018",
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-06-15T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:61064929016253": {
+    "abertura": "10/03/2022",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "CORTEVA AGRISCIENCE DO BRASIL LTDA.",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      }
+    ],
+    "logradouro": "RUA 11",
+    "numero": "S/N",
+    "complemento": "QUADRA007 LOTE 001 SALA A",
+    "municipio": "APARECIDA DE GOIANIA",
+    "bairro": "POLO EMPRESARIAL GOIAS - ETAPA VI",
+    "uf": "GO",
+    "cep": "74.985-128",
+    "email": "contas.pagar@corteva.com",
+    "telefone": "(11) 4166-8122",
+    "data_situacao": "10/03/2022",
+    "cnpj": "61.064.929/0162-53",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "3863073282.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:52321741000178": {
+    "abertura": "26/09/2023",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "NUNO ASSISTENCIA TECNICA EM MAQUINAS AGRICOLAS LTDA",
+    "fantasia": "NUNO ASSISTENCIA TECNICA EM MAQUINAS AGRICOLAS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "33.14-7-11",
+        "text": "Manutenção e reparação de máquinas e equipamentos para agricultura e pecuária"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-12",
+        "text": "Manutenção e reparação de tratores agrícolas"
+      },
+      {
+        "code": "33.14-7-16",
+        "text": "Manutenção e reparação de tratores, exceto agrícolas"
+      },
+      {
+        "code": "33.14-7-17",
+        "text": "Manutenção e reparação de máquinas e equipamentos de terraplenagem, pavimentação e construção, exceto tratores"
+      },
+      {
+        "code": "33.14-7-18",
+        "text": "Manutenção e reparação de máquinas para a indústria metalúrgica, exceto máquinas-ferramenta"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "NUNO NASCIMENTO SOUSA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA 7",
+    "numero": "129",
+    "complemento": "QUADRA 07;LOTE 07",
+    "municipio": "GURUPI",
+    "bairro": "PARQUE PRIMAVERA",
+    "uf": "TO",
+    "cep": "77.413-070",
+    "email": "nunonascimento355@gmail.com",
+    "telefone": "(63) 9999-1973",
+    "data_situacao": "26/09/2023",
+    "cnpj": "52.321.741/0001-78",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "80000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:58475205000103": {
+    "abertura": "16/12/2024",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "M DAS D M DE OLIVEIRA",
+    "fantasia": "RICARDO DIESEL",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-02",
+        "text": "Manutenção e reparação de equipamentos hidráulicos e pneumáticos, exceto válvulas"
+      },
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "logradouro": "RUA 8",
+    "numero": "SN",
+    "complemento": "QUADRA01 LOTE 12",
+    "municipio": "PORANGATU",
+    "bairro": "PLANALTO",
+    "uf": "GO",
+    "cep": "76.552-168",
+    "email": "maria.dasdores13@icloud.com",
+    "telefone": "(62) 8463-9827 / (0000) 0000-0000",
+    "data_situacao": "16/12/2024",
+    "cnpj": "58.475.205/0001-03",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "30000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:24678052000180": {
+    "abertura": "27/04/2016",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "CCA - CONTROLE CENTRO ANALITICO LTDA",
+    "fantasia": "LABORATORIO SOLOS & PLANTAS - UNIDADE LEM/BA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "63.99-2-00",
+        "text": "Outras atividades de prestação de serviços de informação não especificadas anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.12-1-02",
+        "text": "Manutenção e reparação de aparelhos e instrumentos de medida, teste e controle"
+      },
+      {
+        "code": "46.69-9-99",
+        "text": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente; partes e peças"
+      },
+      {
+        "code": "71.20-1-00",
+        "text": "Testes e análises técnicas"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "JOICY DIAS INACIO",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "RENATO CANDIDO ALVES FILHO",
+        "qual": "22-Sócio"
+      }
+    ],
+    "logradouro": "RUA VALDEMAR KLEIN",
+    "numero": "356",
+    "municipio": "LUIS EDUARDO MAGALHAES",
+    "bairro": "JARDIM IMPERIAL",
+    "uf": "BA",
+    "cep": "47.850-000",
+    "email": "joicy.inacio@soloseplantas.com.br",
+    "telefone": "(77) 9843-5601",
+    "data_situacao": "27/04/2016",
+    "cnpj": "24.678.052/0001-80",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "25000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:52226073002909": {
+    "abertura": "11/11/2008",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "BRASIF S/A EXPORTACAO IMPORTACAO",
+    "porte": "DEMAIS",
+    "natureza_juridica": "205-4 - Sociedade Anônima Fechada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-08",
+        "text": "Manutenção e reparação de máquinas, equipamentos e aparelhos para transporte e elevação de cargas"
+      },
+      {
+        "code": "33.14-7-16",
+        "text": "Manutenção e reparação de tratores, exceto agrícolas"
+      },
+      {
+        "code": "33.14-7-17",
+        "text": "Manutenção e reparação de máquinas e equipamentos de terraplenagem, pavimentação e construção, exceto tratores"
+      },
+      {
+        "code": "46.14-1-00",
+        "text": "Representantes comerciais e agentes do comércio de máquinas, equipamentos, embarcações e aeronaves"
+      },
+      {
+        "code": "78.20-5-00",
+        "text": "Locação de mão-de-obra temporária"
+      },
+      {
+        "code": "80.20-0-01",
+        "text": "Atividades de monitoramento de sistemas de segurança eletrônico"
+      }
+    ],
+    "logradouro": "Q ACSU SE 110 AVENIDA JOAQUIM TEOTONIO SEGURADO",
+    "numero": "S/N",
+    "complemento": "CONJ 1 LOTE 05",
+    "municipio": "PALMAS",
+    "bairro": "PLANO DIRETOR SUL",
+    "uf": "TO",
+    "cep": "77.024-002",
+    "email": "arnaldo.martins@brasif.com.br",
+    "telefone": "(13) 2129-3759",
+    "data_situacao": "11/11/2008",
+    "cnpj": "52.226.073/0029-09",
+    "ultima_atualizacao": "2025-09-03T17:39:33.146Z",
+    "status": "OK",
+    "fantasia": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:11239851000108": {
+    "abertura": "07/10/2009",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "AGRO FORTE MAQUINAS E TECNOLOGIA LTDA",
+    "fantasia": "AGRO FORTE",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.12-9-01",
+        "text": "Representantes comerciais e agentes do comércio de veículos automotores"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-07",
+        "text": "Serviços de instalação, manutenção e reparação de acessórios para veículos automotores"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "JEAN RONIS DOS SANTOS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA BELEM BRASILIA",
+    "numero": "SN",
+    "complemento": "QUADRA02 LOTE 02",
+    "municipio": "URUACU",
+    "bairro": "JARDIM NOSSA SENHORA D'ABADIA",
+    "uf": "GO",
+    "cep": "76.400-000",
+    "email": "financeiro@agrofortestara.com.br",
+    "telefone": "(62) 3357-2574",
+    "data_situacao": "07/10/2009",
+    "cnpj": "11.239.851/0001-08",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "15000000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "07/10/2009",
+      "data_exclusao": "31/12/2013",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:04880535000155": {
+    "abertura": "07/02/2002",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "RB COMERCIO DE PECAS E SERVICOS MECANICOS LTDA",
+    "fantasia": "RB BATERIAS AUTOCENTER",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-01",
+        "text": "Comércio por atacado de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "43.13-4-00",
+        "text": "Obras de terraplenagem"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "46.61-3-00",
+        "text": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário; partes e peças"
+      },
+      {
+        "code": "46.62-1-00",
+        "text": "Comércio atacadista de máquinas, equipamentos para terraplenagem, mineração e construção; partes e peças"
+      },
+      {
+        "code": "46.81-8-05",
+        "text": "Comércio atacadista de lubrificantes"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.89-0-99",
+        "text": "Comércio varejista de outros produtos não especificados anteriormente"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "77.32-2-01",
+        "text": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MARIA APARECIDA ALVES ARRUDA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "FELIPE ALVES ARRUDA",
+        "qual": "05-Administrador"
+      },
+      {
+        "nome": "JAIRO ARRUDA DA COSTA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA D",
+    "numero": "363",
+    "municipio": "GURUPI",
+    "bairro": "ENG. WALDIR LINS",
+    "uf": "TO",
+    "cep": "77.423-030",
+    "telefone": "(63) 3141-477 / (63) 3141-477",
+    "data_situacao": "30/09/2005",
+    "cnpj": "04.880.535/0001-55",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "500000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": "01/01/2021",
+      "data_exclusao": "31/12/2023",
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:07417204000171": {
+    "abertura": "18/05/2005",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "4 RODAS COM. DE PECAS E ACESSORIOS P/ VEICULOS LTDA",
+    "fantasia": "4 RODAS CENTRO AUTOMOTIVO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-04",
+        "text": "Serviços de alinhamento e balanceamento de veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "BELCHIOR GONCALVES CAVALCANTE",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "JOSE MARIA GONCALVES CAVALCANTE",
+        "qual": "22-Sócio"
+      }
+    ],
+    "logradouro": "AVENIDA PIAUI",
+    "numero": "874",
+    "complemento": "QD. 131 LT. 24-A",
+    "municipio": "GURUPI",
+    "bairro": "CENTRO",
+    "uf": "TO",
+    "cep": "77.410-030",
+    "telefone": "(63) 3128-178 / (63) 3128-178",
+    "data_situacao": "18/05/2005",
+    "cnpj": "07.417.204/0001-71",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "220000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:38222272000109": {
+    "abertura": "25/08/2020",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "KC AGRONEGOCIO E SERVICOS AGRICOLAS LTDA",
+    "fantasia": "KC AGRONEGOCIOS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "63.99-2-00",
+        "text": "Outras atividades de prestação de serviços de informação não especificadas anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "01.61-0-03",
+        "text": "Serviço de preparação de terreno, cultivo e colheita"
+      },
+      {
+        "code": "01.61-0-99",
+        "text": "Atividades de apoio à agricultura não especificadas anteriormente"
+      },
+      {
+        "code": "73.19-0-02",
+        "text": "Promoção de vendas"
+      },
+      {
+        "code": "74.90-1-03",
+        "text": "Serviços de agronomia e de consultoria às atividades agrícolas e pecuárias"
+      },
+      {
+        "code": "82.11-3-00",
+        "text": "Serviços combinados de escritório e apoio administrativo"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "TAYNARA LUANE KUNAN COLODEL",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "QUADRA ORLA 14 ALAMEDA 12",
+    "numero": "17",
+    "complemento": "LOTE 17 QUADRA24 SALA 03D",
+    "municipio": "PALMAS",
+    "bairro": "GRACIOSA - ORLA 14",
+    "uf": "TO",
+    "cep": "77.026-060",
+    "email": "taynarakunan@hotmail.com",
+    "telefone": "(63) 8424-1088",
+    "data_situacao": "25/08/2020",
+    "cnpj": "38.222.272/0001-09",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "105000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:52394857000137": {
+    "abertura": "02/10/2023",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "NORTE EQUIPAMENTOS E SERVICOS PARA POSTOS MANUTENCAO E INSTALACAO LTDA",
+    "fantasia": "NP INSTALACOES E SERVICOS",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.12-1-02",
+        "text": "Manutenção e reparação de aparelhos e instrumentos de medida, teste e controle"
+      },
+      {
+        "code": "33.29-5-99",
+        "text": "Instalação de outros equipamentos não especificados anteriormente"
+      },
+      {
+        "code": "46.69-9-01",
+        "text": "Comércio atacadista de bombas e compressores; partes e peças"
+      },
+      {
+        "code": "46.69-9-99",
+        "text": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente; partes e peças"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.44-0-03",
+        "text": "Comércio varejista de materiais hidráulicos"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "CLAUDIA DARLATH FERREIRA SILVA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AV MARGINAL BERNARDO SAYAO",
+    "numero": "335",
+    "complemento": "QUADRA02 LOTE 07",
+    "municipio": "PARAISO DO TOCANTINS",
+    "bairro": "RESIDENCIAL VALE DO ARAGUAIA",
+    "uf": "TO",
+    "cep": "77.600-000",
+    "email": "np-instalacoes@hotmail.com",
+    "telefone": "(63) 8425-8958/ (0000) 0000-0000",
+    "data_situacao": "02/10/2023",
+    "cnpj": "52.394.857/0001-37",
+    "ultima_atualizacao": "2025-09-01T15:49:22.253Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "80000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:42295114000156": {
+    "abertura": "11/06/2021",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "LIDER DIESEL COMERCIO DE PECAS AUTOMOTIVAS LTDA",
+    "fantasia": "LIDER DIESEL",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-07",
+        "text": "Serviços de instalação, manutenção e reparação de acessórios para veículos automotores"
+      },
+      {
+        "code": "45.30-7-04",
+        "text": "Comércio a varejo de peças e acessórios usados para veículos automotores"
+      },
+      {
+        "code": "45.30-7-05",
+        "text": "Comércio a varejo de pneumáticos e câmaras-de-ar"
+      },
+      {
+        "code": "47.32-6-00",
+        "text": "Comércio varejista de lubrificantes"
+      },
+      {
+        "code": "47.52-1-00",
+        "text": "Comércio varejista especializado de equipamentos de telefonia e comunicação"
+      },
+      {
+        "code": "47.53-9-00",
+        "text": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "DURVAL GRACIANO DA SILVA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "KEILLA JANE FERREIRA DE SOUZA SILVA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA H",
+    "numero": "1360",
+    "complemento": "QUADRA11 LOTE 20",
+    "municipio": "GURUPI",
+    "bairro": "WALDIR LINS I",
+    "uf": "TO",
+    "cep": "77.423-060",
+    "email": "pettfernandes@hotmail.com",
+    "telefone": "(63) 8449-1660",
+    "data_situacao": "11/06/2021",
+    "cnpj": "42.295.114/0001-56",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:08212238000192": {
+    "abertura": "07/08/2006",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "J. B. DE OLIVEIRA SERVICO",
+    "fantasia": "BATISTA LOCACAO E LIMPA FOSSA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "77.39-0-99",
+        "text": "Aluguel de outras máquinas e equipamentos comerciais e industriais não especificados anteriormente, sem operador"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "77.32-2-02",
+        "text": "Aluguel de andaimes"
+      },
+      {
+        "code": "77.32-2-01",
+        "text": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes"
+      },
+      {
+        "code": "37.02-9-00",
+        "text": "Atividades relacionadas a esgoto, exceto a gestão de redes"
+      },
+      {
+        "code": "77.19-5-99",
+        "text": "Locação de outros meios de transporte não especificados anteriormente, sem condutor"
+      }
+    ],
+    "logradouro": "RUA 13 DE MAIO",
+    "numero": "604",
+    "municipio": "PARAISO DO TOCANTINS",
+    "bairro": "CENTRO",
+    "uf": "TO",
+    "cep": "77.600-000",
+    "telefone": "(63) 3361-1107 / (63) 3361-1107 / (63) 3361-1107",
+    "data_situacao": "07/08/2006",
+    "cnpj": "08.212.238/0001-92",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "200000.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2008",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:09094617000198": {
+    "abertura": "20/09/2007",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ENGENORTE TRANSFORMADORES ELETRICOS LTDA",
+    "fantasia": "ENGENORTE",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "33.13-9-01",
+        "text": "Manutenção e reparação de geradores, transformadores e motores elétricos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "27.10-4-02",
+        "text": "Fabricação de transformadores, indutores, conversores, sincronizadores e semelhantes, peças e acessórios"
+      },
+      {
+        "code": "33.21-0-00",
+        "text": "Instalação de máquinas e equipamentos industriais"
+      },
+      {
+        "code": "42.21-9-02",
+        "text": "Construção de estações e redes de distribuição de energia elétrica"
+      },
+      {
+        "code": "42.21-9-03",
+        "text": "Manutenção de redes de distribuição de energia elétrica"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MARIO DE CASTRO PILLAR",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA GOIAS",
+    "numero": "427",
+    "complemento": "QUADRA02 LOTE 03",
+    "municipio": "GURUPI",
+    "bairro": "SETOR AEROPORTO III",
+    "uf": "TO",
+    "cep": "77.440-770",
+    "email": "engenorte2011@gmail.com",
+    "telefone": "(63) 8467-7364 / (63) 9982-0807 / (63) 3312-4737",
+    "data_situacao": "20/09/2007",
+    "cnpj": "09.094.617/0001-98",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "220000.00",
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/01/2024",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:28514009000130": {
+    "abertura": "28/08/2017",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "A.S. BAYMA SERVICOS TECNICOS E SEGURANCA DO TRABALHO LTDA",
+    "fantasia": "BAYMA SERVICOS E SEGURANCA DO TRABALHO",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "33.11-2-00",
+        "text": "Manutenção e reparação de tanques, reservatórios metálicos e caldeiras, exceto para veículos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.14-7-03",
+        "text": "Manutenção e reparação de válvulas industriais"
+      },
+      {
+        "code": "33.14-7-04",
+        "text": "Manutenção e reparação de compressores"
+      },
+      {
+        "code": "33.14-7-07",
+        "text": "Manutenção e reparação de máquinas e aparelhos de refrigeração e ventilação para uso industrial e comercial"
+      },
+      {
+        "code": "33.14-7-08",
+        "text": "Manutenção e reparação de máquinas, equipamentos e aparelhos para transporte e elevação de cargas"
+      },
+      {
+        "code": "33.14-7-09",
+        "text": "Manutenção e reparação de máquinas de escrever, calcular e de outros equipamentos não eletrônicos para escritório"
+      },
+      {
+        "code": "33.14-7-10",
+        "text": "Manutenção e reparação de máquinas e equipamentos para uso geral não especificados anteriormente"
+      },
+      {
+        "code": "71.19-7-04",
+        "text": "Serviços de perícia técnica relacionados à segurança do trabalho"
+      },
+      {
+        "code": "85.99-6-04",
+        "text": "Treinamento em desenvolvimento profissional e gerencial"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALIOMAR SILVA BAYMA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "RUA PRESIDENTE JUSCELINO KUBITSCHEK",
+    "numero": "744",
+    "complemento": "QUADRA247 LOTE 07",
+    "municipio": "GURUPI",
+    "bairro": "SETOR CENTRAL",
+    "uf": "TO",
+    "cep": "77.405-105",
+    "telefone": "(63) 3312-2852",
+    "data_situacao": "28/08/2017",
+    "cnpj": "28.514.009/0001-30",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "95000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:05990133000176": {
+    "abertura": "04/11/2003",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "LUCIVEL VEICULOS E PECAS LTDA",
+    "fantasia": "LUCIVEL",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.11-1-01",
+        "text": "Comércio a varejo de automóveis, camionetas e utilitários novos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      },
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-02",
+        "text": "Serviços de lanternagem ou funilaria e pintura de veículos automotores"
+      },
+      {
+        "code": "45.20-0-03",
+        "text": "Serviços de manutenção e reparação elétrica de veículos automotores"
+      },
+      {
+        "code": "45.20-0-04",
+        "text": "Serviços de alinhamento e balanceamento de veículos automotores"
+      },
+      {
+        "code": "45.12-9-01",
+        "text": "Representantes comerciais e agentes do comércio de veículos automotores"
+      },
+      {
+        "code": "66.19-3-99",
+        "text": "Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "LUCIANO JUNIOR PINTO",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "ALANNA ANDRADE PINTO",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AV BERNARDO SAYAO",
+    "numero": "1037",
+    "municipio": "CERES",
+    "bairro": "CENTRO",
+    "uf": "GO",
+    "cep": "76.300-000",
+    "email": "executivo@lucivel.com.br",
+    "telefone": "(62) 3307-3030",
+    "data_situacao": "04/11/2003",
+    "cnpj": "05.990.133/0001-76",
+    "ultima_atualizacao": "2025-09-02T14:45:10.697Z",
+    "status": "OK",
+    "complemento": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "2100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:05609304000174": {
+    "abertura": "16/04/2003",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ANTONIO APARECIDO MARTINS",
+    "fantasia": "OFICINA ELETRO BRASIL",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "47.57-1-00",
+        "text": "Comércio varejista especializado de peças e acessórios para aparelhos eletroeletrônicos para uso doméstico, exceto informática e comunicação"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "33.13-9-01",
+        "text": "Manutenção e reparação de geradores, transformadores e motores elétricos"
+      },
+      {
+        "code": "47.53-9-00",
+        "text": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo"
+      }
+    ],
+    "logradouro": "AVENIDA PEDRO FELINTO REGO",
+    "numero": "439",
+    "municipio": "RIALMA",
+    "bairro": "CENTRO",
+    "uf": "GO",
+    "cep": "76.310-000",
+    "data_situacao": "16/04/2003",
+    "cnpj": "05.609.304/0001-74",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "complemento": "",
+    "email": "",
+    "telefone": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": true,
+      "data_opcao": "01/07/2007",
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }
