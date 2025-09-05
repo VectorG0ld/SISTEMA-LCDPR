@@ -22,6 +22,15 @@ from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from PySide6.QtPrintSupport import QPrinter
 
+# Mapa (WebEngine) + abrir links externos
+try:
+    from PySide6.QtWebEngineWidgets import QWebEngineView
+except Exception:
+    QWebEngineView = None  # fallback se QtWebEngine não estiver disponível
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
+
 from contextlib import contextmanager
 import shiboken6
 
@@ -334,6 +343,24 @@ class Database:
         self.conn.execute("PRAGMA temp_store=MEMORY")
         self.conn.execute("PRAGMA cache_size=-200000")  # ~200 MB (ajuste se quiser)
 
+        self._migrate_schema()
+        self._migrate_add_data_ord()
+        self._create_indexes()
+        self._migrate_imovel_latlon()  # <--- garante lat/lon no imóvel
+
+    def _migrate_imovel_latlon(self):
+        cur = self.conn.cursor()
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(imovel_rural)").fetchall()]
+        altered = False
+        if "lat" not in cols:
+            cur.execute("ALTER TABLE imovel_rural ADD COLUMN lat REAL")
+            altered = True
+        if "lon" not in cols:
+            cur.execute("ALTER TABLE imovel_rural ADD COLUMN lon REAL")
+            altered = True
+        if altered:
+            self.conn.commit()
+    
     def _migrate_schema(self):
         """Adiciona a coluna usuario em lancamento se ela ainda não existir."""
         cursor = self.conn.cursor()
@@ -2834,11 +2861,12 @@ class GerenciamentoParticipantesWidget(QWidget):
         self._build_ui(); self._load_participantes_column_filter(); self.carregar_participantes()
 
     def _build_ui(self):
-        tl = QHBoxLayout(); tl.setContentsMargins(0,0,10,10)
+        tl = QHBoxLayout(); tl.setContentsMargins(12, 8, 12, 8)
         self.btn_novo = QPushButton("Novo Participante"); self.btn_novo.setIcon(QIcon.fromTheme("document-new")); self.btn_novo.clicked.connect(self.novo_participante); tl.addWidget(self.btn_novo)
         self.btn_editar = QPushButton("Editar"); self.btn_editar.setEnabled(False); self.btn_editar.setIcon(QIcon.fromTheme("document-edit")); self.btn_editar.clicked.connect(self.editar_participante); tl.addWidget(self.btn_editar)
         self.btn_excluir = QPushButton("Excluir"); self.btn_excluir.setEnabled(False); self.btn_excluir.setIcon(QIcon.fromTheme("edit-delete")); self.btn_excluir.clicked.connect(self.excluir_participante); tl.addWidget(self.btn_excluir)
         self.btn_importar = QPushButton("Importar"); self.btn_importar.setIcon(QIcon.fromTheme("document-import")); self.btn_importar.clicked.connect(self.importar_participantes); tl.addWidget(self.btn_importar)
+        self.btn_exportar = QPushButton("Exportação"); self.btn_exportar.setIcon(QIcon.fromTheme("document-export")); self.btn_exportar.clicked.connect(self.exportar_participantes); tl.addWidget(self.btn_exportar)
         self.btn_cadastrar_novos = QPushButton("Cadastrar novos participantes"); self.btn_cadastrar_novos.setIcon(QIcon.fromTheme("list-add")); self.btn_cadastrar_novos.clicked.connect(self.cadastrar_novos_participantes); tl.addWidget(self.btn_cadastrar_novos)
         self.search_part = QLineEdit(); self.search_part.setPlaceholderText("Pesquisar participantes…"); self.search_part.textChanged.connect(self._filter_participantes); tl.addWidget(self.search_part)
 
@@ -2912,7 +2940,87 @@ class GerenciamentoParticipantesWidget(QWidget):
             self.carregar_participantes()
         except Exception:
             QMessageBox.warning(self, "Importação Falhou", "Arquivo não segue o layout esperado e não foi importado.")
-    
+
+    def exportar_participantes(self):
+        # Janela com campo de pasta + "..."
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Exportar participantes")
+        form = QFormLayout(dlg)
+
+        w = QWidget()
+        hl = QHBoxLayout(w)
+        hl.setContentsMargins(0, 0, 0, 0)
+
+        ed_dir = QLineEdit()
+        btn_browse = QToolButton()
+        btn_browse.setText("…")
+
+        def _pick_dir():
+            p = QFileDialog.getExistingDirectory(self, "Selecionar pasta de exportação", "")
+            if p:
+                ed_dir.setText(p)
+
+        btn_browse.clicked.connect(_pick_dir)
+        hl.addWidget(ed_dir)
+        hl.addWidget(btn_browse)
+        form.addRow("Pasta de exportação:", w)
+
+        # Carrega pasta padrão de um JSON (se existir)
+        try:
+            cfg_dir = os.path.join(PROJECT_DIR, "layout importacao", "participantes")
+            os.makedirs(cfg_dir, exist_ok=True)
+            cfg_file = os.path.join(cfg_dir, "export_participantes_path.json")
+            if os.path.exists(cfg_file):
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    ed_dir.setText(data.get("export_folder", ""))
+        except Exception:
+            pass
+
+        # Botões OK/Cancelar
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        form.addWidget(bb)
+        bb.accepted.connect(dlg.accept)
+        bb.rejected.connect(dlg.reject)
+
+        if not dlg.exec():
+            return
+
+        out_dir = ed_dir.text().strip()
+        if not out_dir:
+            QMessageBox.warning(self, "Caminho inválido", "Informe a pasta de exportação.")
+            return
+
+        # Salva a pasta escolhida no JSON
+        try:
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                json.dump({"export_folder": out_dir}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            QMessageBox.warning(self, "Aviso", f"Não foi possível salvar a pasta padrão:\n{e}")
+
+        # Monta o nome do arquivo
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_path = os.path.join(out_dir, f"participantes_{ts}.txt")
+
+        # Busca participantes e escreve no layout de importação: cpf_cnpj|nome|tipo
+        try:
+            rows = self.db.fetch_all(
+                "SELECT cpf_cnpj, nome, tipo_contraparte FROM participante ORDER BY nome"
+            )
+            if not rows:
+                QMessageBox.information(self, "Sem dados", "Não há participantes para exportar.")
+                return
+
+            with open(out_path, "w", encoding="utf-8", newline="") as f:
+                for cpf, nome, tipo in rows:
+                    f.write(f"{(cpf or '').strip()}|{(nome or '').strip()}|{int(tipo)}\n")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao exportar arquivo:\n{e}")
+            return
+
+        QMessageBox.information(self, "Exportação concluída", f"Arquivo gerado:\n{out_path}")
+
     def cadastrar_novos_participantes(self):
         import importlib.util, json, os
         dlg = QDialog(self)
@@ -3070,12 +3178,238 @@ class CadastrosWidget(QTabWidget):
         self.addTab(GerenciamentoContasWidget(), "Contas")
         self.addTab(GerenciamentoParticipantesWidget(), "Participantes")
         self.addTab(QWidget(), "Culturas")
-        self.addTab(QWidget(), "Áreas")
+        self.addTab(GerenciamentoAreasWidget(), "Áreas")
         self.addTab(QWidget(), "Estoque")
         icons = ["home","credit-card","user-group","tree","map","box"]
         for i,ic in enumerate(icons):
             self.setTabIcon(i, QIcon.fromTheme(ic))
 
+class GerenciamentoAreasWidget(QWidget):
+    """
+    Lista as Áreas (area_producao JOIN imovel_rural) e exibe um mapa ao lado.
+    Ao selecionar uma linha, centraliza o mapa na fazenda. Se precisar, geocodifica
+    o endereço e salva lat/lon no imovel.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.db = Database()
+        self._build_ui()
+        self._carregar_areas()
+        self._render_map()  # render inicial
+
+    # ---------- UI ----------
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        # Topbar com busca + botão "Abrir no Maps"
+        tb = QHBoxLayout()
+        self.search = QLineEdit(); self.search.setPlaceholderText("Pesquisar por imóvel/cultura…")
+        self.search.textChanged.connect(self._filtrar)
+        self.btn_open_maps = QPushButton("Abrir no Maps"); self.btn_open_maps.clicked.connect(self._abrir_no_maps)
+        tb.addWidget(self.search)
+        tb.addWidget(self.btn_open_maps)
+        root.addLayout(tb)
+
+        # Splitter: tabela (esq) + mapa (dir)
+        self.split = QSplitter()
+        self.tabela = QTableWidget(0, 6)
+        self.tabela.setHorizontalHeaderLabels(["Imóvel", "Cultura", "Área (ha)", "Plantio", "Colheita Est.", "UF"])
+        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabela.setSelectionMode(QTableWidget.SingleSelection)
+        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabela.itemSelectionChanged.connect(self._on_select_row)
+        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        self.split.addWidget(self.tabela)
+
+        if QWebEngineView:
+            self.map = QWebEngineView()
+        else:
+            # Fallback: instrução se QtWebEngine não estiver disponível
+            self.map = QTextBrowser()
+            self.map.setText("Para visualizar o mapa, instale o Qt WebEngine (PySide6-WebEngine).")
+        self.split.addWidget(self.map)
+        self.split.setStretchFactor(0, 1)
+        self.split.setStretchFactor(1, 2)
+        root.addWidget(self.split)
+
+    # ---------- Dados ----------
+    def _carregar_areas(self):
+        # Junte área_producao + imovel_rural para exibir e guardar o ID/Endereço do imóvel
+        sql = """
+            SELECT a.id,
+                   i.id AS imovel_id,
+                   i.nome_imovel,
+                   i.endereco, i.num, i.bairro, i.uf, i.cep,
+                   i.lat, i.lon,
+                   c.nome AS cultura,
+                   a.area, IFNULL(a.data_plantio,''), IFNULL(a.data_colheita_estimada,'')
+            FROM area_producao a
+            JOIN imovel_rural i ON i.id = a.imovel_id
+            JOIN cultura c      ON c.id = a.cultura_id
+            ORDER BY i.nome_imovel, c.nome
+        """
+        rows = self.db.fetch_all(sql)
+        self.tabela.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            (area_id, imovel_id, nome_imovel, endr, num, bairro, uf, cep, lat, lon,
+             cultura, area_ha, plantio, colheita) = row
+
+            vals = [nome_imovel, cultura, f"{float(area_ha or 0):.2f}",
+                    self._fmt_data(plantio), self._fmt_data(colheita), uf or ""]
+            for c, v in enumerate(vals):
+                it = QTableWidgetItem(v)
+                it.setTextAlignment(Qt.AlignCenter)
+                self.tabela.setItem(r, c, it)
+
+            # Guarda payloads na 1ª coluna
+            payload = {
+                "area_id": area_id,
+                "imovel_id": imovel_id,
+                "addr": self._compose_addr(endr, num, bairro, uf, cep),
+                "lat": lat, "lon": lon
+            }
+            self.tabela.item(r, 0).setData(Qt.UserRole, payload)
+
+        # badge/contador (se você usa global)
+        try:
+            ListAccelerator.build_cache(self.tabela)
+            ListCounter.refresh(self.tabela)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _fmt_data(s: str):
+        s = (s or "").strip()
+        if len(s) == 10 and "-" in s:  # yyyy-mm-dd -> dd/mm/yyyy
+            y, m, d = s.split("-"); return f"{int(d):02d}/{int(m):02d}/{y}"
+        return s or ""
+
+    @staticmethod
+    def _compose_addr(endr, num, bairro, uf, cep):
+        parts = [str(endr or "").strip()]
+        if num: parts.append(str(num).strip())
+        if bairro: parts.append(str(bairro).strip())
+        # cod_mun é código IBGE, então evitamos aqui e confiamos em CEP/UF
+        if uf: parts.append(str(uf).strip())
+        if cep: parts.append(str(cep).strip())
+        parts.append("Brasil")
+        return ", ".join([p for p in parts if p])
+
+    # ---------- Filtro ----------
+    def _filtrar(self, txt: str):
+        txt = (txt or "").casefold()
+        for r in range(self.tabela.rowCount()):
+            vis = any((self.tabela.item(r, c).text().casefold().find(txt) >= 0) for c in range(self.tabela.columnCount()))
+            self.tabela.setRowHidden(r, not vis)
+        try:
+            ListCounter.refresh(self.tabela)
+        except Exception:
+            pass
+
+    # ---------- Seleção/ação ----------
+    def _on_select_row(self):
+        idxs = self.tabela.selectionModel().selectedRows()
+        if not idxs: return
+        r = idxs[0].row()
+        payload = self.tabela.item(r, 0).data(Qt.UserRole) or {}
+        imovel_id = payload.get("imovel_id")
+        addr = payload.get("addr")
+        lat, lon = payload.get("lat"), payload.get("lon")
+
+        if lat is None or lon is None:
+            lat, lon = self._ensure_geocode(imovel_id, addr)
+            # atualiza payload em memória
+            p = self.tabela.item(r, 0).data(Qt.UserRole) or {}
+            p["lat"], p["lon"] = lat, lon
+            self.tabela.item(r, 0).setData(Qt.UserRole, p)
+
+        self._render_map(selected_imovel_id=imovel_id)
+
+    def _abrir_no_maps(self):
+        idxs = self.tabela.selectionModel().selectedRows()
+        if not idxs: return
+        r = idxs[0].row()
+        addr = (self.tabela.item(r, 0).data(Qt.UserRole) or {}).get("addr", "")
+        if addr:
+            from urllib.parse import quote
+            url = QUrl(f"https://www.google.com/maps/search/?api=1&query={quote(addr)}")
+            QDesktopServices.openUrl(url)
+
+    # ---------- Geocode ----------
+    def _ensure_geocode(self, imovel_id: int, address: str):
+        # se já houver, devolve
+        row = self.db.fetch_one("SELECT lat, lon FROM imovel_rural WHERE id=?", (imovel_id,))
+        if row and row[0] is not None and row[1] is not None:
+            return row[0], row[1]
+
+        # geocodifica (Nominatim) – respeite limites em produção.
+        try:
+            import requests, time
+            resp = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": address, "format": "json", "limit": 1, "addressdetails": 0},
+                headers={"User-Agent": "AgroApp/1.0 (contato@exemplo.com)"}, timeout=8
+            )
+            if resp.ok:
+                js = resp.json()
+                if js:
+                    lat = float(js[0]["lat"]); lon = float(js[0]["lon"])
+                    self.db.execute_query("UPDATE imovel_rural SET lat=?, lon=? WHERE id=?", (lat, lon, imovel_id))
+                    return lat, lon
+        except Exception:
+            pass
+        return None, None
+
+    # ---------- Mapa (Leaflet) ----------
+    def _render_map(self, selected_imovel_id: int | None = None):
+        # Coleta todos os imóveis com coordenadas
+        imoveis = self.db.fetch_all("SELECT id, nome_imovel, lat, lon FROM imovel_rural WHERE lat IS NOT NULL AND lon IS NOT NULL")
+        if not QWebEngineView:
+            # fallback: mostra a lista de coordenadas
+            html = "<h3>Imóveis geocodificados</h3><ul>"
+            for (iid, nome, lat, lon) in imoveis:
+                sel = " (selecionado)" if iid == selected_imovel_id else ""
+                html += f"<li>{nome}: {lat:.5f}, {lon:.5f}{sel}</li>"
+            html += "</ul>"
+            self.map.setText(html)
+            return
+
+        # Centro padrão
+        if selected_imovel_id:
+            row = next(((n, la, lo) for (i, n, la, lo) in imoveis if i == selected_imovel_id), None)
+            center = (row[1], row[2]) if row else ((-15.7801, -47.9292))  # Brasilia fallback
+        else:
+            center = (imoveis[0][2], imoveis[0][3]) if imoveis else (-15.7801, -47.9292)
+
+        # Gera HTML do Leaflet
+        markers_js = []
+        for (iid, nome, lat, lon) in imoveis:
+            color = "red" if iid == selected_imovel_id else "blue"
+            markers_js.append(
+                f"L.circleMarker([{lat},{lon}], {{radius: 8, color: '{color}'}}).addTo(map).bindPopup({json.dumps(nome)});"
+            )
+
+        html = f"""
+<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<style>html,body,#map{{height:100%;margin:0;padding:0}}</style>
+</head><body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+  var map = L.map('map').setView([{center[0]},{center[1]}], 13);
+  L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  }}).addTo(map);
+  {''.join(markers_js)}
+</script>
+</body></html>
+"""
+        self.map.setHtml(html)
+
+# --- JANELA PRINCIPAL ---
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__(); self.db = Database()
