@@ -4389,7 +4389,7 @@ class MainWindow(QMainWindow):
 
         btn_danfe.clicked.connect(_open_danfe)
         btn_folha.clicked.connect(lambda: _placeholder("Folha de pagamento"))
-        btn_cte.clicked.connect(lambda: _placeholder("CTe"))
+        btn_cte.clicked.connect(lambda: (dlg.accept(), self.open_importador_cte_tab()))
         btn_talao.clicked.connect(_open_talao)
         btn_scan.clicked.connect(lambda: _placeholder("Notas digitalizadas"))
 
@@ -4418,6 +4418,24 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(importer_widget, "Importar DANFE (Fiscal.io)")
         self.tabs.setCurrentWidget(importer_widget)
 
+    def open_importador_cte_tab(self):
+        # evita duplicar a aba
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if w and getattr(w, 'objectName', lambda: '')() == 'tab_import_cte':
+                self.tabs.setCurrentIndex(i)
+                return
+        try:
+            mod = self._load_importador_cte_module()
+            importer_widget = mod.ImportadorCTe(self)
+            importer_widget.setObjectName('tab_import_cte')
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao carregar Importador CT-e:\n{e}")
+            return
+        self.tabs.addTab(importer_widget, "Importar CTe")
+        self.tabs.setCurrentWidget(importer_widget)
+
+
     def _load_importador_danfe_module(self):
         import importlib.util, os
         # Caminho padrão solicitado: ./Importação DANFE/Importador XML.py
@@ -4433,6 +4451,23 @@ class MainWindow(QMainWindow):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
+
+    # ISSO (inexistente) — vamos ADICIONAR:
+    def _load_importador_cte_module(self):
+        import importlib.util, os
+        base = PROJECT_DIR
+        preferred = os.path.join(base, "Importação CTe", "Importador CTe.py")
+        fallback  = os.path.join(base, "Importador CTe.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'Importador CTe.py'.")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("importador_cte", filepath)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
 
     # INSIRA DEPOIS DE open_importador_danfe_tab():
     def _load_automacao_energia_module(self):

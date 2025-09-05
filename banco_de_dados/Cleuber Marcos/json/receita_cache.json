@@ -13828,5 +13828,284 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:48994162000119": {
+    "abertura": "28/12/2022",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "TRANSPORTES MF LTDA",
+    "fantasia": "BRASIL CARGAS",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      },
+      {
+        "code": "49.30-2-04",
+        "text": "Transporte rodoviário de mudanças"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MARCOS AURELIO SANTOS FIDELIS",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "AVENIDA GOIÁS",
+    "numero": "486",
+    "complemento": "SALA 01",
+    "municipio": "GOIANESIA",
+    "bairro": "SETOR SUL",
+    "uf": "GO",
+    "cep": "76.382-187",
+    "email": "marcosfidelis2022@icloud.com",
+    "telefone": "(62) 8241-9389",
+    "data_situacao": "28/12/2022",
+    "cnpj": "48.994.162/0001-19",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "10000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:57437347000113": {
+    "abertura": "25/09/2024",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "BURITI TRANSPORTADORA LTDA",
+    "fantasia": "BURITI TRANSPORTADORA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal."
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "49.30-2-04",
+        "text": "Transporte rodoviário de mudanças"
+      },
+      {
+        "code": "52.12-5-00",
+        "text": "Carga e descarga"
+      },
+      {
+        "code": "52.50-8-04",
+        "text": "Organização logística do transporte de carga"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "FILIPE RODRIGUES DA CUNHA GUIMARAES",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "MARIA LUIZA RODRIGUES GUIMARAES",
+        "qual": "22-Sócio"
+      }
+    ],
+    "logradouro": "Q QUADRA 01, SN RUA 04 COM RUA 03",
+    "numero": "SN",
+    "complemento": "LOTE 01 SALA 04",
+    "municipio": "PORTO NACIONAL",
+    "bairro": "LUZIMANGUES",
+    "uf": "TO",
+    "cep": "77.500-000",
+    "email": "transportadora@grupoburiti.com",
+    "telefone": "(63) 8444-6192/ (0000) 0000-0000",
+    "data_situacao": "25/09/2024",
+    "cnpj": "57.437.347/0001-13",
+    "ultima_atualizacao": "2025-08-28T13:35:41.360Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "100000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:20163636000404": {
+    "abertura": "02/10/2024",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "R.M.S TRANSPORTES E COMERCIO LTDA",
+    "fantasia": "RMS TRANSPORTES",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.23-1-99",
+        "text": "Comércio atacadista de matérias-primas agrícolas não especificadas anteriormente"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal"
+      },
+      {
+        "code": "49.30-2-04",
+        "text": "Transporte rodoviário de mudanças"
+      },
+      {
+        "code": "52.50-8-05",
+        "text": "Operador de transporte multimodal - OTM"
+      }
+    ],
+    "logradouro": "RUA TAMANDARE",
+    "numero": "567",
+    "complemento": "QUADRA418",
+    "municipio": "IMPERATRIZ",
+    "bairro": "MERCADINHO",
+    "uf": "MA",
+    "cep": "65.901-360",
+    "email": "avantecontabilidade@outlook.com",
+    "telefone": "(99) 8184-0099",
+    "data_situacao": "02/10/2024",
+    "cnpj": "20.163.636/0004-04",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "50000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:28788202000169": {
+    "abertura": "04/10/2017",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ALEX CARIOCA TRANSPORTES LTDA",
+    "fantasia": "CARIOCA TRANSPORTES",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "ALEX CARIOCA DE OLIVEIRA",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "QUADRA QUADRA 09 RUA 06 LT 06",
+    "numero": "S/N",
+    "complemento": "SETOR PORTAL DO LAGO",
+    "municipio": "PORTO NACIONAL",
+    "bairro": "DISTRITO DE LUZIMANGUES",
+    "uf": "TO",
+    "cep": "77.500-000",
+    "email": "alexcarioca4@hotmail.com",
+    "telefone": "(63) 9280-8539",
+    "data_situacao": "04/10/2017",
+    "cnpj": "28.788.202/0001-69",
+    "ultima_atualizacao": "2025-07-13T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "93700.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }
