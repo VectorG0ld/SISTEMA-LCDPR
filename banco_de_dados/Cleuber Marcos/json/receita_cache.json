@@ -14445,5 +14445,119 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:00394460005887": {
+    "abertura": "10/10/1977",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "MINISTERIO DA FAZENDA",
+    "fantasia": "RECEITA FEDERAL",
+    "porte": "DEMAIS",
+    "natureza_juridica": "101-5 - Órgão Público do Poder Executivo Federal",
+    "atividade_principal": [
+      {
+        "code": "84.11-6-00",
+        "text": "Administração pública em geral"
+      }
+    ],
+    "logradouro": "ESP DOS MINISTERIOS",
+    "numero": "S/N",
+    "complemento": "BLOCO P ANDAR 7",
+    "municipio": "BRASILIA",
+    "bairro": "ZONA CIVICO-ADMINISTRATIVA",
+    "uf": "DF",
+    "cep": "70.048-900",
+    "email": "atendimentorfb.01@rfb.gov.br",
+    "telefone": "(61) 3412-2707",
+    "data_situacao": "06/03/2004",
+    "efr": "UNIÃO",
+    "cnpj": "00.394.460/0058-87",
+    "ultima_atualizacao": "2025-09-08T13:28:55.570Z",
+    "status": "OK",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:29979036000140": {
+    "abertura": "13/04/1978",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "INSTITUTO NACIONAL DO SEGURO SOCIAL",
+    "fantasia": "COORDENACAO GERAL DE ORCAMENTO FINANCAS E CONTABILIDADE",
+    "porte": "DEMAIS",
+    "natureza_juridica": "110-4 - Autarquia Federal",
+    "atividade_principal": [
+      {
+        "code": "84.30-2-00",
+        "text": "Seguridade social obrigatória"
+      }
+    ],
+    "logradouro": "ST SAUS QUADRA 02 BLOCO O",
+    "numero": "6",
+    "complemento": "ANDAR",
+    "municipio": "BRASILIA",
+    "bairro": "ASA SUL",
+    "uf": "DF",
+    "cep": "70.070-946",
+    "email": "cnpj@inss.gov.br",
+    "telefone": "(61) 3313-4509",
+    "data_situacao": "03/11/2005",
+    "efr": "UNIÃO",
+    "cnpj": "29.979.036/0001-40",
+    "ultima_atualizacao": "2025-09-08T18:29:21.823Z",
+    "status": "OK",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "atividades_secundarias": [
+      {
+        "code": "00.00-0-00",
+        "text": "Não informada"
+      }
+    ],
+    "capital_social": "0.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }

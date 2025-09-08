@@ -4387,7 +4387,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Em breve", f"{msg} — funcionalidade em desenvolvimento.")
 
         btn_danfe.clicked.connect(_open_danfe)
-        btn_folha.clicked.connect(lambda: _placeholder("Folha de pagamento"))
+        btn_folha.clicked.connect(lambda: (dlg.accept(), self.open_automacao_folha_tab()))
         btn_cte.clicked.connect(lambda: (dlg.accept(), self.open_importador_cte_tab()))
         btn_talao.clicked.connect(_open_talao)
         btn_scan.clicked.connect(lambda: _placeholder("Notas digitalizadas"))
@@ -4433,8 +4433,26 @@ class MainWindow(QMainWindow):
             return
         self.tabs.addTab(importer_widget, "Importar CTe")
         self.tabs.setCurrentWidget(importer_widget)
-
-
+    
+    def open_automacao_folha_tab(self):
+        # Evita duplicar a aba
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if w and getattr(w, 'objectName', lambda: '')() == 'tab_automacao_folha':
+                self.tabs.setCurrentIndex(i)
+                return
+        try:
+            mod = self._load_automacao_folha_module()
+            # Garanta que o arquivo automacao_folha.py exponha esta classe:
+            folha_widget = mod.AutomacaoFolhaUI(self)
+            folha_widget.setObjectName('tab_automacao_folha')
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao carregar Importação Folha:\n{e}")
+            return
+    
+        self.tabs.addTab(folha_widget, "Folha de Pagamento")
+        self.tabs.setCurrentWidget(folha_widget)
+    
     def _load_importador_danfe_module(self):
         import importlib.util, os
         # Caminho padrão solicitado: ./Importação DANFE/Importador XML.py
@@ -4467,6 +4485,21 @@ class MainWindow(QMainWindow):
         spec.loader.exec_module(mod)
         return mod
 
+    def _load_automacao_folha_module(self):
+        import importlib.util, os
+        base = PROJECT_DIR
+        # você pode ajustar as pastas conforme sua organização:
+        preferred = os.path.join(base, "Importação Folha", "automacao_folha.py")
+        fallback  = os.path.join(base, "automacao_folha.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'automacao_folha.py'.")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("automacao_folha", filepath)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
 
     # INSIRA DEPOIS DE open_importador_danfe_tab():
     def _load_automacao_energia_module(self):
