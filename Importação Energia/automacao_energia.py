@@ -17,17 +17,19 @@ import re
 import traceback
 from pathlib import Path
 from datetime import datetime
+import tempfile
 
 import pdfplumber
 import pytesseract
 from PIL import Image
 
 from PySide6.QtCore import (Qt, QThread, Signal, QTimer, QCoreApplication)
-from PySide6.QtGui import (QIcon, QFont, QColor, QTextCursor, QPixmap, QCloseEvent)
+from PySide6.QtGui import (QIcon, QFont, QColor, QTextCursor, QPixmap, QCloseEvent, QTextOption)
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QToolButton,
     QPushButton, QTextEdit, QFileDialog, QMessageBox, QCheckBox, QDialog, QLineEdit,
-    QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QGraphicsDropShadowEffect, QTabWidget
+    QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QGraphicsDropShadowEffect, QTabWidget,
+    QSizePolicy
 )
 
 # ============================
@@ -53,39 +55,39 @@ QTabWidget::pane { border: 1px solid #1e5a9c; border-radius: 4px; background: #2
 QTabBar::tab { background: #2A2C2D; color: #E0E0E0; padding: 8px 16px; border: 1px solid #1e5a9c; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 2px; }
 QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px solid #002a54; }
 QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
-/* ===== Overrides apenas da tela de Configurações (QDialog com objectName=tab_config) ===== */
+/* ===== Apenas tela de Configurações (objectName=tab_config) ===== */
 QWidget#tab_config QGroupBox {
-    background-color: transparent;        /* remove o fundo azul */
-    border: 1px solid #11398a;            /* mantém só a linha azul */
+    background: transparent;              /* sem fundo azul */
+    border: 1px solid #11398a;            /* só a linha azul envolta */
     border-radius: 6px;
-    margin-top: 10px;
-}
-QWidget#tab_config QGroupBox::title {
-    color: #ffffff;
-    background: transparent;              /* título sem tarja */
-    padding: 0 5px;
-    left: 10px;
+    margin-top: 14px;                     /* espaço p/ título */
 }
 
-/* Se você usa QFrame como “cards” nessa tela, aplique o mesmo visual de borda */
+QWidget#tab_config QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;        /* título no topo/esq */
+    padding: 0 6px;
+    /* PONTO-CHAVE: pinta atrás do texto para "apagar" a linha que cruza o título */
+    background-color: #1B1D1E;            /* use a MESMA cor do fundo do diálogo */
+    color: #ffffff;
+}
+
+/* Garante que labels não tenham borda “acidental” */
+QWidget#tab_config QLabel {
+    border: none;
+    background: transparent;
+}
+
+/* Se tiver QFrame usado como “card” nessa tela, mantenha só a borda azul */
 QWidget#tab_config QFrame,
 QWidget#tab_config QFrame#card,
 QWidget#tab_config QFrame.card {
-    background-color: transparent;
+    background: transparent;
     border: 1px solid #11398a;
     border-radius: 6px;
 }
-
-/* Inputs nessa tela continuam com o visual padrão; se quiser um toque sutil: */
-QWidget#tab_config QLineEdit,
-QWidget#tab_config QComboBox,
-QWidget#tab_config QTextEdit {
-    background-color: #2B2F31;   /* mantém dark */
-    border: 1px solid #1e5a9c;
-    border-radius: 6px;
-    padding: 6px;
-}
-
+/* Apenas Configurações */
+QWidget#tab_config QLabel { border: none; background: transparent; }
 """
 
 # ============================
@@ -103,24 +105,82 @@ FARM_CODES = {
     "Fazenda Siganna":"001","Armazem Frutacc":"006","Lagoa da Confusão":"001",
     "Fazenda Primavera":"004","Fazenda Primaveira":"004","Fazenda Estrela":"008",
     "Fazenda Ilhéus":"004","Sitio Boa Esperança":"007","Fazenda Retiro":"004",
-    "Fazenda Barragem Grande":"007","Fazenda Ilha do Formoso":"001","Fazenda Pouso da Anta":"001"
+    "Fazenda Barragem Grande":"007","Fazenda Ilha do Formoso":"001","Fazenda Pouso da Anta":"001",
+    # opcional: se quiser já mapear explicitamente Formiga:
+    "Fazenda Formiga":"001"
 }
 
-PROMPT_BASE = f"""
-Você é um leitor especializado em talões de energia.
-Extraia e retorne apenas um JSON com os campos:
-  - data_vencimento (DDMMYYYY) — data de vencimento, não emissão.
-    Priorize o nome do arquivo; se não tiver, busque no texto.
-  - valor (0,00) — total a pagar, precedido de "R$".
-  - numero_nf — número da nota fiscal (NF, Nota Fiscal Nº etc.).
-    Retire pontos e traços do número.
-  - nome_fornecedor — texto após NF ou label "Fornecedor:".
-  - codigo_participante — mapeie:
-      Equatorial->146, Companhia Hidroelétrica->147, Energisa->148
-  - codigo_imovel — mapeie nome da fazenda (ou do arquivo), usando:
-{json.dumps(FARM_CODES, indent=4, ensure_ascii=False)}
-Formato: JSON puro, sem markup.
-""".strip()
+# Mapeamentos por TITULAR (mesma lógica do Cleuber: casa por NOME em texto/arquivo)
+FARM_MAP_GILSON = {
+    "FAZENDA RIO FORMOSO": "002",
+}
+
+FARM_MAP_ADRIANA = {
+    "FAZENDA DUERE": "002",
+    "FAZENDA BARRAGEM GRANDE": "001",
+    "MONTIVIDIU DO NORTE": "001",
+}
+
+FARM_MAP_LUCAS = {
+    "FAZENDA RIO FORMOSO": "002",
+}
+
+def _farm_code_by_owner(owner: str, upper_text: str):
+    """
+    Retorna o código do imóvel conforme OWNER, procurando por chaves no texto (uppercase).
+    Usa FARM_CODES para Cleuber; FARM_MAP_* para os demais.
+    """
+    def scan(mapping: dict):
+        for key, code in mapping.items():
+            if key.upper() in upper_text:
+                return code
+        return None
+
+    if owner == "Cleuber":
+        return scan(FARM_CODES)
+    if owner == "Gilson":
+        return scan(FARM_MAP_GILSON)
+    if owner == "Adriana":
+        return scan(FARM_MAP_ADRIANA)
+    if owner == "Lucas":
+        return scan(FARM_MAP_LUCAS)
+    return None
+
+
+def _prompt_base_for(owner: str) -> str:
+    """
+    Gera o prompt com MAPEAMENTO DE FAZENDAS específico do titular atual.
+    - Cleuber: usa FARM_CODES (mapeamento global existente)
+    - Gilson/Adriana/Lucas: usam FARM_MAP_[OWNER] (mapeamentos separados)
+    A IA deve usar EXCLUSIVAMENTE o mapa daquele titular para 'codigo_imovel'.
+    """
+    if owner == "Cleuber":
+        farms_map = FARM_CODES
+    elif owner == "Gilson":
+        farms_map = FARM_MAP_GILSON
+    elif owner == "Adriana":
+        farms_map = FARM_MAP_ADRIANA
+    elif owner == "Lucas":
+        farms_map = FARM_MAP_LUCAS
+    else:
+        farms_map = {}  # fallback
+
+    return (
+        "Você é um leitor especializado em talões de energia.\n"
+        "Extraia e retorne apenas um JSON com os campos:\n"
+        "  - data_vencimento (DDMMYYYY) — data de vencimento, não emissão.\n"
+        "    Priorize o nome do arquivo; se não tiver, busque no texto.\n"
+        "  - valor (0,00) — total a pagar, precedido de \"R$\".\n"
+        "  - numero_nf — número da nota fiscal (NF, Nota Fiscal Nº etc.).\n"
+        "    Retire pontos e traços do número.\n"
+        "  - nome_fornecedor — texto após NF ou label \"Fornecedor:\".\n"
+        "  - codigo_participante — mapeie:\n"
+        "      Equatorial->01543032000104, Companhia Hidroelétrica->01377555000110, Energisa->25086034000171\n"
+        "  - codigo_imovel — CONSIDERE o titular atual: " + owner.upper() + ".\n"
+        "      Use EXCLUSIVAMENTE os mapeamentos abaixo (não use outros; se não encontrar, deixe vazio):\n"
+        + json.dumps(farms_map, indent=4, ensure_ascii=False) + "\n"
+        "Formato: JSON puro, sem markup."
+    )
 
 # ============================
 # Helpers de OpenAI (SDK nova/antiga)
@@ -189,16 +249,26 @@ class ConfigDialog(QDialog):
         self.setModal(True)
         self.setFixedSize(640, 260)
         self.cfg = cfg or {}
+        self.setObjectName("tab_config")
 
         lay = QVBoxLayout(self)
         grp = QGroupBox("Caminhos e Opções")
         form = QFormLayout(grp)
+        
+        # empurra o conteúdo do groupbox para baixo (L, T, R, B)
+        form.setContentsMargins(12, 18, 12, 12)
+        form.setVerticalSpacing(10)  # opcional: distância entre linhas
 
         self.base_dir_edit = QLineEdit(self.cfg.get("base_dir", ""))
         btn_base = QPushButton("Procurar")
         btn_base.clicked.connect(self._browse_base)
         row = QHBoxLayout(); row.addWidget(self.base_dir_edit); row.addWidget(btn_base)
-        form.addRow("Pasta Base (ENERGIA):", row)
+        lbl_base = QLabel("Pasta Base (ENERGIA):")
+        lbl_base.setObjectName("lblBaseEnergia")
+        lbl_base.setFrameShape(QFrame.NoFrame)                 # remove qualquer frame nativo
+        lbl_base.setStyleSheet("border:none; background:transparent; padding:0;")
+        lbl_base.setBuddy(self.base_dir_edit)                  # acessibilidade (Alt+letra no Win)
+        form.addRow(lbl_base, row)
 
         self.chk_ocr = QCheckBox("Usar OCR quando não houver texto extraível")
         self.chk_ocr.setChecked(bool(self.cfg.get("use_ocr", True)))
@@ -464,12 +534,13 @@ class GerarTXTWorker(BaseWorker):
                                 continue
 
                         sep = "="*60
-                        log_f.write(f"\n{sep}\nPROMPT ENVIADO PARA IA:\nNome do arquivo: {fname}\nConteúdo extraído:\n{full_text}\n")
-
-                        # Chamada à IA
+                        prompt_owner = _prompt_base_for(name)
+                        log_f.write(f"\n{sep}\nPROMPT ENVIADO PARA IA ({name}):\n{prompt_owner}\n\nNome do arquivo: {fname}\nConteúdo extraído:\n{full_text}\n")
+                        
+                        # Chamada à IA (prompt específico por titular)
                         try:
                             json_text = run_chat(model, [
-                                {"role":"system","content":PROMPT_BASE},
+                                {"role":"system","content":prompt_owner},
                                 {"role":"user","content":f"Nome do arquivo: {fname}\nConteúdo extraído:\n{full_text}"}
                             ], temperature=0)
 
@@ -499,11 +570,15 @@ class GerarTXTWorker(BaseWorker):
 
                         nf = str(data.get("numero_nf", "") or "")
                         pc = str(data.get("codigo_participante", "") or "")
+                        # prioridade: mesma lógica do Cleuber (match por NOME no texto/arquivo), mas por TITULAR
                         ic = str(data.get("codigo_imovel", "") or "")
-
-                        # ajuste código imóvel para exceção
-                        if name in ("Gilson", "Adriana", "Lucas"):
-                            ic = "001"
+                        txt_upper = (full_text + " " + fname).upper()
+                        code_match = _farm_code_by_owner(name, txt_upper)
+                        if code_match:
+                            ic = code_match
+                        else:
+                            ic = ic or "001"
+                        
 
                         # pula PDFs com valor zerado
                         if vf in ("0", "0,00", ""):
@@ -582,7 +657,6 @@ class AutomacaoEnergiaUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Automação Talões de Energia")
-        self.resize(980, 720)
         if ICON_PATH.exists():
             self.setWindowIcon(QIcon(str(ICON_PATH)))
 
@@ -611,11 +685,8 @@ class AutomacaoEnergiaUI(QWidget):
         top_row.addWidget(self._build_stats_card(), 2)
         root.addLayout(top_row)
 
-        # Log
-        self.splitter = QSplitter(Qt.Vertical)
-        self.splitter.addWidget(self._build_log_card())
-        self.splitter.setStretchFactor(0, 1)
-        root.addWidget(self.splitter)
+        # Log (fixo, não alarga o layout)
+        root.addWidget(self._build_log_card())
 
         # Rodapé
         footer = QLabel("⚡ Automação de Talões de Energia — v1.0")
@@ -652,13 +723,21 @@ class AutomacaoEnergiaUI(QWidget):
         title = QLabel("AUTOMAÇÃO ENERGIA – TXT & CLASSIFICAÇÃO")
         f = QFont(); f.setPointSize(20); f.setBold(True)
         title.setFont(f)
+        
         subtitle = QLabel("Separe por titular, gere TXT e acompanhe tudo em tempo real.")
-
+        
         title.setStyleSheet("border:none;")
         subtitle.setStyleSheet("border:none;")
-
+        
+        # ↓ Impede alargamento: deixa o texto quebrar dentro do espaço disponível
+        title.setWordWrap(True)
+        subtitle.setWordWrap(True)
+        title.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        subtitle.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        
         box = QVBoxLayout()
-        box.addWidget(title); box.addWidget(subtitle)
+        box.addWidget(title)
+        box.addWidget(subtitle)
         lay.addLayout(box, 1)
 
         # ações rápidas
@@ -696,18 +775,16 @@ class AutomacaoEnergiaUI(QWidget):
 
         actions = QHBoxLayout(); actions.setSpacing(10)
 
-        self.btn_select_dir = QPushButton("📂 Selecionar Pasta de PDFs")
-        self.btn_select_dir.clicked.connect(self._select_base_dir)
-        actions.addWidget(self.btn_select_dir)
-
+        self.btn_gerar = QPushButton("🧾 Gerar TXT dos Talões")
+        self.btn_gerar.clicked.connect(self._start_gerar_txt)
+        actions.addWidget(self.btn_gerar)
+        
         self.btn_separar = QPushButton("🧭 Separar por Titular")
         self.btn_separar.setObjectName("success")
         self.btn_separar.clicked.connect(self._start_separador)
         actions.addWidget(self.btn_separar)
 
-        self.btn_gerar = QPushButton("🧾 Gerar TXT dos Talões")
-        self.btn_gerar.clicked.connect(self._start_gerar_txt)
-        actions.addWidget(self.btn_gerar)
+
 
         # INSIRA LOGO APÓS self.btn_gerar ... antes do btn_cancel:
         self.btn_importar_txt = QPushButton("📥 Importar TXT do Talão")
@@ -816,8 +893,14 @@ class AutomacaoEnergiaUI(QWidget):
         self.log.setMinimumHeight(280)
         self.log.setFrameStyle(QFrame.NoFrame)
         self.log.setStyleSheet("QTextEdit{background:transparent; border:none;} QTextEdit::viewport{background:transparent; border:none;}")
-        body_lay.addWidget(self.log)
 
+        # >>> impede que o log force a janela a alargar:
+        self.log.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.log.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+        self.log.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.log.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+
+        body_lay.addWidget(self.log)
         lay.addWidget(body)
         return card
 
@@ -986,57 +1069,162 @@ class AutomacaoEnergiaUI(QWidget):
                 self._importar_todos_os_txts_por_perfil()
 
     def _importar_todos_os_txts_por_perfil(self):
+        """
+        Importa os TXT gerados, trocando para cada perfil correspondente ANTES de importar.
+        Antes de cada import, FILTRA DUPLICADOS (mesmo participante + mesmo nº do doc) com base no BD.
+        No fim, exibe um bloco de 'DUPLICADOS (ENERGIA)' no log.
+        """
         base = (self.cfg or {}).get("base_dir") or ""
         if not base:
-            QMessageBox.warning(self, "Configuração", "Defina a Pasta Base nas Configurações.")
+            QMessageBox.warning(self, "Pasta base", "Defina a pasta base primeiro.")
             return
-    
-        # mapeia nome curto -> nome exibido no seletor de perfil do sistema
+
         PROFILE_NAME_MAP = {
             "Cleuber":  "Cleuber Marcos",
             "Gilson":   "Gilson Oliveira",
-            "Adriana":  "Adriana Lucia",
             "Lucas":    "Lucas Laignier",
+            "Adriana":  "Adriana Lucia",
         }
-    
-        main_win = self.window()
+
+        mw = self.window()
+        if mw is None:
+            QMessageBox.warning(self, "Janela principal", "Janela principal não encontrada.")
+            return
+
+        # Lembrar o perfil atual para voltar ao final
+        perfil_original = None
         try:
-            combo = getattr(main_win, "profile_selector", None)
+            combo = getattr(mw, "profile_selector", None)
             perfil_original = combo.currentText() if combo else None
         except Exception:
-            perfil_original = None
-    
+            pass
+
         import_errors = []
+        dups_log = []  # (perfil, num_doc, cpf_cnpj, historico, arquivo)
+
         for nome_curto, perfil in PROFILE_NAME_MAP.items():
             txt_path = os.path.join(base, f"{nome_curto}.txt")
             if not os.path.exists(txt_path):
                 self.log_msg(f"[{nome_curto}] TXT não encontrado: {txt_path}", "warning")
                 continue
+
             try:
-                # troca de perfil para garantir o lançamento no DB correto
-                if hasattr(main_win, "switch_profile"):
-                    main_win.switch_profile(perfil)
-                main_win._import_lancamentos_txt(txt_path)
-                main_win.carregar_lancamentos()
-                main_win.dashboard.load_data()
-                self.log_msg(f"[{perfil}] Importado: {txt_path}", "success")
+                # Troca de perfil ANTES de checar duplicados (duplicidade é por perfil/BD)
+                if hasattr(mw, "switch_profile"):
+                    mw.switch_profile(perfil)
+
+                # Ler linhas do TXT e filtrar duplicados
+                try:
+                    with open(txt_path, "r", encoding="utf-8") as f:
+                        linhas = [ln.strip() for ln in f if ln.strip()]
+                except Exception as e:
+                    self.log_msg(f"[{perfil}] Falha ao ler TXT: {e}", "error")
+                    import_errors.append((perfil, f"Leitura TXT: {e}"))
+                    continue
+
+                sem_dup = []
+                for ln in linhas:
+                    parts = ln.split("|")
+                    # layout esperado (12 colunas): data|imóvel|conta|num_doc|tipo_doc|histórico|cpf_cnpj|tipo|...
+                    if len(parts) < 12:
+                        # linha inesperada: não bloqueia
+                        sem_dup.append(ln)
+                        continue
+
+                    num_doc = (parts[3] or "").replace(" ", "")
+                    cpf_cnpj = re.sub(r"\D", "", parts[6] or "")
+                    historico = parts[5] if len(parts) > 5 else ""
+
+                    if not num_doc or not cpf_cnpj:
+                        sem_dup.append(ln)
+                        continue
+
+                    # Checa no BD se já existe lançamento com mesmo participante (cpf_cnpj) + mesmo num_doc
+                    row = mw.db.fetch_one(
+                        """
+                        SELECT 1
+                          FROM lancamento l
+                          JOIN participante p ON p.id = l.id_participante
+                         WHERE REPLACE(COALESCE(l.num_doc,''),' ','') = ?
+                           AND REPLACE(COALESCE(p.cpf_cnpj,''),' ','') = ?
+                         LIMIT 1
+                        """,
+                        (num_doc, cpf_cnpj)
+                    )
+
+                    if row:
+                        dups_log.append((perfil, num_doc, cpf_cnpj, historico, os.path.basename(txt_path)))
+                    else:
+                        sem_dup.append(ln)
+
+                if not sem_dup:
+                    self.log_msg(f"⚠️ Nenhum lançamento novo para {perfil} (todos já existem).", "warning")
+                    continue
+
+                # Grava em ARQUIVO TEMPORÁRIO e importa por ele (mantendo os TXT salvos no disco)
+                with tempfile.NamedTemporaryFile("w", delete=False, suffix=".txt", encoding="utf-8") as tf:
+                    tf.write("\n".join(sem_dup))
+                    temp_path = tf.name
+
+                try:
+                    mw._import_lancamentos_txt(str(temp_path))
+                    if hasattr(mw, "carregar_lancamentos"):
+                        mw.carregar_lancamentos()
+                    if hasattr(mw, "dashboard"):
+                        try:
+                            mw.dashboard.load_data()
+                        except Exception:
+                            pass
+                    self.log_msg(f"✅ Importado em: {perfil} (TEMP)", "success")
+                finally:
+                    try:
+                        os.unlink(temp_path)
+                    except Exception:
+                        pass
+                    
+
             except Exception as e:
                 import_errors.append((perfil, str(e)))
                 self.log_msg(f"[{perfil}] Falha ao importar: {e}", "error")
-    
-        # volta ao perfil original (se possível)
+
+        # Volta para o perfil original
         try:
-            if perfil_original and hasattr(main_win, "switch_profile"):
-                main_win.switch_profile(perfil_original)
+            if perfil_original and hasattr(mw, "switch_profile"):
+                mw.switch_profile(perfil_original)
         except Exception:
             pass
-        
+
+        # Alertas de importação
         if import_errors:
             msg = "\n".join(f"• {p}: {err}" for p, err in import_errors)
             QMessageBox.warning(self, "Importação concluída com alertas", msg)
         else:
             QMessageBox.information(self, "OK", "Importação automática concluída.")
-        
+
+        # Bloco de DUPLICADOS (ENERGIA)
+        if dups_log:
+            self.log.append("<div style='text-align:center;color:#ffd166;font-weight:700;font-family:monospace;'>🔁 DUPLICADOS (ENERGIA)</div>")
+            self.log.append("<div style='font-family:monospace; color:#ffd166; text-align:center; margin:2px 0 6px 0;'>MESMO PARTICIPANTE + MESMO Nº DO DOC</div>")
+            hdr = ("PERFIL".ljust(16) + " │ " +
+                   "DOC".ljust(12) + " │ " +
+                   "CPF/CNPJ".ljust(14) + " │ " +
+                   "HISTÓRICO".ljust(28) + " │ " +
+                   "ARQUIVO")
+            self.log.append("<div style='font-family:monospace;'><b style='color:#ffd166;'>" + hdr + "</b></div>")
+            self.log.append("<div style='font-family:monospace; color:#554a08;'>"
+                            "────────────────┼────────────┼──────────────┼────────────────────────────┼────────────────</div>")
+            for perfil, num_doc, cpf, hist, arq in dups_log:
+                perf = f"{(perfil or '')[:16]:<16}"
+                doc  = f"{(num_doc or '')[:12]:<12}"
+                cpf2 = f"{(cpf or '')[:14]:<14}"
+                hist2 = f"{(hist or '')[:28]:<28}"
+                arq2 = (arq or "")[:16]
+                line = f"{perf} │ {doc} │ {cpf2} │ {hist2} │ {arq2}"
+                self.log.append(f"<span style='font-family:monospace; color:#ffd166;'>{line}</span>")
+            self.log.append("<div style='text-align:center;color:#2e3d56;font-family:monospace;'>======================</div>")
+        else:
+            self.log_msg("✅ Nenhum duplicado detectado para ENERGIA.", "success")
+    
     def _reset_stats_ui(self):
         self._update_stats(0,0,0)
         self.log_msg("--------------------------------", "divider")

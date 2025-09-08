@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QLineEdit,
-    QFileDialog, QMessageBox, QTextEdit, QSizePolicy, QSpacerItem
+    QFileDialog, QMessageBox, QTextEdit
 )
 
 # ===========================
@@ -22,18 +22,39 @@ from PySide6.QtWidgets import (
 # ===========================
 ICON_PATH = Path(__file__).parent / "image" / "logo.png"
 
-STYLE = """
-#card{ background:#1c1f22; border:1px solid #1e5a9c; border-radius:12px; }
-#soft{ background:#22262a; border:none; border-radius:10px; }
-QLabel, QPushButton, QLineEdit, QTextEdit { color:#E6EAF0; }
-QPushButton{ background:#1e5a9c; border:none; border-radius:8px; padding:10px 16px; font-weight:600; }
-QPushButton:hover{ background:#164771; }
-QPushButton#danger{ background:#C5483D; }
-QPushButton#danger:hover{ background:#E4574C; }
-QLineEdit{ background:#1b1e21; border:1px solid #294d7a; border-radius:8px; padding:8px; color:#E6EAF0; }
-QTextEdit{ background:#0f1113; border:1px solid #2c3340; border-radius:8px; padding:10px; font-family: 'Cascadia Mono','Consolas','Courier New',monospace; }
-.stat-chip{ background:#222a33; border:1px solid #355b92; border-radius:999px; padding:6px 10px; font-weight:700;}
+STYLE_SHEET = """
+QMainWindow, QWidget { background-color: #1B1D1E; font-family: 'Segoe UI', Arial, sans-serif; color: #E0E0E0; }
+QLineEdit, QDateEdit, QComboBox, QTextEdit { color: #E0E0E0; background-color: #2B2F31; border: 1px solid #1e5a9c; border-radius: 6px; padding: 6px; }
+QLineEdit::placeholder { color: #5A5A5A; }
+QPushButton { background-color: #1e5a9c; color: #FFFFFF; border: none; border-radius: 6px; padding: 8px 16px; font-weight: bold; }
+QPushButton:hover, QPushButton:pressed { background-color: #002a54; }
+QPushButton#danger { background-color: #C0392B; }
+QPushButton#danger:hover { background-color: #E74C3C; }
+QPushButton#success { background-color: #27AE60; }
+QPushButton#success:hover { background-color: #2ECC71; }
+QGroupBox { border: 1px solid #11398a; border-radius: 6px; margin-top: 10px; font-weight: bold; background-color: #0d1b3d; }
+QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #ffffff; }
+QTableWidget { background-color: #222426; color: #E0E0E0; border: 1px solid #1e5a9c; border-radius: 4px; gridline-color: #3A3C3D; alternate-background-color: #2A2C2D; }
+QHeaderView::section { background-color: #1e5a9c; color: #FFFFFF; padding: 6px; border: none; }
+QTabWidget::pane { border: 1px solid #1e5a9c; border-radius: 4px; background: #212425; margin-top: 5px; }
+QTabBar::tab { background: #2A2C2D; color: #E0E0E0; padding: 8px 16px; border: 1px solid #1e5a9c; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 2px; }
+QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px solid #002a54; }
+QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
 """
+
+from PySide6.QtGui import QColor, QIcon, QPixmap, QTextCursor
+from PySide6.QtWidgets import QToolButton, QTabWidget, QGraphicsDropShadowEffect
+
+def _apply_global_styles(self):
+    self.setStyleSheet(STYLE_SHEET)
+
+def _add_shadow(self, widget: QWidget, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5):
+    eff = QGraphicsDropShadowEffect(self)
+    eff.setBlurRadius(blur)
+    eff.setColor(color)
+    eff.setOffset(0, y_offset)
+    widget.setGraphicsEffect(eff)
+    widget.setStyleSheet(widget.styleSheet() + f"; border-radius:{radius}px;")
 
 # ===========================
 # Helpers
@@ -70,6 +91,118 @@ def _fmt_ddmmYYYY_from_iso(iso_or_br: str) -> str:
     except Exception:
         pass
     return datetime.today().strftime("%d-%m-%Y")
+
+def _cte_tomador_info(xml_path: str) -> tuple[str, str]:
+    """
+    Retorna (cpf_cnpj_tomador, nome_tomador) já normalizados.
+    Considera tanto ide/toma4 (tomador 'outros') quanto ide/toma3 (0..3).
+    """
+    text = Path(xml_path).read_text(encoding="utf-8", errors="ignore")
+    root = ET.fromstring(text)
+    ns = "{http://www.portalfiscal.inf.br/cte}"
+    infcte = root.find(f".//{ns}infCte") or root.find(".//infCte")
+    if infcte is None:
+        return "", ""
+
+    def fx(path: str) -> str:
+        return (infcte.findtext(path) or "").strip()
+
+    # 1) Toma4 com identificação direta do tomador
+    t_cnpj = fx(f".//{ns}ide/{ns}toma4/{ns}CNPJ")
+    t_cpf  = fx(f".//{ns}ide/{ns}toma4/{ns}CPF")
+    t_nome = fx(f".//{ns}ide/{ns}toma4/{ns}xNome")
+    if t_cnpj or t_cpf:
+        return (_digits(t_cnpj or t_cpf), t_nome)
+
+    # 2) Toma3 -> mapear o papel para a seção correspondente
+    toma = fx(f".//{ns}ide/{ns}toma3/{ns}toma")
+    papel = {"0": "rem", "1": "exped", "2": "receb", "3": "dest"}.get(toma)
+    if papel:
+        p_cnpj = fx(f".//{ns}{papel}/{ns}CNPJ")
+        p_cpf  = fx(f".//{ns}{papel}/{ns}CPF")
+        p_nome = fx(f".//{ns}{papel}/{ns}xNome")
+        if p_cnpj or p_cpf:
+            return (_digits(p_cnpj or p_cpf), p_nome)
+
+    return "", ""
+
+# --- Tomadores admitidos e seus mapeamentos de imóvel/conta ---
+TOMADOR_MAP = {
+    # CLEUBER – mantém mapeamento dinâmico já existente (cidade/IE)
+    "42276950153": {"perfil": "Cleuber Marcos", "modo": "cleuber"},
+
+    # GILSON
+    "54860253191": {
+        "perfil": "Gilson Oliveira", "modo": "fixo",
+        "cod_imovel": "112725503",
+        "nome_imovel": "RIALMA - FAZENDA FORMIGA",
+    },
+
+    # LUCAS
+    "03886681130": {
+        "perfil": "Lucas Laignier", "modo": "fixo",
+        "cod_imovel": "115008810",
+        "nome_imovel": "TROMBAS - FAZENDA PRIMAVERA RETIRO",
+    },
+
+    # ADRIANA
+    "47943246187": {
+        "perfil": "Adriana Lucia", "modo": "fixo",
+        "cod_imovel": "113348037",
+        "nome_imovel": "MONTIVIDIU DO NORTE - FAZENDA POUSO DA ANTA",
+    },
+}
+
+def _cte_tomador_endereco(xml_path: str) -> dict:
+    """
+    Extrai o endereço do tomador (toma4 ou papel de toma3) para
+    auto-cadastro do imóvel: xLgr, nro, xCpl, xBairro, cMun, xMun, CEP, UF e IE.
+    """
+    text = Path(xml_path).read_text(encoding="utf-8", errors="ignore")
+    root = ET.fromstring(text)
+    ns = "{http://www.portalfiscal.inf.br/cte}"
+    infcte = root.find(f".//{ns}infCte") or root.find(".//infCte")
+    if infcte is None:
+        return {}
+
+    def fx(p): return (infcte.findtext(p) or "").strip()
+
+    # tenta toma4
+    base = f".//{ns}ide/{ns}toma4"
+    if infcte.find(base) is not None:
+        end = {
+            "xLgr": fx(f"{base}/{ns}enderToma/{ns}xLgr"),
+            "nro": fx(f"{base}/{ns}enderToma/{ns}nro"),
+            "xCpl": fx(f"{base}/{ns}enderToma/{ns}xCpl"),
+            "xBairro": fx(f"{base}/{ns}enderToma/{ns}xBairro"),
+            "cMun": fx(f"{base}/{ns}enderToma/{ns}cMun"),
+            "xMun": fx(f"{base}/{ns}enderToma/{ns}xMun"),
+            "CEP": fx(f"{base}/{ns}enderToma/{ns}CEP"),
+            "UF": fx(f"{base}/{ns}enderToma/{ns}UF"),
+            "IE": fx(f"{base}/{ns}IE"),
+        }
+        return end
+
+    # mapeia toma3 → seção de rem/exped/receb/dest
+    papel = {"0": "rem", "1": "exped", "2": "receb", "3": "dest"}.get(fx(f".//{ns}ide/{ns}toma3/{ns}toma"))
+    if papel:
+        tag_by_papel = {"rem":"enderReme","exped":"enderExped","receb":"enderReceb","dest":"enderDest"}
+        ender_tag = tag_by_papel.get(papel)
+        if ender_tag:
+            end = {
+                "xLgr": fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}xLgr"),
+                "nro":  fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}nro"),
+                "xCpl": fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}xCpl"),
+                "xBairro": fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}xBairro"),
+                "cMun": fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}cMun"),
+                "xMun": fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}xMun"),
+                "CEP":  fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}CEP"),
+                "UF":   fx(f".//{ns}{papel}/{ns}{ender_tag}/{ns}UF"),
+                "IE":   fx(f".//{ns}{papel}/{ns}IE"),
+            }
+            return end
+
+    return {}
 
 # Perfis padrão da sua UI (exatamente como aparecem no sistema.py)
 PERFIS_VALIDOS = ["Cleuber Marcos", "Gilson Oliveira", "Adriana Lucia", "Lucas Laignier"]
@@ -167,7 +300,7 @@ class ImportadorCTe(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("tab_import_cte")
-        self.setStyleSheet(STYLE)
+        _apply_global_styles(self)
 
         # Estado / Config
         self.config = self.load_config()
@@ -182,99 +315,213 @@ class ImportadorCTe(QWidget):
     # ---------- UI ----------
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(10)
+        root.setContentsMargins(14, 14, 14, 14)
+        root.setSpacing(12)
 
-        root.addWidget(self._header_card())
-        root.addWidget(self._controls_card())
-        root.addWidget(self._log_card())
-        root.addStretch()
+        header = self._header_card()
+        root.addWidget(header)
+
+        controls_card = self._controls_card()
+        stats_card = self._build_stats_card()
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
+        top_row.addWidget(controls_card, 3)
+        top_row.addWidget(stats_card, 2)
+        root.addLayout(top_row)
+
+        log_card = self._log_card()
+        root.addWidget(log_card)
+
+        footer = QLabel("🚚 Importador CT-e — v.1.0")
+        footer.setAlignment(Qt.AlignCenter)
+        footer.setStyleSheet("font-size:11px; color:#7F7F7F; padding-top:4px;")
+        root.addWidget(footer)
+
+    def _build_stats_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName("statsCard")
+        card.setStyleSheet("#statsCard{border:1px solid #1e5a9c; border-radius:14px;} #statsCard *{border:none; background:transparent;}")
+        lay = QVBoxLayout(card); lay.setContentsMargins(14,12,14,12); lay.setSpacing(6)
+
+        title = QLabel("📊 Último Status da Sessão")
+        f = QFont(); f.setPointSize(12); f.setBold(True)
+        title.setFont(f)
+        lay.addWidget(title)
+
+        self.lbl_last_status = QLabel("Pronto")
+        self.lbl_last_status.setStyleSheet("font-weight:600;")
+        self.lbl_last_status_time = QLabel(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        self.lbl_last_status_time.setAlignment(Qt.AlignRight)
+        status_row = QHBoxLayout(); status_row.setSpacing(10)
+        status_row.addWidget(self.lbl_last_status); status_row.addStretch(); status_row.addWidget(self.lbl_last_status_time)
+        lay.addLayout(status_row)
+
+        # Reaproveita chips já criados em _controls_card
+        chips = QHBoxLayout(); chips.setSpacing(10)
+        chips.addWidget(self.lbl_stat_total)
+        chips.addWidget(self.lbl_stat_ok)
+        chips.addWidget(self.lbl_stat_err)
+        chips.addStretch()
+        lay.addLayout(chips)
+
+        _add_shadow(self, card, radius=14, blur=20, color=QColor(0,0,0,45), y_offset=4)
+        return card
 
     def _header_card(self) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        lay = QHBoxLayout(card); lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(10)
+        card = QFrame()
+        card.setStyleSheet("QFrame{border:1px solid #1e5a9c; border-radius:16px;}")
+        lay = QHBoxLayout(card); lay.setContentsMargins(18,16,18,16); lay.setSpacing(14)
 
         icon = QLabel()
         if ICON_PATH.exists():
             pix = QPixmap(str(ICON_PATH)).scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            icon.setPixmap(pix)
+            icon.setPixmap(pix); icon.setStyleSheet("border:none;")
         else:
-            icon.setText("🚚")
-            icon.setStyleSheet("font-size:34px;")
+            icon.setText("🚚"); icon.setStyleSheet("font-size:34px; border:none;")
         lay.addWidget(icon, 0, Qt.AlignVCenter)
 
         title = QLabel("IMPORTADOR CT-e")
-        f = QFont(); f.setPointSize(18); f.setBold(True)
-        title.setFont(f)
+        f = QFont(); f.setPointSize(20); f.setBold(True)
+        title.setFont(f); title.setStyleSheet("border:none;")
 
-        self.lbl_last_status = QLabel("Pronto")
-        self.lbl_last_status.setStyleSheet("color:#9cc2ff;")
-        self.lbl_last_status_time = QLabel(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-        self.lbl_last_status_time.setStyleSheet("color:#ccc;")
+        subtitle = QLabel("Lê XMLs, gera TXT (12 colunas) e importa no sistema.")
+        subtitle.setStyleSheet("border:none;")
 
-        lay.addWidget(title, 0, Qt.AlignVCenter)
-        lay.addStretch()
-        lay.addWidget(self.lbl_last_status)
-        lay.addWidget(self.lbl_last_status_time)
+        title_box = QVBoxLayout()
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        lay.addLayout(title_box, 1)
+
+        btn_help = QToolButton(); btn_help.setText("❓ Ajuda")
+        btn_help.clicked.connect(lambda: QMessageBox.information(
+            self, "Ajuda",
+            "1) Defina a pasta dos XMLs de CT-e.\n"
+            "2) Use “📤 Importar XMLs (CT-e) → Gerar TXT”.\n"
+            "3) Se quiser, “📥 Importar Lançamentos” para subir o TXT.\n"
+            "4) Acompanhe os logs e salve o histórico."
+        ))
+
+        btn_close = QToolButton(); btn_close.setText("✖ Fechar")
+        def _close_self_tab():
+            parent = self.parent()
+            while parent and not isinstance(parent, QTabWidget):
+                parent = parent.parent()
+            if parent:
+                idx = parent.indexOf(self)
+                if idx != -1:
+                    parent.removeTab(idx)
+            else:
+                self.close()
+        btn_close.clicked.connect(_close_self_tab)
+
+        row = QHBoxLayout(); row.setSpacing(8)
+        row.addWidget(btn_help); row.addWidget(btn_close)
+        lay.addLayout(row, 0)
+
+        _add_shadow(self, card, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
         return card
 
     def _controls_card(self) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        lay = QVBoxLayout(card); lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(8)
-
-        # Linha 1 — Pasta CT-e (persistente)
+        card = QFrame()
+        card.setStyleSheet("QFrame{border:1px solid #1e5a9c; border-radius:12px;}")
+        lay = QVBoxLayout(card); lay.setContentsMargins(14,12,14,12); lay.setSpacing(10)
+    
+        # Linha 1 — Pasta CT-e
         l1 = QHBoxLayout()
         self.ed_dir = QLineEdit(self.config.get("cte_dir", ""))
         self.ed_dir.setPlaceholderText("Pasta onde estão os XMLs de CT-e…")
         btn_browse = QPushButton("Selecionar Pasta"); btn_browse.clicked.connect(self._choose_dir)
         btn_save   = QPushButton("Salvar Pasta");     btn_save.clicked.connect(self._save_dir)
-        l1.addWidget(QLabel("📂 Pasta CT-e:")); l1.addWidget(self.ed_dir, 1); l1.addWidget(btn_browse); l1.addWidget(btn_save)
-
-        # Linha 2 — Ações
-        l2 = QHBoxLayout()
-        self.btn_xmls = QPushButton("Importar XMLs (CT-e) → Gerar TXT")
+        l1.addWidget(QLabel("📂 Pasta CT-e:"))
+        l1.addWidget(self.ed_dir, 1)
+        l1.addWidget(btn_browse)
+        l1.addWidget(btn_save)
+    
+        # Linha 2 — Ações principais
+        actions = QHBoxLayout(); actions.setSpacing(10)
+        self.btn_xmls = QPushButton("📤 Importar XMLs (CT-e) → Gerar TXT")
+        self.btn_xmls.setObjectName("success")
         self.btn_xmls.clicked.connect(self.importar_xmls_cte)
-
-        self.btn_import_txt = QPushButton("Importar CTe (TXT)")
+        actions.addWidget(self.btn_xmls)
+    
+        self.btn_import_txt = QPushButton("📥 Importar Lançamentos")
         self.btn_import_txt.clicked.connect(self.importar_lancamentos_txt)
-
-        self.btn_cancel = QPushButton("Cancelar"); self.btn_cancel.setEnabled(False); self.btn_cancel.setObjectName("danger")
-        self.btn_cancel.clicked.connect(self._cancelar)
-
-        l2.addWidget(self.btn_xmls)
-        l2.addWidget(self.btn_import_txt)
-        l2.addStretch()
-        l2.addWidget(self.btn_cancel)
-
-        # Linha 3 — Stats
-        l3 = QHBoxLayout()
-        self.lbl_stat_total = QLabel("Total: 0"); self.lbl_stat_total.setProperty("class","stat-chip")
-        self.lbl_stat_ok    = QLabel("Sucesso: 0"); self.lbl_stat_ok.setProperty("class","stat-chip"); self.lbl_stat_ok.setStyleSheet("QLabel{color:#9be27b;}")
-        self.lbl_stat_err   = QLabel("Erros: 0");   self.lbl_stat_err.setProperty("class","stat-chip"); self.lbl_stat_err.setStyleSheet("QLabel{color:#ff8a8a;}")
-
-        l3.addWidget(self.lbl_stat_total); l3.addWidget(self.lbl_stat_ok); l3.addWidget(self.lbl_stat_err); l3.addStretch()
-
-        lay.addLayout(l1); lay.addLayout(l2); lay.addLayout(l3)
+        actions.addWidget(self.btn_import_txt)
+    
+        self.btn_cancel = QPushButton("⛔ Cancelar"); self.btn_cancel.setEnabled(False)
+        self.btn_cancel.setObjectName("danger")
+        self.btn_cancel.clicked.connect(self.cancelar_processos)
+        actions.addWidget(self.btn_cancel)
+    
+        actions.addStretch()
+    
+        # Botões utilitários do Log (QToolButton + estilo)
+        self.btn_log_clear = QToolButton()
+        self.btn_log_clear.setText("🧹 Limpar Log")
+        self.btn_log_clear.setStyleSheet("QToolButton{background:#0d1b3d; border:1px solid #1e5a9c; border-radius:8px; padding:6px 10px;} QToolButton:hover{background:#123764;}")
+        self.btn_log_clear.clicked.connect(self._log_clear)
+        actions.addWidget(self.btn_log_clear)
+    
+        self.btn_log_save = QToolButton()
+        self.btn_log_save.setText("💾 Salvar Log")
+        self.btn_log_save.setStyleSheet("QToolButton{background:#0d1b3d; border:1px solid #1e5a9c; border-radius:8px; padding:6px 10px;} QToolButton:hover{background:#123764;}")
+        self.btn_log_save.clicked.connect(self._log_save)
+        actions.addWidget(self.btn_log_save)
+    
+        # Linha 3 — Chips de status
+        chips_row = QHBoxLayout(); chips_row.setSpacing(10)
+        def _make_chip(label: str, bg: str, fg: str) -> QLabel:
+            w = QLabel(f"{label}: 0"); w.setAlignment(Qt.AlignCenter)
+            w.setStyleSheet(f"QLabel {{ background:{bg}; color:{fg}; border-radius:10px; padding:8px 12px; font-weight:600; }}")
+            return w
+        self.lbl_stat_total = _make_chip("Total",   "#2B2F31", "#E0E0E0")
+        self.lbl_stat_ok    = _make_chip("Sucesso", "#183d2a", "#A7F3D0")
+        self.lbl_stat_err   = _make_chip("Erros",   "#3b1f1f", "#FF6B6B")
+        chips_row.addWidget(self.lbl_stat_total)
+        chips_row.addWidget(self.lbl_stat_ok)
+        chips_row.addWidget(self.lbl_stat_err)
+        chips_row.addStretch()
+    
+        lay.addLayout(l1)
+        lay.addLayout(actions)
+        lay.addLayout(chips_row)
+    
+        _add_shadow(self, card, radius=14, blur=20, color=QColor(0,0,0,45), y_offset=4)
         return card
+    
+    def cancelar_processos(self):
+        # cancela o processamento atual de XMLs CT-e
+        self._cancel = True
+        self.btn_cancel.setEnabled(False)
+        self.log_msg("Processo(s) cancelado(s).", "success")
+        self.lbl_last_status.setText("PROCESSO CANCELADO PELO USUARIO")
+        self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 
     def _log_card(self) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        lay = QVBoxLayout(card); lay.setContentsMargins(12, 10, 12, 10); lay.setSpacing(8)
+        card = QFrame()
+        card.setObjectName("logCard")
+        card.setStyleSheet("#logCard{background:#212425; border:1px solid #1e5a9c; border-radius:10px;} #logCard QLabel{border:none; background:transparent; color:#E0E0E0;}")
+        lay = QVBoxLayout(card); lay.setContentsMargins(12,10,12,12); lay.setSpacing(8)
 
-        header = QHBoxLayout()
-        title = QLabel("📝 Histórico"); f = QFont(); f.setPointSize(12); f.setBold(True); title.setFont(f)
-        header.addWidget(title); header.addStretch()
-        btn_clear = QPushButton("Limpar Log"); btn_clear.clicked.connect(self._log_clear)
-        btn_save  = QPushButton("Salvar Log"); btn_save.clicked.connect(self._log_save)
-        header.addWidget(btn_clear); header.addWidget(btn_save)
+        title = QLabel("📝 Histórico")
+        f = QFont(); f.setBold(True); f.setPointSize(12)
+        title.setFont(f); title.setStyleSheet("padding:2px 6px;")
+        lay.addWidget(title, alignment=Qt.AlignLeft)
 
-        box = QFrame(); box.setObjectName("soft")
-        box_lay = QVBoxLayout(box); box_lay.setContentsMargins(10, 10, 10, 10)
-        self.log = QTextEdit(readOnly=True); self.log.setMinimumHeight(240)
-        box_lay.addWidget(self.log)
+        body = QFrame(); body.setObjectName("logBody")
+        body.setStyleSheet("#logBody{background:#2B2F31; border:none; border-radius:8px;}")
+        body_lay = QVBoxLayout(body); body_lay.setContentsMargins(12,12,12,12); body_lay.setSpacing(0)
 
-        lay.addLayout(header); lay.addWidget(box)
+        self.log = QTextEdit(readOnly=True)
+        self.log.setMinimumHeight(260)
+        self.log.setFrameStyle(QFrame.NoFrame)
+        self.log.setStyleSheet("QTextEdit{background:transparent; border:none;} QTextEdit::viewport{background:transparent; border:none;}")
+
+        body_lay.addWidget(self.log)
+        lay.addWidget(body)
         return card
+
 
     # ---------- Ações ----------
     def _choose_dir(self):
@@ -330,6 +577,72 @@ class ImportadorCTe(QWidget):
         # Log amigável
         self.log_msg(f"Participante cadastrado: {nome} [{cpf_cnpj}] (id={pid})", "success")
         return pid
+    
+    # ===== NOVO: garante cadastro do imóvel =====
+    def _ensure_imovel(self, cod_imovel_sugerido: str, nome_imovel: str, addr: dict) -> str:
+        """
+        Garante que o imóvel exista. Se não existir, cria com CÓDIGO SEQUENCIAL (001, 002, ...),
+        ignorando IE/códigos grandes. Retorna o código efetivamente usado/existente.
+        """
+        mw = self.window()
+        if not mw or not hasattr(mw, "db"):
+            # Sem DB, devolve algo seguro
+            return (cod_imovel_sugerido or "001")
+
+        # 1) Já existe pelo NOME? (preferência por nome exato da fazenda)
+        row = mw.db.fetch_one(
+            "SELECT cod_imovel FROM imovel_rural WHERE nome_imovel=? LIMIT 1",
+            (nome_imovel,)
+        )
+        if row and row[0]:
+            # Se já existir, retorna o código existente (com zero-pad se for numérico de até 3 dígitos)
+            code = str(row[0])
+            return code.zfill(3) if re.fullmatch(r"\d{1,3}", code) else code
+
+        # 2) Não existe: calcular PRÓXIMO CÓDIGO SEQUENCIAL de 3 dígitos (001..999)
+        row = mw.db.fetch_one(
+            "SELECT COALESCE(MAX(CAST(cod_imovel AS INTEGER)), 0) "
+            "FROM imovel_rural "
+            "WHERE cod_imovel GLOB '[0-9]*' AND LENGTH(cod_imovel) <= 3"
+        )
+        max3 = int(row[0] or 0)
+        new_code = f"{max3 + 1:03d}"
+
+        # 3) Sanitização dos campos de endereço
+        def nz(v, alt=""):
+            v = (v or "").strip()
+            return v if v else alt
+
+        cep = _digits(addr.get("CEP", ""))[:8] or "00000000"
+        uf  = nz(addr.get("UF"), "GO")
+        cod_mun = nz(_digits(addr.get("cMun", "")) or "", "0")
+        endereco = nz(addr.get("xLgr"), ".")
+        bairro   = nz(addr.get("xBairro"), ".")
+        numero   = nz(addr.get("nro"), None)
+        compl    = nz(addr.get("xCpl"), None)
+        ie       = _digits(addr.get("IE", "")) or None
+
+        # 4) INSERT com 18 campos (modelo do seu sistema)
+        mw.db.execute_query(
+            """
+            INSERT OR REPLACE INTO imovel_rural (
+              cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+              nome_imovel, endereco, num, compl, bairro, uf,
+              cod_mun, cep, tipo_exploracao, participacao,
+              area_total, area_utilizada
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            [
+              new_code, "BR", "BRL", None, None, ie,
+              nome_imovel, endereco, numero, compl, bairro, uf,
+              cod_mun, cep, 1, 100.0, 0.0, 0.0
+            ],
+            autocommit=True
+        )
+
+        self.log_msg(f"🏡 Imóvel cadastrado: {nome_imovel} [cod {new_code}]", "success")
+        return new_code
+
 
     def importar_xmls_cte(self):
         base_dir = self.ed_dir.text().strip()
@@ -345,7 +658,6 @@ class ImportadorCTe(QWidget):
         self.stat_total = len(xmls); self.stat_ok = 0; self.stat_err = 0; self._upd_stats()
         self._cancel = False; self.btn_cancel.setEnabled(True)
         self.log.clear()
-        self._log_header()
         self.log_msg(f"Iniciando processamento de {len(xmls)} arquivo(s)…", "info")
 
         QTimer.singleShot(0, lambda: self._process_xmls(xmls))
@@ -428,17 +740,29 @@ class ImportadorCTe(QWidget):
                     if self._cancel:
                         self.log_msg("Processo cancelado pelo usuário.", "warning"); break
                     try:
+                        # filtro por tomador (aceita Cleuber, Gilson, Lucas, Adriana)
+                        tomador_cpf, tomador_nome = _cte_tomador_info(path)
+                        if tomador_cpf not in TOMADOR_MAP:
+                            self.log_msg(
+                                f"Pulado: tomador '{tomador_nome}' [{tomador_cpf or '---'}] não é Cleuber/Gilson/Lucas/Adriana.",
+                                "warning"
+                            )
+                            continue
+
                         rec = _read_cte_fields(path)
 
-                        # ===== [NOVO] Garantir participante (usa CNPJ/CPF do CT-e) =====
-                        # Preferimos o nome do emitente (transportadora); se vazio, tenta destinatário.
-                        _nome_part = (rec.get("emitente") or rec.get("destinatario") or "").strip()
-                        if rec.get("cpf_cnpj"):
-                            self._ensure_participante(rec["cpf_cnpj"], _nome_part, TIPO_FORNECEDOR)
+                        # --- restringe aos tomadores permitidos e seta perfil/conta ---
+                        tom = TOMADOR_MAP[tomador_cpf]
+                        rec["perfil"] = tom["perfil"]
+                        rec["cod_conta"] = "001"           # conta 001 do perfil do tomador
+                        rec["_tomador_cpf"] = tomador_cpf
 
-                        # ------- resolver cod_imovel (apenas Cleuber tem mapeamento) -------
+                        # ------- resolver cod_imovel (tomador-específico) -------
                         cod_imovel = "001"; origem = "default"
-                        if rec.get("perfil") == "Cleuber Marcos":
+                        tom_cfg = TOMADOR_MAP.get(tomador_cpf, {})
+
+                        if tom_cfg.get("modo") == "cleuber":
+                            # mantém lógica dinâmica por cidade/IE (Cleuber)
                             cidade = rec.get("cidade") or ""
                             ie     = rec.get("ie") or ""
 
@@ -458,8 +782,20 @@ class ImportadorCTe(QWidget):
                                         cod = _query_cod_by_alias(alias2)
                                         if cod:
                                             cod_imovel, origem = cod, f"IE→alias:{alias2}"
+                        else:
+                            # GILSON / LUCAS / ADRIANA — código fixo + prepara auto-cadastro
+                            cod_imovel = tom_cfg["cod_imovel"]
+                            origem = "tomador:fixo"
+                            addr = _cte_tomador_endereco(path)  # endereço do tomador no XML
+                            rec["_auto_imovel"] = True
+                            rec["_imovel_payload"] = {
+                                "cod_imovel": cod_imovel,
+                                "nome_imovel": tom_cfg["nome_imovel"],
+                                "addr": addr,
+                            }
 
                         rec["cod_imovel"] = cod_imovel
+
                         grupos.setdefault(rec["perfil"], []).append(rec)
 
                         key = (rec["perfil"], cod_imovel)
@@ -475,6 +811,26 @@ class ImportadorCTe(QWidget):
 
                 # Salvar TXT(s) na MESMA pasta dos XMLs
                 out_dir = Path(base_dir)
+
+                # [AJUSTE] Autocadastro + ATUALIZAÇÃO do CÓDIGO SEQUENCIAL **NO PERFIL CORRETO**
+                main_win = self.window()
+                for perfil, lst in grupos.items():
+                    if main_win and hasattr(main_win, "switch_profile"):
+                        main_win.switch_profile(perfil)  # << cadastra o imóvel no perfil do tomador
+                    for r in lst:
+                        if r.get("_auto_imovel") and r.get("_imovel_payload"):
+                            p = r["_imovel_payload"]
+                            cod_usado = self._ensure_imovel(p["cod_imovel"], p["nome_imovel"], p["addr"])
+                            r["cod_imovel"] = cod_usado  # 001, 002, ...
+
+                # (re)calcular o RESUMO com o cod_imovel atualizado
+                resumo = {}
+                for _perfil, _lst in grupos.items():
+                    for r in _lst:
+                        key = (r["perfil"], r["cod_imovel"])
+                        resumo[key] = resumo.get(key, 0) + int(r.get("cent_sai", 0))
+
+                # Agora SIM gerar os TXT já com o código certo (sem recriar imóvel aqui)
                 all_txt = out_dir / "CTE_TODOS.txt"
                 with open(all_txt, "w", encoding="utf-8") as f:
                     for lst in grupos.values():
@@ -488,6 +844,22 @@ class ImportadorCTe(QWidget):
                         for r in lst:
                             f.write(_make_line(r) + "\n")
                     por_perfil[perfil] = str(fname)
+
+                # Blocos de log por perfil (fora do loop acima, para não duplicar)
+                EMOJI_PERFIL = {
+                    "Cleuber Marcos": "🧑‍🌾",
+                    "Gilson Oliveira": "🧔",
+                    "Lucas Laignier": "🧑",
+                    "Adriana Lucia": "👩"
+                }
+                for perfil, lst in grupos.items():
+                    if not lst:
+                        continue
+                    self._log_section(perfil.split()[0], EMOJI_PERFIL.get(perfil, "🚚"))
+                    self._log_header()
+                    for r in lst:
+                        self._log_row_table(r)
+                    self.log.append("<div style='text-align:center;color:#2e3d56;font-family:monospace;'>======================</div>")
 
                 # Resumo organizado
                 if resumo:
@@ -506,21 +878,117 @@ class ImportadorCTe(QWidget):
                 if main_win and hasattr(main_win, "_import_lancamentos_txt") and hasattr(main_win, "switch_profile"):
                     if QMessageBox.question(self, "Importar agora?", "Importar os lançamentos gerados para cada perfil?",
                                             QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
+                        # 🔁 Preparar registro de duplicados para log ao final
+                        dups_log = []
+
                         for perfil, fp in por_perfil.items():
                             try:
                                 if perfil not in PERFIS_VALIDOS:
                                     self.log_msg(f"Aviso: perfil '{perfil}' não está na lista de perfis válidos; pulado.", "warning")
                                     continue
+                                
+                                # Troca para o banco do perfil ANTES de checar duplicidade
                                 main_win.switch_profile(perfil)
-                                main_win._import_lancamentos_txt(fp)
+
+                                # (se houver) auto-cadastro/ajuste do código do imóvel antes da importação
+                                lst = grupos.get(perfil, [])
+                                for r in lst:
+                                    if r.get("_auto_imovel"):
+                                        payload = r["_imovel_payload"]
+                                        cod_usado = self._ensure_imovel(
+                                            payload["cod_imovel"], payload["nome_imovel"], payload["addr"] or {}
+                                        )
+                                        r["cod_imovel"] = cod_usado  # garante 001, 002, ...
+
+                                # 🔎 Filtra DUPLICADOS (mesmo participante + mesmo nº doc) consultando o banco
+                                mw = self.window()
+                                sem_dup = []
+                                for r in lst:
+                                    num_doc = (r.get("num_doc") or "").replace(" ", "")
+                                    cpf = re.sub(r"\D", "", r.get("cpf_cnpj") or "")
+                                    if not num_doc or not cpf:
+                                        # sem dados para checar => não bloqueia
+                                        sem_dup.append(r)
+                                        continue
+                                    
+                                    row = mw.db.fetch_one("""
+                                        SELECT 1
+                                          FROM lancamento l
+                                          JOIN participante p ON p.id = l.id_participante
+                                         WHERE REPLACE(COALESCE(l.num_doc,''),' ','') = ?
+                                           AND REPLACE(COALESCE(p.cpf_cnpj,''),' ','') = ?
+                                         LIMIT 1
+                                    """, (num_doc, cpf))
+
+                                    if row:
+                                        dups_log.append((
+                                            perfil,
+                                            num_doc,
+                                            cpf,
+                                            (r.get("emitente") or r.get("historico") or ""),
+                                            r.get("arquivo")
+                                        ))
+                                    else:
+                                        sem_dup.append(r)
+
+                                if not sem_dup:
+                                    self.log_msg(f"⚠️ Nenhum lançamento novo para {perfil} (todos já existem).", "warning")
+                                    continue
+                                
+                                # ✍️ Gera um TXT filtrado (SEM duplicados) e importa esse arquivo
+                                fname_filtrado = Path(fp).with_name(Path(fp).stem + "_SEM_DUP.txt")
+                                with open(fname_filtrado, "w", encoding="utf-8") as f:
+                                    for r in sem_dup:
+                                        f.write(_make_line(r) + "\n")
+
+                                main_win._import_lancamentos_txt(str(fname_filtrado))
                                 if hasattr(main_win, "carregar_lancamentos"): main_win.carregar_lancamentos()
                                 if hasattr(main_win, "dashboard"):
                                     try: main_win.dashboard.load_data()
                                     except Exception: pass
-                                self.log_msg(f"Importado em: {perfil} ({Path(fp).name})", "success")
+                                self.log_msg(f"Importado em: {perfil} ({Path(fname_filtrado).name})", "success")
+
                             except Exception as e:
                                 self.log_msg(f"Falha ao importar em {perfil}: {e}", "error")
+
+                        # 📣 Bloco final — CT-e DUPLICADOS (destacado e tabelado)
+                        if dups_log:
+                            # título centralizado
+                            self._log_section("DUPLICADOS", "🔁")
+                        
+                            # subtítulo
+                            self.log.append("<div style='font-family:monospace; color:#ffd166; text-align:center; margin:2px 0 6px 0;'>MESMO PARTICIPANTE + MESMO Nº DA NOTA</div>")
+                        
+                            # cabeçalho da tabela
+                            hdr = (
+                                "PERFIL".ljust(16) + " │ " +
+                                "DOC".ljust(10) + " │ " +
+                                "CPF/CNPJ".ljust(14) + " │ " +
+                                "EMITENTE".ljust(24) + " │ " +
+                                "ARQUIVO"
+                            )
+                            self.log.append("<div style='font-family:monospace;'><b style='color:#ffd166;'>" + hdr + "</b></div>")
+                            self.log.append("<div style='font-family:monospace; color:#554a08;'>"
+                                            "────────────────┼──────────┼──────────────┼──────────────────────────┼────────────────</div>")
+                        
+                            # linhas
+                            for perfil, num_doc, cpf, emit, arq in dups_log:
+                                perf = f"{(perfil or '')[:16]:<16}"
+                                doc  = f"{(num_doc or '')[:10]:<10}"
+                                cpf2 = f"{(cpf or '')[:14]:<14}"
+                                emi  = f"{(emit or '')[:24]:<24}"
+                                arq2 = (arq or "")[:16]
+                                line = f"{perf} │ {doc} │ {cpf2} │ {emi} │ {arq2}"
+                                self.log.append(f"<span style='font-family:monospace; color:#ffd166;'>{line}</span>")
+                        
+                            # rodapé
+                            self.log.append("<div style='text-align:center;color:#2e3d56;font-family:monospace;'>======================</div>")
+                        else:
+                            self.log_msg("✅ Nenhum CT-e duplicado detectado.", "success")
+                        
+
                         QMessageBox.information(self, "Concluído", "Lançamentos importados.")
+
             finally:
                 self._upd_stats()
                 self.btn_cancel.setEnabled(False)
@@ -559,22 +1027,85 @@ class ImportadorCTe(QWidget):
         self.log.append("<span style='color:#2e3d56;'>──────┼──────┼────────────────┼─────┼────────────────┼──────┼────────────────────────────────────</span>")
     
     def log_line(self, rec: dict, origem: str):
-        arq = rec['arquivo'][:6].ljust(6)
-        data = rec['data_br'][:5]                 # dd-mm
-        perf = rec['perfil'][:16].ljust(16)
-        doc  = (rec['num_doc'] or "")[:5].ljust(5)
-        cid  = (rec.get('cidade') or "-")[:12].ljust(12)
-        imv  = rec['cod_imovel'][:6].ljust(6)
+        arq = rec['arquivo'][:12]
+        data = rec['data_br']
+        perf = rec['perfil']
+        doc  = rec.get('num_doc') or "-"
+        cid  = rec.get('cidade') or "-"
+        imv  = rec['cod_imovel']
         val  = f"R$ {int(rec['cent_sai'])/100:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
-        emi  = (rec.get('emitente') or "")[:30]
-        linha = f"{arq} │ {data} │ {perf} │ {doc} │ {cid}→{imv} │ {val:>10s} │ {emi}"
-        cor = "#8fce00" if origem != "default" else "#bcd"
-        self._append_html(f"<span style='color:{cor};'>{linha}</span>  <span style='color:#6982b3;'>( {origem} )</span>")
+        emi  = (rec.get('emitente') or "")
+        texto = f"{arq} • {data} • {perf} • Doc {doc} • {cid}→{imv} • {val} • {emi}  ({origem})"
+        self.log_msg(texto, "info" if origem == "default" else "success")
+
     
-    def log_msg(self, text: str, level: str = "info"):
-        color = {"info": "#a9c7ff", "success": "#9be27b", "warning": "#ffd166", "error": "#ff8a8a"}.get(level, "#bcd")
-        self._append_html(f"<span style='color:{color}; white-space:pre-wrap;'>{text}</span>")
-    
+    def log_msg(self, message: str, msg_type: str = "info"):
+        now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        palette = {
+            "info":   {"emoji": "ℹ️", "text": "#FFFFFF", "accent": "#3A3C3D", "weight": "500"},
+            "success":{"emoji": "✅", "text": "#A7F3D0", "accent": "#2F7D5D", "weight": "700"},
+            "warning":{"emoji": "⚠️", "text": "#FFFFFF", "accent": "#8A6D3B", "weight": "600"},
+            "error":  {"emoji": "❌", "text": "#FF6B6B", "accent": "#7A2E2E", "weight": "800"},
+            "title":  {"emoji": "📌", "text": "#FFFFFF", "accent": "#1e5a9c", "weight": "800"},
+            "divider":{"emoji": "",   "text": "",       "accent": "#3A3C3D", "weight": "400"},
+        }
+        if msg_type == "divider":
+            self.log.append('<div style="border-top:1px solid #3A3C3D; margin:10px 0;"></div>')
+            return
+        p = palette.get(msg_type, palette["info"])
+        html = (
+            f'<div style="border-left:3px solid {p["accent"]}; padding:6px 10px; margin:2px 0;">'
+            f'<span style="opacity:.7; font-family:monospace;">[{now}]</span>'
+            f' <span style="margin:0 6px 0 8px;">{p["emoji"]}</span>'
+            f'<span style="color:{p["text"]}; font-weight:{p["weight"]};">{message}</span>'
+            f'</div>'
+        )
+        self.log.append(html)
+
+    def _log_section(self, titulo: str, emoji: str = "🚚"):
+        self.log.append(
+            f"<div style='text-align:center;margin:8px 0 4px 0;'>"
+            f"<span style='font-family:monospace;color:#a9c7ff;font-weight:800;'>"
+            f"========== {emoji} CT-e {titulo.upper()} =========="
+            f"</span></div>"
+        )
+
+    def _log_header(self):
+        self.log.append(
+            "<div style='font-family:monospace;'>"
+            "<b style='color:#a9c7ff;'>"
+            + "ARQ".ljust(6)
+            + " │ DATA │ PERFIL          │ DOC  │ CIDADE → IMÓVEL     │ VALOR       │ EMITENTE"
+            + "</b></div>"
+        )
+        self.log.append(
+            "<div style='font-family:monospace;color:#2e3d56;'>"
+            "──────┼──────┼────────────────┼──────┼────────────────────┼────────────┼────────────────────────────────────"
+            "</div>"
+        )
+
+    def _log_row_table(self, rec: dict):
+        def cut(s, n): return (str(s or "")[:n])
+        def money(cents):
+            try:
+                v = int(rec.get("cent_sai", 0)) / 100.0
+            except Exception:
+                v = 0.0
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+
+        arq  = cut(rec.get("arquivo",""), 6).ljust(6)
+        data = cut(rec.get("data_br",""), 10).ljust(6)[:6]  # dd-mm
+        perf = cut(rec.get("perfil",""), 16).ljust(16)
+        doc  = cut(rec.get("num_doc","-"), 6).ljust(6)
+        cid  = cut(rec.get("cidade",""), 12)
+        imv  = cut(rec.get("cod_imovel",""), 8)
+        cid_imv = (f"{cid} → {imv}").ljust(20)
+        val  = money(rec).rjust(12)
+        emi  = cut(rec.get("emitente",""), 36)
+
+        line = f"{arq} │ {data} │ {perf} │ {doc} │ {cid_imv} │ {val} │ {emi}"
+        self.log.append(f"<span style='font-family:monospace;'>{line}</span>")
+
     def _append_html(self, html: str):
         if not html: return
         self.log.moveCursor(QTextCursor.End)
@@ -584,8 +1115,8 @@ class ImportadorCTe(QWidget):
     
     def _log_clear(self):
         self.log.clear()
-        self._log_header()
         self.log_msg("Log limpo.", "info")
+
     
     def _log_save(self):
         try:

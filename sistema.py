@@ -15,8 +15,9 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
     QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy, QCompleter,
-    QStackedWidget, QTextBrowser, QSplitter, QScrollArea
+    QStackedWidget, QTextBrowser, QSplitter
 )
+
 from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
@@ -26,9 +27,7 @@ from contextlib import contextmanager
 import shiboken6
 
 from pathlib import Path
-import importlib.util
 from decimal import Decimal, ROUND_HALF_UP
-import unicodedata
 from decimal import Decimal
 
 # —————— Validação de CPF ——————
@@ -3411,8 +3410,8 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "farm.png")), "Cad. Imóvel", self, triggered=self.cad_imovel))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "bank.png")), "Cad. Conta", self, triggered=self.cad_conta))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "users.png")), "Cad. Participante", self, triggered=self.cad_participante))
-        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")), "Relatórios", self, triggered=self.abrir_central_relatorios))
-        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "relatorio.png")), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "relatorio.png")), "Relatórios", self, triggered=self.abrir_central_relatorios))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
         tb.addSeparator(); tb.addWidget(QLabel("Perfil:"))
         self.profile_selector = QComboBox()
         self.profile_selector.addItems(["Cleuber Marcos", "Gilson Oliveira", "Adriana Lucia", "Lucas Laignier"])

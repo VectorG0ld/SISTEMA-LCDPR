@@ -14107,5 +14107,343 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:14992755000124": {
+    "abertura": "03/02/2012",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ALBANY ALTAMIRO QUEIROZ PINHEIRO",
+    "fantasia": "COMERCIO DE CEREAIS ARAGUAIA",
+    "porte": "MICRO EMPRESA",
+    "natureza_juridica": "213-5 - Empresário (Individual)",
+    "atividade_principal": [
+      {
+        "code": "47.29-6-99",
+        "text": "Comércio varejista de produtos alimentícios em geral ou especializado em produtos alimentícios não especificados anteriormente"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      },
+      {
+        "code": "46.83-4-00",
+        "text": "Comércio atacadista de defensivos agrícolas, adubos, fertilizantes e corretivos do solo"
+      },
+      {
+        "code": "47.44-0-01",
+        "text": "Comércio varejista de ferragens e ferramentas"
+      },
+      {
+        "code": "47.89-0-04",
+        "text": "Comércio varejista de animais vivos e de artigos e alimentos para animais de estimação"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "logradouro": "AVENIDA JOSE PEREIRA DO NASCIMENTO",
+    "numero": "4668",
+    "complemento": "QUADRA: 12; LOTE: 04;",
+    "municipio": "SAO MIGUEL DO ARAGUAIA",
+    "bairro": "SETOR OESTE",
+    "uf": "GO",
+    "cep": "76.590-000",
+    "email": "comerciodecereaisaraguaia@gmail.com",
+    "telefone": "(62) 3364-2585",
+    "data_situacao": "03/02/2012",
+    "cnpj": "14.992.755/0001-24",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "200000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:15222567000503": {
+    "abertura": "16/04/2018",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "BELLUNO LOGISTICA E TRANSPORTES LTDA",
+    "fantasia": "BELLUNO LOGISTICA E TRANSPORTES",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "46.22-2-00",
+        "text": "Comércio atacadista de soja"
+      },
+      {
+        "code": "46.23-1-03",
+        "text": "Comércio atacadista de algodão"
+      },
+      {
+        "code": "46.23-1-06",
+        "text": "Comércio atacadista de sementes, flores, plantas e gramas"
+      },
+      {
+        "code": "46.23-1-08",
+        "text": "Comércio atacadista de matérias-primas agrícolas com atividade de fracionamento e acondicionamento associada"
+      },
+      {
+        "code": "46.32-0-01",
+        "text": "Comércio atacadista de cereais e leguminosas beneficiados"
+      },
+      {
+        "code": "49.30-2-01",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal"
+      },
+      {
+        "code": "49.30-2-03",
+        "text": "Transporte rodoviário de produtos perigosos"
+      },
+      {
+        "code": "52.50-8-03",
+        "text": "Agenciamento de cargas, exceto para o transporte marítimo"
+      },
+      {
+        "code": "52.50-8-04",
+        "text": "Organização logística do transporte de carga"
+      }
+    ],
+    "logradouro": "RODOVIA BR 050, KM 66,3",
+    "numero": "0",
+    "complemento": "ANEXO RURAL POSTO CAXUXA SL20",
+    "municipio": "UBERLANDIA",
+    "bairro": "ZONA RURAL",
+    "uf": "MG",
+    "cep": "38.402-019",
+    "email": "fiscal@bellunologistica.com.br",
+    "telefone": "(66) 3425-1897 / (66) 9710-0054",
+    "data_situacao": "16/04/2018",
+    "cnpj": "15.222.567/0005-03",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "1000000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:23714398000123": {
+    "abertura": "16/11/2015",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "TOP FREIOS AR LTDA",
+    "fantasia": "TOP FREIOS AR E TRANSPORTE",
+    "porte": "EMPRESA DE PEQUENO PORTE",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "45.30-7-03",
+        "text": "Comércio a varejo de peças e acessórios novos para veículos automotores"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "45.20-0-01",
+        "text": "Serviços de manutenção e reparação mecânica de veículos automotores"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "52.12-5-00",
+        "text": "Carga e descarga"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "LEUVAINE MARTINS DA SILVA",
+        "qual": "49-Sócio-Administrador"
+      },
+      {
+        "nome": "GISELIA DOS SANTOS CORTEZ",
+        "qual": "49-Sócio-Administrador"
+      }
+    ],
+    "logradouro": "R 7 DE SETEMBRO",
+    "numero": "S/N",
+    "complemento": "QUADRAS 22 LOTE 07 GALPAOC 3",
+    "municipio": "APARECIDA DE GOIANIA",
+    "bairro": "JARDIM IPANEMA COMPLEMENTO",
+    "uf": "GO",
+    "cep": "74.984-320",
+    "telefone": "(62) 3587-1660",
+    "data_situacao": "16/11/2015",
+    "cnpj": "23.714.398/0001-23",
+    "ultima_atualizacao": "2025-08-28T21:00:40.203Z",
+    "status": "OK",
+    "email": "",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "88000.00",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
+  },
+  "cnpj:25086034000171": {
+    "abertura": "27/03/1989",
+    "situacao": "ATIVA",
+    "tipo": "MATRIZ",
+    "nome": "ENERGISA TOCANTINS DISTRIBUIDORA DE ENERGIA S.A.",
+    "fantasia": "ENERGISA TOCANTINS",
+    "porte": "DEMAIS",
+    "natureza_juridica": "205-4 - Sociedade Anônima Fechada",
+    "atividade_principal": [
+      {
+        "code": "35.14-0-00",
+        "text": "Distribuição de energia elétrica"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "35.11-5-01",
+        "text": "Geração de energia elétrica"
+      },
+      {
+        "code": "35.12-3-00",
+        "text": "Transmissão de energia elétrica"
+      },
+      {
+        "code": "74.90-1-04",
+        "text": "Atividades de intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários"
+      }
+    ],
+    "qsa": [
+      {
+        "nome": "MAURICIO PEREZ BOTELHO",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "DANIELE ARAUJO SALOMAO CASTELO",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "ALBERTO ALVES CUNHA",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "ALANKARDEK FERREIRA MOREIRA",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "ALESSANDRO BRUM",
+        "qual": "16-Presidente"
+      },
+      {
+        "nome": "GIORELI DE SOUSA FILHO",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "JOSE MARCOS CHAVES DE MELO",
+        "qual": "10-Diretor"
+      },
+      {
+        "nome": "RODRIGO SANTANA",
+        "qual": "10-Diretor"
+      }
+    ],
+    "logradouro": "Q ACNE 11 RUA NE 11",
+    "numero": "0",
+    "complemento": "CONJ 04 LOTE 12-B",
+    "municipio": "PALMAS",
+    "bairro": "PLANO DIRETOR NORTE",
+    "uf": "TO",
+    "cep": "77.006-030",
+    "email": "rodolfo.paixao@energisa.com.br",
+    "telefone": "(32) 3429-6282",
+    "data_situacao": "03/11/2005",
+    "cnpj": "25.086.034/0001-71",
+    "ultima_atualizacao": "2025-08-20T18:43:52.483Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "532190272.69",
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-07-13T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }
