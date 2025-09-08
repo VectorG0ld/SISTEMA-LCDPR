@@ -28,9 +28,11 @@ from PySide6.QtGui import QFont, QTextCursor, QPixmap, QColor, QTextOption, QReg
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QTextEdit,
     QFileDialog, QMessageBox, QComboBox, QToolButton, QTabWidget, QDialog,
-    QDialogButtonBox, QFormLayout, QLineEdit, QSizePolicy, QGroupBox, QListView
+    QDialogButtonBox, QFormLayout, QLineEdit, QSizePolicy, QGroupBox, QListView, QGridLayout
 )
 import unicodedata
+import tempfile
+import shutil
 
 # ============================
 # Estilo (igual ao anexo)
@@ -613,6 +615,57 @@ class ConfigDialog(QDialog):
     def get_config(self) -> dict:
         return dict(self._cfg)
 
+class ProfilePickerDialog(QDialog):
+    """Dialogo simples para escolher o PERFIL com botões."""
+    def __init__(self, perfis: list[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Selecionar perfil de importação")
+        self.setModal(True)
+        self.setStyleSheet(STYLE_SHEET)
+        self.setFixedWidth(520)
+        self.selected = None
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(14,14,14,14)
+        root.setSpacing(10)
+
+        lbl = QLabel("Escolha o perfil para importar:")
+        root.addWidget(lbl)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+
+        if perfis:
+            cols = 3
+            for i, p in enumerate(perfis):
+                btn = QPushButton(str(p))
+                btn.setMinimumWidth(140)
+                btn.clicked.connect(lambda _=False, name=str(p): self._choose(name))
+                grid.addWidget(btn, i // cols, i % cols)
+            root.addLayout(grid)
+        else:
+            # Fallback: se não descobrirmos perfis, mostra um campo para digitar
+            info = QLabel("Nenhuma lista de perfis encontrada. Digite o nome do perfil:")
+            edt = QLineEdit()
+            edt.setPlaceholderText("Ex.: Perfil Financeiro")
+            def _ok():
+                self.selected = edt.text().strip()
+                if self.selected:
+                    self.accept()
+            root.addWidget(info)
+            root.addWidget(edt)
+            ok = QPushButton("Importar")
+            ok.clicked.connect(_ok)
+            root.addWidget(ok)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Cancel, Qt.Horizontal, self)
+        btns.rejected.connect(self.reject)
+        root.addWidget(btns)
+
+    def _choose(self, name: str):
+        self.selected = name
+        self.accept()
 
 # ============================
 # UI Principal (estilo do anexo)
@@ -1075,15 +1128,16 @@ class AutomacaoFolhaUI(QWidget):
             self.lbl_last_status.setText("TXT gerado.")
             self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 
-            # perguntar se deseja importar agora
+            # perguntar se deseja importar agora (via arquivo temporário + seleção de perfil)
             resp = QMessageBox.question(
                 self, "Importar agora?",
-                "Deseja importar o TXT gerado no sistema?",
+                "Deseja importar o TXT gerado agora (via arquivo temporário)?",
                 QMessageBox.Yes | QMessageBox.No
             )
             if resp == QMessageBox.Yes:
-                self._importar_txt()
+                self._pick_and_import_temp(path_txt)
 
+            
         elif status == "Vazio":
             QMessageBox.information(self, "TXT", "Nenhuma linha foi gerada para o período.")
         elif status == "Cancelado":
@@ -1115,6 +1169,161 @@ class AutomacaoFolhaUI(QWidget):
         except Exception as e:
             self.log_msg(f"Erro ao importar: {e}", "error")
 
+    def _importar_txt_temp(self, src_path: str):
+        """Copia o TXT gerado para um arquivo temporário e importa sem pedir caminho."""
+        try:
+            if not src_path or not os.path.exists(src_path):
+                QMessageBox.warning(self, "TXT", "Arquivo gerado não encontrado para importação.")
+                return
+
+            base = os.path.basename(src_path)
+
+            # cria um arquivo temporário .txt e copia o conteúdo
+            fd, tmp_path = tempfile.mkstemp(prefix="folha_", suffix=".txt")
+            os.close(fd)
+            shutil.copy2(src_path, tmp_path)
+
+            # importa no sistema pelo caminho temporário (sem diálogo)
+            mw = self.window()
+            if not hasattr(mw, "_import_lancamentos_txt"):
+                raise RuntimeError("A janela principal não expõe _import_lancamentos_txt.")
+
+            self.log_msg(f"Importando (via temporário): {base}", "info", update_status=False)
+            mw._import_lancamentos_txt(tmp_path)
+
+            if hasattr(mw, "carregar_lancamentos"):
+                mw.carregar_lancamentos()
+            if hasattr(mw, "dashboard"):
+                try:
+                    mw.dashboard.load_data()
+                except Exception:
+                    pass
+
+            self.log_msg(f"Importado no sistema (via temporário): {base}", "success", update_status=False)
+            self.lbl_last_status.setText("Importado no sistema.")
+            self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+        except Exception as e:
+            self.log_msg(f"Erro ao importar (temporário): {e}", "error")
+        finally:
+            # tenta remover o temporário (opcional: comente se quiser manter)
+            try:
+                if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+
+    def _discover_perfis(self) -> list[str]:
+        """Tenta descobrir a lista de perfis a partir da janela principal/config."""
+        mw = self.window()
+        # 1) atributos comuns
+        for attr in ("perfis", "profiles", "lista_perfis", "profiles_list"):
+            lst = getattr(mw, attr, None)
+            if isinstance(lst, (list, tuple)) and lst:
+                return [str(x) for x in lst]
+        # 2) métodos comuns
+        for meth in ("get_perfis", "listar_perfis", "get_profiles", "list_profiles"):
+            if hasattr(mw, meth):
+                try:
+                    lst = getattr(mw, meth)()
+                    if isinstance(lst, (list, tuple)) and lst:
+                        return [str(x) for x in lst]
+                except Exception:
+                    pass
+        # 3) config opcional
+        lst = (self.cfg or {}).get("perfis", [])
+        if isinstance(lst, list) and lst:
+            return [str(x) for x in lst]
+        return []  # deixamos o dialog cair no fallback (digitar)
+    
+    def _pick_and_import_temp(self, src_path: str):
+        """Abre o seletor de PERFIL e importa via temporário para o perfil escolhido."""
+        perfis = self._discover_perfis()
+        dlg = ProfilePickerDialog(perfis, self)
+        if dlg.exec() == QDialog.Accepted and dlg.selected:
+            self._importar_txt_temp_to_profile(src_path, dlg.selected)
+        else:
+            self.log_msg("Importação cancelada pelo usuário (perfil não selecionado).", "warning")
+    
+    def _importar_txt_temp_to_profile(self, src_path: str, perfil: str):
+        """Importa usando um arquivo temporário, aplicando o PERFIL selecionado."""
+        try:
+            if not src_path or not os.path.exists(src_path):
+                QMessageBox.warning(self, "TXT", "Arquivo gerado não encontrado para importação.")
+                return
+    
+            base = os.path.basename(src_path)
+    
+            # cria temporário
+            fd, tmp_path = tempfile.mkstemp(prefix="folha_", suffix=".txt")
+            os.close(fd)
+            shutil.copy2(src_path, tmp_path)
+    
+            mw = self.window()
+            if not hasattr(mw, "_import_lancamentos_txt"):
+                raise RuntimeError("A janela principal não expõe _import_lancamentos_txt.")
+    
+            self.log_msg(f"Importando (via temporário) no perfil '{perfil}': {base}", "info", update_status=False)
+    
+            # 1) tenta passar o perfil diretamente para o importador (posicional/kw)
+            imported = False
+            try:
+                mw._import_lancamentos_txt(tmp_path, perfil)   # posicional
+                imported = True
+            except TypeError:
+                try:
+                    mw._import_lancamentos_txt(tmp_path, perfil=perfil)  # nomeado
+                    imported = True
+                except TypeError:
+                    pass
+                
+            # 2) se não aceitar argumento, tenta selecionar o perfil antes e importar
+            if not imported:
+                switched = False
+                for setter in ("selecionar_perfil", "set_perfil", "set_profile", "setPerfil", "seleciona_perfil"):
+                    if hasattr(mw, setter):
+                        try:
+                            getattr(mw, setter)(perfil)
+                            switched = True
+                            break
+                        except Exception:
+                            pass
+                if not switched:
+                    for attr in ("perfil_atual", "perfil", "profile", "current_profile"):
+                        if hasattr(mw, attr):
+                            try:
+                                setattr(mw, attr, perfil)
+                                switched = True
+                                break
+                            except Exception:
+                                pass
+                            
+                # importa sem argumento de perfil
+                mw._import_lancamentos_txt(tmp_path)
+                imported = True
+    
+            # pós-import
+            if hasattr(mw, "carregar_lancamentos"):
+                mw.carregar_lancamentos()
+            if hasattr(mw, "dashboard"):
+                try:
+                    mw.dashboard.load_data()
+                except Exception:
+                    pass
+                
+            self.log_msg(f"Importado no sistema (perfil '{perfil}', via temporário): {base}", "success", update_status=False)
+            self.lbl_last_status.setText("Importado no sistema.")
+            self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+    
+        except Exception as e:
+            self.log_msg(f"Erro ao importar (perfil '{perfil}'): {e}", "error")
+        finally:
+            try:
+                if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+            
     # ---------- Stats ----------
     def _update_stats(self, total: int, ok: int, err: int):
         self.stat_total, self.stat_ok, self.stat_err = total, ok, err
