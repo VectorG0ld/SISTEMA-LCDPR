@@ -1,2 +1,0 @@
-[08/09/2025 18:05:46] ℹ️Log limpo.
-[08/09/2025 18:05:46] ✅Log salvo em: c:\Users\conta\OneDrive\Documentos\CODIGOS\Trabalho\LIVRO CAIXA\SISTEMA LCDPR\Importação Folha\logs\folha_log_20250908_180546.txt
