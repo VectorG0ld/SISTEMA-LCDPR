@@ -27,7 +27,7 @@ from PySide6.QtGui import (QIcon, QFont, QColor, QTextCursor, QPixmap, QCloseEve
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QToolButton,
     QPushButton, QTextEdit, QFileDialog, QMessageBox, QCheckBox, QDialog, QLineEdit,
-    QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QGraphicsDropShadowEffect
+    QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QGraphicsDropShadowEffect, QTabWidget
 )
 
 # ============================
@@ -47,8 +47,45 @@ QPushButton#success { background-color: #27AE60; }
 QPushButton#success:hover { background-color: #2ECC71; }
 QGroupBox { border: 1px solid #11398a; border-radius: 6px; margin-top: 10px; font-weight: bold; background-color: #0d1b3d; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #ffffff; }
+QTableWidget { background-color: #222426; color: #E0E0E0; border: 1px solid #1e5a9c; border-radius: 4px; gridline-color: #3A3C3D; alternate-background-color: #2A2C2D; }
+QHeaderView::section { background-color: #1e5a9c; color: #FFFFFF; padding: 6px; border: none; }
 QTabWidget::pane { border: 1px solid #1e5a9c; border-radius: 4px; background: #212425; margin-top: 5px; }
+QTabBar::tab { background: #2A2C2D; color: #E0E0E0; padding: 8px 16px; border: 1px solid #1e5a9c; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 2px; }
+QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px solid #002a54; }
 QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
+/* ===== Overrides apenas da tela de Configurações (QDialog com objectName=tab_config) ===== */
+QWidget#tab_config QGroupBox {
+    background-color: transparent;        /* remove o fundo azul */
+    border: 1px solid #11398a;            /* mantém só a linha azul */
+    border-radius: 6px;
+    margin-top: 10px;
+}
+QWidget#tab_config QGroupBox::title {
+    color: #ffffff;
+    background: transparent;              /* título sem tarja */
+    padding: 0 5px;
+    left: 10px;
+}
+
+/* Se você usa QFrame como “cards” nessa tela, aplique o mesmo visual de borda */
+QWidget#tab_config QFrame,
+QWidget#tab_config QFrame#card,
+QWidget#tab_config QFrame.card {
+    background-color: transparent;
+    border: 1px solid #11398a;
+    border-radius: 6px;
+}
+
+/* Inputs nessa tela continuam com o visual padrão; se quiser um toque sutil: */
+QWidget#tab_config QLineEdit,
+QWidget#tab_config QComboBox,
+QWidget#tab_config QTextEdit {
+    background-color: #2B2F31;   /* mantém dark */
+    border: 1px solid #1e5a9c;
+    border-radius: 6px;
+    padding: 6px;
+}
+
 """
 
 # ============================
@@ -148,6 +185,7 @@ class ConfigDialog(QDialog):
     def __init__(self, cfg: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("⚙️ Configurações")
+        self.setObjectName("tab_config")  # aplica os estilos só neste diálogo
         self.setModal(True)
         self.setFixedSize(640, 260)
         self.cfg = cfg or {}
@@ -630,8 +668,9 @@ class AutomacaoEnergiaUI(QWidget):
         btn_key = QToolButton(); btn_key.setText("🔑 Definir API da OpenAI")
         btn_key.clicked.connect(self._open_key)
 
-        btn_close = QToolButton(); btn_close.setText("✖ Fechar")
-        btn_close.clicked.connect(self.close)
+        btn_close = QToolButton()
+        btn_close.setText("✖ Fechar")
+        btn_close.clicked.connect(self._close_self_tab)
 
         right = QHBoxLayout(); right.setSpacing(8)
         right.addWidget(btn_cfg); right.addWidget(btn_key); right.addWidget(btn_close)
@@ -639,6 +678,17 @@ class AutomacaoEnergiaUI(QWidget):
 
         self._add_shadow(header, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
         return header
+
+    def _close_self_tab(self):
+        parent = self.parent()
+        while parent and not isinstance(parent, QTabWidget):
+            parent = parent.parent()
+        if parent:  # dentro de um QTabWidget
+            idx = parent.indexOf(self)
+            if idx != -1:
+                parent.removeTab(idx)
+        else:       # janela solta
+            self.close()
 
     def _build_controls_card(self) -> QFrame:
         card = QFrame(); card.setStyleSheet("QFrame{border:1px solid #1e5a9c; border-radius:12px;}")

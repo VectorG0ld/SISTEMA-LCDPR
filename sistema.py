@@ -3412,7 +3412,7 @@ class MainWindow(QMainWindow):
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "bank.png")), "Cad. Conta", self, triggered=self.cad_conta))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "users.png")), "Cad. Participante", self, triggered=self.cad_participante))
         tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "report.png")), "Relatórios", self, triggered=self.abrir_central_relatorios))
-        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "txt.png")), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
+        tb.addAction(QAction(QIcon(os.path.join(ICONS_DIR, "relatorio.png")), "Arquivo LCDPR", self, triggered=self.arquivo_lcdpr))
         tb.addSeparator(); tb.addWidget(QLabel("Perfil:"))
         self.profile_selector = QComboBox()
         self.profile_selector.addItems(["Cleuber Marcos", "Gilson Oliveira", "Adriana Lucia", "Lucas Laignier"])
