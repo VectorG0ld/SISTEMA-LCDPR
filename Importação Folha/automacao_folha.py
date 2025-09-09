@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 import unicodedata
 import tempfile
 import shutil
+import sqlite3
 
 # ============================
 # Estilo (igual ao anexo)
@@ -162,6 +163,15 @@ IMOVEL_MAP = {
     },
 }
 
+# ===== Perfis suportados (rótulo -> nome interno da MainWindow) =====
+PROFILE_DISPLAY = ["Cleuber", "Gilson", "Adriana", "Lucas"]
+PROFILE_MAP = {
+    "Cleuber": "Cleuber Marcos",
+    "Gilson":  "Gilson Oliveira",
+    "Adriana": "Adriana Lucia",
+    "Lucas":   "Lucas Laignier",
+}
+
 # ===== CNPJs dos TRIBUTOS (usar apenas dígitos) =====
 TRIBUTOS_CNPJ = {
     "INSS": re.sub(r"\D", "", "00.394.460/0058-87"),  # 00394460005887
@@ -221,6 +231,25 @@ def _make_line(data_br, imovel, conta, num_doc, tipo_doc, historico, cpf, tipo_l
         data_br, imovel, conta, num_doc, tipo_doc,
         historico, cpf, tipo_lanc, cent_ent, cent_sai, cent_saldo, nat
     ])
+
+# === DEDUP (contra o banco) ===
+def _yyyymmdd_from_br(date_br: str) -> int:
+    # date_br = "dd-mm-YYYY"
+    return int(date_br[6:10] + date_br[3:5] + date_br[0:2])
+
+def _norms_code(code: str) -> list[str]:
+    s = (code or '').strip()
+    if not s:
+        return []
+    out = [s]
+    if s.isdigit():
+        out += [s.zfill(3), (s.lstrip('0') or '0')]
+    # remove duplicatas preservando ordem
+    seen = set(); res = []
+    for x in out:
+        if x not in seen:
+            seen.add(x); res.append(x)
+    return res
 
 def _extract_imovel_name(texto_a: str) -> str:
     """
@@ -283,25 +312,43 @@ def _owner_from_text(a_txt: str) -> str | None:
             return tt
     return None
 
-def _cod_imovel_from_colA(a_txt: str) -> str:
+def _cod_imovel_from_colA(a_txt: str, owner: str | None = None) -> str:
     """
-    Lê a coluna A (A5..), identifica o TITULAR e procura um dos nomes de fazenda
-    do respectivo mapeamento; retorna o CÓDIGO (ex.: '005').
-    Se não encontrar nada, retorna '001'.
+    Lê a coluna A e tenta identificar a FAZENDA pelo texto livre, mapeando para o CÓDIGO
+    cadastrado em IMOVEL_MAP. Se o titular (owner) for detectado, restringe o match ao mapa dele.
+    Usa substring e, se necessário, similaridade (fuzzy).
     """
-    t = _norm(a_txt)
-    owner = _owner_from_text(t) or ""  # pode ser vazio
-    # 1) tenta no mapa do titular detectado
+    t = _norm(a_txt or "")
+    # normaliza abreviações comuns
+    t = t.replace(" FAZ. ", " FAZENDA ").replace(" FAZ ", " FAZENDA ")
+
+    # 0) Se tiver owner, usamos primeiro só o mapa dele
+    maps_to_scan = []
     if owner and owner in IMOVEL_MAP:
-        for faz, code in IMOVEL_MAP[owner].items():
-            if _norm(faz) in t:
+        maps_to_scan.append(IMOVEL_MAP[owner])
+    # 1) Depois, todos os mapas (fallback)
+    maps_to_scan.append({faz: code for mp in IMOVEL_MAP.values() for faz, code in mp.items()})
+
+    for mp in maps_to_scan:
+        candidates = [(_norm(faz), code) for faz, code in mp.items()]
+        # Match direto por substring (mais seguro)
+        for n, code in candidates:
+            if n in t or t in n:
                 return code
-    # 2) fallback: procura em todos os mapas (caso A não traga o nome do titular)
-    for mp in IMOVEL_MAP.values():
-        for faz, code in mp.items():
-            if _norm(faz) in t:
-                return code
-    # 3) fallback final
+        # Fuzzy se não achou por substring
+        try:
+            from difflib import SequenceMatcher
+            best_code, best_ratio = None, 0.0
+            for n, code in candidates:
+                r = SequenceMatcher(None, n, t).ratio()
+                if r > best_ratio:
+                    best_ratio, best_code = r, code
+            if best_ratio >= 0.60:
+                return best_code
+        except Exception:
+            pass
+
+    # 2) Fallback
     return "001"
 
 # ============================
@@ -341,17 +388,21 @@ def _read_sheet_with_xlwings(filepath: str, mes: int, ano: int):
             if not (a_txt or cpf or nome or val):
                 break
 
-            cod_imovel = _cod_imovel_from_colA(a_txt)
+            owner = _owner_from_text(a_txt)
+            imovel_nome = _extract_imovel_name(a_txt)
+            cod_imovel = _cod_imovel_from_colA(a_txt, owner)
+            
             if cod_imovel:
                 imoveis.append(cod_imovel)
-
-            if cpf and nome and (val is not None and str(val).strip() != ""):
-                funcionarios.append({
-                    "cpf": cpf,
-                    "nome": nome,
-                    "centavos": _to_cent(val),
-                    "imovel": cod_imovel
-                })
+            
+            funcionarios.append({
+                "cpf": cpf,
+                "nome": nome,
+                "centavos": _to_cent(val),
+                "imovel": cod_imovel,          # código usado no TXT
+                "imovel_nome": imovel_nome,    # agora acessado
+                "titular": owner               # agora acessado
+            })
             r += 1
 
         imovel_tributos = _mode_or_default(imoveis, default="001")
@@ -418,15 +469,12 @@ def _read_planilha(filepath: str, mes: int, ano: int):
     except Exception:
         return _read_sheet_with_openpyxl(filepath, mes, ano)
 
-# ============================
-# Worker (QThread) – Geração do TXT com Cancelar
-# ============================
 class FolhaWorker(QThread):
     log_sig = Signal(str, str)               # (mensagem, tipo)
     stats_sig = Signal(int, int, int)        # total, ok, err
     finished_sig = Signal(str, str)          # status, caminho_txt (ou "")
 
-    def __init__(self, planilha: str, inicio: str, fim: str, parent=None):
+    def __init__(self, planilha: str, inicio: str, fim: str, db_path: str | None = None, parent=None):
         super().__init__(parent)
         self.planilha = planilha
         self.inicio = inicio
@@ -436,10 +484,13 @@ class FolhaWorker(QThread):
         self.ok = 0
         self.err = 0
 
-        # Constantes do layout
         self.COD_CONTA = "001"
-        self._vistos = set()  # (cpf, data_br)
+        self._vistos = set()
         self._linhas = []
+
+        # conexão PRÓPRIA da thread (só leitura) p/ dedupe
+        self._db_path = db_path
+        self._conn = None
 
     def cancel(self):
         self._cancel = True
@@ -450,15 +501,75 @@ class FolhaWorker(QThread):
     def _emit_stats(self):
         self.stats_sig.emit(self.total, self.ok, self.err)
 
+    # ---------- DB helpers (thread-safe p/ SQLite) ----------
+    def _conn_ro(self):
+        if self._conn is None and self._db_path:
+            try:
+                uri = f"file:{self._db_path}?mode=ro"
+                self._conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+            except Exception:
+                self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        return self._conn
+
+    def _fetch_one(self, sql: str, params: tuple = ()):
+        conn = self._conn_ro()
+        if not conn:
+            return None
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        return cur.fetchone()
+
+    def _imovel_id(self, cod: str):
+        if not cod:
+            return None
+        for alt in _norms_code(cod):
+            row = self._fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (alt,))
+            if row:
+                return row[0]
+        return None
+
+    def _part_id(self, digits: str):
+        if not digits:
+            return None
+        row = self._fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+        return row[0] if row else None
+
+    def _exists_in_db(self, data_br: str, cod_imovel: str, digits: str, cents_str: str, historico: str) -> bool:
+        """
+        True se já existe lançamento idêntico (data_ord, imóvel, participante, tipo=2, valor_saida, histórico).
+        Se não conseguir resolver FKs ou não houver conexão, NÃO bloqueia.
+        """
+        id_im = self._imovel_id(cod_imovel)
+        pid = self._part_id(digits)
+        if not id_im or not pid:
+            return False
+
+        data_ord = _yyyymmdd_from_br(data_br)
+        try:
+            valor = (int(''.join(c for c in str(cents_str) if c.isdigit())) / 100.0)
+        except Exception:
+            valor = 0.0
+
+        row = self._fetch_one(
+            """
+            SELECT 1 FROM lancamento
+             WHERE data_ord=? AND cod_imovel=? AND id_participante=? AND tipo_lanc=2
+               AND ABS(valor_saida - ?) < 0.005
+               AND TRIM(COALESCE(historico,'')) = TRIM(?)
+             LIMIT 1
+            """,
+            (data_ord, id_im, pid, valor, historico)
+        )
+        return bool(row)
+
+    # ---------- Execução ----------
     def run(self):
         try:
-            # Vamos contar total estimado como "meses * (func + 3 tributos)"
-            # Atualiza dinamicamente por mês.
             linhas = []
             self._emit("Iniciando leitura da planilha…", "title")
 
             for m, y in _iter_mes_ano(self.inicio, self.fim):
-                if self._cancel: 
+                if self._cancel:
                     self._emit("Processo cancelado.", "warning")
                     self.finished_sig.emit("Cancelado", "")
                     return
@@ -473,7 +584,6 @@ class FolhaWorker(QThread):
                     self._emit(f"Erro ao ler {m:02d}/{y}: {e}", "error")
                     continue
 
-
                 data_func = _dia_ajustado(y, m, 5)
                 data_trib = _dia_ajustado(y, m, 20)
                 data_func_br = _fmt_dd_mm_yyyy(data_func)
@@ -485,20 +595,32 @@ class FolhaWorker(QThread):
                         self._emit("Cancelado pelo usuário.", "warning")
                         self.finished_sig.emit("Cancelado", "")
                         return
-                    cpf = _digits(f.get("cpf")); nome = (f.get("nome") or "").strip()
+
+                    cpf   = _digits(f.get("cpf"))
+                    nome  = (f.get("nome") or "").strip()
                     cents = str(f.get("centavos") or "0")
-                    imovel = (f.get("imovel") or "001").strip()  # código do imóvel
+                    imovel = (f.get("imovel") or "001").strip()
 
-                    if not cpf or not nome or cents in ("", "0"):
-                        continue
+                    if not nome:
+                        self._emit("Linha ignorada: sem nome.", "warning");  continue
+                    if not cpf:
+                        self._emit(f"Linha ignorada (sem CPF): {nome}", "warning");  continue
+                    if cents in ("", "0"):
+                        self._emit(f"Linha ignorada (valor zero): {nome}", "warning");  continue
 
-                    key = (cpf, data_func_br)
+                    key = (_norm(nome), data_func_br)  # dedupe intra-execução
                     if key in self._vistos:
-                        self._emit(f"↩️ DUP ignorado: {cpf} {data_func_br}", "warning")
+                        self._emit(f"↩️ DUP ignorado (sessão): {nome} {data_func_br}", "warning")
                         continue
                     self._vistos.add(key)
 
                     historico = f"FOLHA DE PAGAMENTO REF. {m:02d}/{y} ({nome})"
+
+                    # dedupe no banco (na MESMA thread — conexão própria)
+                    if self._exists_in_db(data_func_br, imovel, cpf, cents, historico):
+                        self._emit(f"↩️ DUP no banco: {nome} {data_func_br}", "warning")
+                        continue
+
                     linha = _make_line(
                         data_func_br, imovel, self.COD_CONTA,
                         "N", "1", historico, cpf, "2", "000", cents, cents, "N"
@@ -506,7 +628,7 @@ class FolhaWorker(QThread):
                     linhas.append(linha)
                     self.ok += 1; self._emit_stats()
 
-                # Tributos únicos do mês
+                # Tributos do mês
                 for rotulo, cents in (("INSS", trib.get("INSS","0")), ("IRRF", trib.get("IRRF","0")), ("FGTS", trib.get("FGTS","0"))):
                     if self._cancel:
                         self._emit("Cancelado pelo usuário.", "warning")
@@ -514,13 +636,19 @@ class FolhaWorker(QThread):
                         return
                     if not cents or str(cents) == "0":
                         continue
+
                     historico = f"FOLHA DE PAGAMENTO REF. {m:02d}/{y} {rotulo}"
                     cnpj = TRIBUTOS_CNPJ.get(rotulo, "")
+                    imovel_use = imovel_trib or "001"
+
+                    if self._exists_in_db(data_trib_br, imovel_use, cnpj, str(cents), historico):
+                        self._emit(f"↩️ DUP no banco: {rotulo} {data_trib_br}", "warning")
+                        continue
+
                     linha = _make_line(
-                        data_trib_br, imovel_trib or "001", self.COD_CONTA,
+                        data_trib_br, imovel_use, self.COD_CONTA,
                         "N", "1", historico, cnpj, "2", "000", str(cents), str(cents), "N"
                     )
-
                     linhas.append(linha)
                     self.ok += 1; self._emit_stats()
 
@@ -541,6 +669,12 @@ class FolhaWorker(QThread):
             self._emit_stats()
             self._emit(f"Erro inesperado:\n{traceback.format_exc()}", "error")
             self.finished_sig.emit("Erro", "")
+        finally:
+            try:
+                if self._conn:
+                    self._conn.close()
+            except Exception:
+                pass
 
 # ============================
 # Diálogo de Configurar
@@ -692,7 +826,9 @@ class AutomacaoFolhaUI(QWidget):
         top.addWidget(self._build_controls_card(), 3)
         top.addWidget(self._build_stats_card(), 2)
         root.addLayout(top)
-        root.addWidget(self._build_log_card())
+        # Log ocupa o resto da tela (mesmo comportamento do Importar Dump)
+        log_card = self._build_log_card()
+        root.addWidget(log_card, 1)  # stretch=1
 
         footer = QLabel("🧾 Automação Folha — v1.0")
         footer.setAlignment(Qt.AlignCenter)
@@ -748,6 +884,18 @@ class AutomacaoFolhaUI(QWidget):
         right.addWidget(btn_help); right.addWidget(btn_cfg); right.addWidget(btn_close)
         lay.addLayout(right, 0)
         return header
+
+    def _get_db_path(self) -> str | None:
+        try:
+            mw = self.window()
+            db = getattr(mw, "db", None)
+            if db and hasattr(db, "execute_query"):
+                row = db.execute_query("PRAGMA database_list").fetchone()
+                if row and len(row) >= 3:
+                    return row[2]  # caminho do arquivo .sqlite
+        except Exception:
+            pass
+        return None
 
     def _close_self_tab(self):
         parent = self.parent()
@@ -924,19 +1072,42 @@ class AutomacaoFolhaUI(QWidget):
         body_lay = QVBoxLayout(body); body_lay.setContentsMargins(12,12,12,12); body_lay.setSpacing(0)
     
         self.log = QTextEdit(readOnly=True)
-        self.log.setMinimumHeight(280)
-        self.log.setMaximumHeight(320)  # não deixa “empurrar” a janela
         self.log.setFrameStyle(QFrame.NoFrame)
-        self.log.setStyleSheet("QTextEdit{background:transparent; border:none;} "
-                               "QTextEdit::viewport{background:transparent; border:none;}")
-    
-        # >>> PONTOS-CHAVE contra “esticamento”
+
+        # ocupa todo o espaço, igual ao Importar Dump
+        self.log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.log.setMinimumHeight(0)
+        self.log.setMaximumHeight(16777215)
+
+        # zera acolchoamentos para a 1ª linha não “nascer” no meio
+        self.log.setStyleSheet(
+            "QTextEdit{background:transparent; border:none; padding:0; margin:0;}"
+            "QTextEdit::viewport{background:transparent; border:none; padding:0; margin:0;}"
+        )
+        self.log.document().setDocumentMargin(2)
+        self.log.setViewportMargins(0, 0, 0, 0)
+        self.log.setContentsMargins(0, 0, 0, 0)
+
+        # mesmas opções de quebra que você já usa
         self.log.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.log.setWordWrapMode(QTextOption.WrapAnywhere)           # quebra até “palavras” longas
-        self.log.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff) # nunca usa barra horizontal
-        self.log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-    
-        body_lay.addWidget(self.log)
+        self.log.setWordWrapMode(QTextOption.WrapAnywhere)
+        self.log.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.log.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        body_lay.addWidget(self.log, 1)
+
+        # garante que a primeira mensagem apareça colada no topo
+        self.log.clear()
+        self.log.moveCursor(QTextCursor.Start)
+        if self.log.verticalScrollBar():
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().minimum())
+
+
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.setStretch(0, 0)
+        lay.setStretch(1, 1)
+        body_lay.setStretch(0, 1)
+
         lay.addWidget(body)
         return card
     
@@ -964,7 +1135,14 @@ class AutomacaoFolhaUI(QWidget):
             f'</div>'
         )
         self.log.append(html)
-    
+        # mantém no topo quando há só 1ª/2ª linha; senão, rola para o fim
+        sb = self.log.verticalScrollBar()
+        if sb:
+            if self.log.document().blockCount() <= 2:
+                sb.setValue(0)
+            else:
+                sb.setValue(sb.maximum())
+
         if update_status:
             # status curto (sem paths enormes): tira caminhos e limita tamanho
             def _shorten_for_status(text: str, maxlen: int = 140) -> str:
@@ -984,8 +1162,12 @@ class AutomacaoFolhaUI(QWidget):
         self.lbl_last_status_time.setMinimumWidth(120)
 
     def _log_clear(self):
-        self.log.clear()
+        self.log.clear()                      # sem HTML “fantasma”
+        self.log.moveCursor(QTextCursor.Start)
+        if self.log.verticalScrollBar():
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().minimum())
         self.log_msg("Log limpo.", "info")
+
 
     def _log_save(self):
         try:
@@ -1085,7 +1267,9 @@ class AutomacaoFolhaUI(QWidget):
         self.btn_cancel.setEnabled(True)
         self.log_msg(f"Geração do TXT iniciada ({ini} → {fim})…", "title")
 
-        self.worker = FolhaWorker(planilha, ini, fim, parent=self)
+        # depois:
+        db_path = self._get_db_path()
+        self.worker = FolhaWorker(planilha, ini, fim, db_path=db_path, parent=self)
         self.worker.log_sig.connect(self._on_worker_log)
         self.worker.stats_sig.connect(self._update_stats)
         self.worker.finished_sig.connect(self._on_worker_finished)
@@ -1214,14 +1398,36 @@ class AutomacaoFolhaUI(QWidget):
                 pass
 
     def _discover_perfis(self) -> list[str]:
-        """Tenta descobrir a lista de perfis a partir da janela principal/config."""
+        """Descobre a lista de perfis a partir da janela principal/config."""
         mw = self.window()
-        # 1) atributos comuns
+
+        # 0) Tenta extrair do combo 'profile_selector' da MainWindow (ordem da UI)
+        try:
+            from PySide6.QtWidgets import QComboBox
+        except Exception:
+            QComboBox = None
+
+        if hasattr(mw, "profile_selector") and (
+            QComboBox is None or isinstance(mw.profile_selector, QComboBox)
+        ):
+            try:
+                items = [mw.profile_selector.itemText(i) for i in range(mw.profile_selector.count())]
+                # Converte nomes internos -> rótulos amigáveis quando possível
+                inv = {v: k for k, v in PROFILE_MAP.items()}
+                display = [inv.get(txt, txt) for txt in items]
+                # Garante que venham exatamente os 4 pedidos, na ordem desejada, se existirem na UI
+                ordered = [name for name in PROFILE_DISPLAY if PROFILE_MAP.get(name) in items]
+                return ordered or display
+            except Exception:
+                pass
+
+        # 1) Atributos comuns
         for attr in ("perfis", "profiles", "lista_perfis", "profiles_list"):
             lst = getattr(mw, attr, None)
             if isinstance(lst, (list, tuple)) and lst:
                 return [str(x) for x in lst]
-        # 2) métodos comuns
+
+        # 2) Métodos comuns
         for meth in ("get_perfis", "listar_perfis", "get_profiles", "list_profiles"):
             if hasattr(mw, meth):
                 try:
@@ -1230,12 +1436,15 @@ class AutomacaoFolhaUI(QWidget):
                         return [str(x) for x in lst]
                 except Exception:
                     pass
-        # 3) config opcional
+
+        # 3) Config opcional (json/config_folha.json)
         lst = (self.cfg or {}).get("perfis", [])
         if isinstance(lst, list) and lst:
             return [str(x) for x in lst]
-        return []  # deixamos o dialog cair no fallback (digitar)
-    
+
+        # 4) Fallback garantido: 4 perfis fixos (como você pediu)
+        return list(PROFILE_DISPLAY)
+
     def _pick_and_import_temp(self, src_path: str):
         """Abre o seletor de PERFIL e importa via temporário para o perfil escolhido."""
         perfis = self._discover_perfis()
@@ -1253,6 +1462,7 @@ class AutomacaoFolhaUI(QWidget):
                 return
     
             base = os.path.basename(src_path)
+            internal = PROFILE_MAP.get(perfil, perfil)
     
             # cria temporário
             fd, tmp_path = tempfile.mkstemp(prefix="folha_", suffix=".txt")
@@ -1268,11 +1478,11 @@ class AutomacaoFolhaUI(QWidget):
             # 1) tenta passar o perfil diretamente para o importador (posicional/kw)
             imported = False
             try:
-                mw._import_lancamentos_txt(tmp_path, perfil)   # posicional
+                mw._import_lancamentos_txt(tmp_path, internal)   # posicional
                 imported = True
             except TypeError:
                 try:
-                    mw._import_lancamentos_txt(tmp_path, perfil=perfil)  # nomeado
+                    mw._import_lancamentos_txt(tmp_path, perfil=internal)  # nomeado
                     imported = True
                 except TypeError:
                     pass
@@ -1280,10 +1490,10 @@ class AutomacaoFolhaUI(QWidget):
             # 2) se não aceitar argumento, tenta selecionar o perfil antes e importar
             if not imported:
                 switched = False
-                for setter in ("selecionar_perfil", "set_perfil", "set_profile", "setPerfil", "seleciona_perfil"):
+                for setter in ("selecionar_perfil", "set_perfil", "set_profile", "setPerfil", "seleciona_perfil", "switch_profile"):
                     if hasattr(mw, setter):
                         try:
-                            getattr(mw, setter)(perfil)
+                            getattr(mw, setter)(internal)
                             switched = True
                             break
                         except Exception:
@@ -1292,15 +1502,16 @@ class AutomacaoFolhaUI(QWidget):
                     for attr in ("perfil_atual", "perfil", "profile", "current_profile"):
                         if hasattr(mw, attr):
                             try:
-                                setattr(mw, attr, perfil)
+                                setattr(mw, attr, internal)
                                 switched = True
                                 break
                             except Exception:
                                 pass
                             
-                # importa sem argumento de perfil
+                # importa sem argumento de perfil (já trocado)
                 mw._import_lancamentos_txt(tmp_path)
                 imported = True
+
     
             # pós-import
             if hasattr(mw, "carregar_lancamentos"):

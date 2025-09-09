@@ -685,8 +685,9 @@ class AutomacaoEnergiaUI(QWidget):
         top_row.addWidget(self._build_stats_card(), 2)
         root.addLayout(top_row)
 
-        # Log (fixo, não alarga o layout)
-        root.addWidget(self._build_log_card())
+        # Log ocupa o resto da tela (mesmo comportamento do Importar Dump)
+        log_card = self._build_log_card()
+        root.addWidget(log_card, 1)  # stretch=1
 
         # Rodapé
         footer = QLabel("⚡ Automação de Talões de Energia — v1.0")
@@ -890,17 +891,42 @@ class AutomacaoEnergiaUI(QWidget):
         body_lay = QVBoxLayout(body); body_lay.setContentsMargins(12,12,12,12); body_lay.setSpacing(0)
 
         self.log = QTextEdit(readOnly=True)
-        self.log.setMinimumHeight(280)
         self.log.setFrameStyle(QFrame.NoFrame)
-        self.log.setStyleSheet("QTextEdit{background:transparent; border:none;} QTextEdit::viewport{background:transparent; border:none;}")
-
-        # >>> impede que o log force a janela a alargar:
+        
+        # ocupa todo o espaço, igual ao Importar Dump
+        self.log.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.log.setMinimumHeight(0)
+        self.log.setMaximumHeight(16777215)
+        
+        # zera acolchoamentos para a 1ª linha não “nascer” no meio
+        self.log.setStyleSheet(
+            "QTextEdit{background:transparent; border:none; padding:0; margin:0;}"
+            "QTextEdit::viewport{background:transparent; border:none; padding:0; margin:0;}"
+        )
+        self.log.document().setDocumentMargin(2)
+        self.log.setViewportMargins(0, 0, 0, 0)
+        self.log.setContentsMargins(0, 0, 0, 0)
+        
+        # mesmas opções de quebra que você já usa
         self.log.setLineWrapMode(QTextEdit.WidgetWidth)
-        self.log.setWordWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+        self.log.setWordWrapMode(QTextOption.WrapAnywhere)
         self.log.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.log.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.log.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        body_lay.addWidget(self.log, 1)
+        
+        # garante que a primeira mensagem apareça colada no topo
+        self.log.clear()
+        self.log.moveCursor(QTextCursor.Start)
+        if self.log.verticalScrollBar():
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().minimum())
+        
+        # Preencher todo o card (igual ao importar-dump)
+        card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        lay.setStretch(0, 0)   # título
+        lay.setStretch(1, 1)   # corpo
+        body_lay.setStretch(0, 1)  # QTextEdit ocupa o corpo
 
-        body_lay.addWidget(self.log)
         lay.addWidget(body)
         return card
 
@@ -927,10 +953,21 @@ class AutomacaoEnergiaUI(QWidget):
             f'</div>'
         )
         self.log.append(html)
+        # mantém no topo quando há só 1ª/2ª linha; senão, rola para o fim
+        sb = self.log.verticalScrollBar()
+        if sb:
+            if self.log.document().blockCount() <= 2:
+                sb.setValue(0)
+            else:
+                sb.setValue(sb.maximum())
 
     def _log_clear(self):
-        self.log.clear()
+        self.log.clear()                      # sem HTML “fantasma”
+        self.log.moveCursor(QTextCursor.Start)
+        if self.log.verticalScrollBar():
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().minimum())
         self.log_msg("Log limpo.", "info")
+
 
     def _log_save(self):
         try:
