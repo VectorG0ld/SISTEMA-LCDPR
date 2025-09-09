@@ -45,39 +45,52 @@ def valida_cpf(cpf: str) -> bool:
 
 # —————— Cache e consulta Receita ——————
 CACHE_FOLDER = 'banco_de_dados'
-CACHE_FILE   = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'receita_cache.json')
+
+def _profile_root():
+    return os.path.join(CACHE_FOLDER, CURRENT_PROFILE)
+
+def _json_dir():
+    p = os.path.join(_profile_root(), 'json')
+    os.makedirs(p, exist_ok=True)
+    return p
+
+def cache_file_path():
+    return os.path.join(_json_dir(), 'receita_cache.json')
+
+def txt_pref_file_path():
+    return os.path.join(_json_dir(), 'lcdpr_txt_path.json')
+
 API_URL_CNPJ = 'https://www.receitaws.com.br/v1/cnpj/'
 API_URL_CPF  = 'https://www.receitaws.com.br/v1/cpf/'
 
 # —————— Configuração para salvar último caminho do TXT LCDPR ——————
 TXT_PREF_FILE = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lcdpr_txt_path.json')
 
-def load_last_txt_path() -> str:
-    os.makedirs(CACHE_FOLDER, exist_ok=True)
+def load_last_txt_path():
     try:
-        with open(TXT_PREF_FILE, 'r', encoding='utf-8') as f:
+        with open(txt_pref_file_path(), 'r', encoding='utf-8') as f:
             return json.load(f).get('last_path', '')
     except:
         return ''
 
 def save_last_txt_path(path: str):
-    os.makedirs(CACHE_FOLDER, exist_ok=True)
-    with open(TXT_PREF_FILE, 'w', encoding='utf-8') as f:
+    with open(txt_pref_file_path(), 'w', encoding='utf-8') as f:
         json.dump({'last_path': path}, f, ensure_ascii=False, indent=2)
 
 def ensure_cache_file():
-    os.makedirs(CACHE_FOLDER, exist_ok=True)
-    if not os.path.isfile(CACHE_FILE):
-        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+    fp = cache_file_path()
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+    if not os.path.isfile(fp):
+        with open(fp, 'w', encoding='utf-8') as f:
             json.dump({}, f, ensure_ascii=False, indent=2)
 
 def load_cache() -> dict:
     ensure_cache_file()
-    with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+    with open(cache_file_path(), 'r', encoding='utf-8') as f:
         return json.load(f)
 
 def save_cache(cache: dict):
-    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+    with open(cache_file_path(), 'w', encoding='utf-8') as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
 # Substitua toda a função por esta versão (usa o mesmo cache existente)
@@ -182,6 +195,9 @@ def get_profile_db_filename():
 LOGIN_DIR   = os.path.join(PROJECT_DIR, 'banco_de_dados', 'login')
 ADMIN_FILE  = os.path.join(LOGIN_DIR, 'admin.json')
 USERS_FILE  = os.path.join(LOGIN_DIR, 'users.json')
+
+def profile_settings():
+    return QSettings("Automatize Tech", f"AgroApp::{CURRENT_PROFILE}")
 
 def ensure_login_files():
     os.makedirs(LOGIN_DIR, exist_ok=True)
@@ -334,18 +350,137 @@ class Database:
         self.conn.execute("PRAGMA cache_size=-200000")  # ~200 MB (ajuste se quiser)
 
     def _migrate_schema(self):
-        """Adiciona a coluna usuario em lancamento se ela ainda não existir."""
-        cursor = self.conn.cursor()
+        """
+        Migrações estruturais:
+          - Garante coluna 'usuario' em lancamento.
+          - Garante que 'lancamento.id' seja AUTOINCREMENT (migração segura).
+          - Sincroniza sqlite_sequence para não reutilizar IDs apagados.
+        """
+        cur = self.conn.cursor()
+
+        # 1) Garante coluna 'usuario'
         try:
-            # testa se já existe
-            cursor.execute("SELECT usuario FROM lancamento LIMIT 1")
+            cur.execute("SELECT usuario FROM lancamento LIMIT 1")
         except sqlite3.OperationalError:
-            # se der erro, adiciona a coluna com valor padrão vazio
-            cursor.execute(
-                "ALTER TABLE lancamento ADD COLUMN usuario TEXT NOT NULL DEFAULT ''"
-            )
+            cur.execute("ALTER TABLE lancamento ADD COLUMN usuario TEXT NOT NULL DEFAULT ''")
             self.conn.commit()
-            
+
+        # 2) Checa se a tabela 'lancamento' já possui AUTOINCREMENT
+        row = cur.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='lancamento'"
+        ).fetchone()
+        ddl = (row[0] or "").upper() if row else ""
+        has_autoinc = "AUTOINCREMENT" in ddl
+
+        if not has_autoinc:
+            # Derruba views que dependem de 'lancamento' para evitar conflitos
+            try:
+                cur.executescript("""
+                    DROP VIEW IF EXISTS saldo_contas;
+                    DROP VIEW IF EXISTS resumo_categorias;
+                """)
+            except Exception:
+                pass
+
+            # Migração: renomeia, recria com AUTOINCREMENT, copia dados e apaga a antiga
+            cur.execute("ALTER TABLE lancamento RENAME TO lancamento_old")
+
+            # Cria a nova tabela com a DDL atual (com AUTOINCREMENT)
+            cur.executescript("""
+            CREATE TABLE lancamento (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                data DATE NOT NULL,
+                cod_imovel INTEGER NOT NULL,
+                cod_conta INTEGER NOT NULL,
+                num_doc TEXT,
+                tipo_doc INTEGER NOT NULL,
+                historico TEXT NOT NULL,
+                id_participante INTEGER,
+                tipo_lanc INTEGER NOT NULL,
+                valor_entrada REAL DEFAULT 0,
+                valor_saida REAL DEFAULT 0,
+                saldo_final REAL NOT NULL,
+                natureza_saldo TEXT NOT NULL,
+                usuario TEXT NOT NULL,
+                categoria TEXT,
+                data_ord INTEGER,
+                area_afetada INTEGER,
+                quantidade REAL,
+                unidade_medida TEXT,
+                FOREIGN KEY(cod_imovel) REFERENCES imovel_rural(id),
+                FOREIGN KEY(cod_conta) REFERENCES conta_bancaria(id),
+                FOREIGN KEY(id_participante) REFERENCES participante(id),
+                FOREIGN KEY(area_afetada) REFERENCES area_producao(id)
+            );
+            """)
+
+            # Descobre colunas em comum e copia preservando os IDs existentes
+            old_cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento_old)").fetchall()]
+            new_cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento)").fetchall()]
+            common   = [c for c in old_cols if c in new_cols]  # mantém ordem do antigo
+            col_list = ", ".join(common)
+            cur.execute(f"INSERT INTO lancamento ({col_list}) SELECT {col_list} FROM lancamento_old")
+
+            # Remove tabela antiga
+            cur.execute("DROP TABLE lancamento_old")
+
+            # Recria índices e views
+            self._create_indexes()
+            self._create_views()
+
+            self.conn.commit()
+
+        # 3) Sincroniza sqlite_sequence com o MAX(id) atual (se existir/for aplicável)
+        try:
+            max_id = cur.execute("SELECT IFNULL(MAX(id), 0) FROM lancamento").fetchone()[0] or 0
+            row = cur.execute("SELECT seq FROM sqlite_sequence WHERE name='lancamento'").fetchone()
+            if row is None:
+                cur.execute("INSERT INTO sqlite_sequence(name, seq) VALUES('lancamento', ?)", (max_id,))
+            elif (row[0] or 0) < max_id:
+                cur.execute("UPDATE sqlite_sequence SET seq=? WHERE name='lancamento'", (max_id,))
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            # sqlite_sequence só existe se houver ao menos uma tabela AUTOINCREMENT
+            pass
+
+    def get_perfil_param(self, profile: str):
+        sql = """SELECT version, ind_ini_per, sit_especial, ident, nome,
+                        logradouro, numero, complemento, bairro, uf,
+                        cod_mun, cep, telefone, email
+                 FROM perfil_param WHERE profile=?"""
+        return self.fetch_one(sql, (profile,))
+
+    def upsert_perfil_param(self, profile: str, p: dict):
+        sql = """
+        INSERT INTO perfil_param (
+          profile, version, ind_ini_per, sit_especial, ident, nome,
+          logradouro, numero, complemento, bairro, uf, cod_mun, cep,
+          telefone, email, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(profile) DO UPDATE SET
+          version=excluded.version,
+          ind_ini_per=excluded.ind_ini_per,
+          sit_especial=excluded.sit_especial,
+          ident=excluded.ident,
+          nome=excluded.nome,
+          logradouro=excluded.logradouro,
+          numero=excluded.numero,
+          complemento=excluded.complemento,
+          bairro=excluded.bairro,
+          uf=excluded.uf,
+          cod_mun=excluded.cod_mun,
+          cep=excluded.cep,
+          telefone=excluded.telefone,
+          email=excluded.email,
+          updated_at=CURRENT_TIMESTAMP
+        """
+        params = (
+            profile, p["version"], p["ind_ini_per"], p["sit_especial"], p["ident"], p["nome"],
+            p["logradouro"], p["numero"], p["complemento"], p["bairro"], p["uf"],
+            p["cod_mun"], p["cep"], p["telefone"], p["email"]
+        )
+        self.execute_query(sql, params)
+
     def _create_tables(self):
         self.conn.cursor().executescript("""
         CREATE TABLE IF NOT EXISTS imovel_rural (
@@ -410,6 +545,24 @@ class Database:
             FOREIGN KEY(cod_conta) REFERENCES conta_bancaria(id),
             FOREIGN KEY(id_participante) REFERENCES participante(id),
             FOREIGN KEY(area_afetada) REFERENCES area_producao(id)
+        );
+        CREATE TABLE IF NOT EXISTS perfil_param (
+            profile TEXT PRIMARY KEY,
+            version TEXT,
+            ind_ini_per TEXT,
+            sit_especial TEXT,
+            ident TEXT,
+            nome TEXT,
+            logradouro TEXT,
+            numero TEXT,
+            complemento TEXT,
+            bairro TEXT,
+            uf TEXT,
+            cod_mun TEXT,
+            cep TEXT,
+            telefone TEXT,
+            email TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         """)
         self.conn.commit()
@@ -1289,7 +1442,40 @@ class ParametrosDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Parâmetros do Contribuinte")
         self.setMinimumSize(400, 500)
-        self.settings = QSettings("Automatize Tech", "AgroApp")
+        self.settings = profile_settings()
+        self.db = Database()
+        row = self.db.get_perfil_param(CURRENT_PROFILE)
+        def _val(k, default=""):
+            if not row:  # sem registro no SQL ainda → usa QSettings como fallback
+                return self.settings.value(f"param/{k}", default)
+            # mapeamento na mesma ordem do SELECT em get_perfil_param
+            keys = ["version","ind_ini_per","sit_especial","ident","nome",
+                    "logradouro","numero","complemento","bairro","uf",
+                    "cod_mun","cep","telefone","email"]
+            d = dict(zip(keys, row))
+            return d.get(k, default)
+
+        # inicialização dos campos:
+        self.version     = QLineEdit(_val("version", "0013"))
+        self.ind_ini_per = QComboBox(); self.ind_ini_per.addItems(["0 - Regular (início em 01/01)", "1 - Início fora de 01/01"])
+        self.ind_ini_per.setCurrentIndex(0 if _val("ind_ini_per","0")=="0" else 1)
+
+        self.sit_especial = QComboBox()
+        self.sit_especial.addItems(["0 - Normal (sem ocorrência)","1 - Falecimento","2 - Espólio","3 - Saída definitiva do país"])
+        se = _val("sit_especial","0"); self.sit_especial.setCurrentIndex(int(se) if se in {"0","1","2","3"} else 0)
+
+        self.ident = QLineEdit(_val("ident","")); self.ident.setInputMask("000.000.000-00;_")
+        self.nome  = QLineEdit(_val("nome",""))
+        self.logradouro  = QLineEdit(_val("logradouro",""))
+        self.numero      = QLineEdit(_val("numero",""))
+        self.complemento = QLineEdit(_val("complemento",""))
+        self.bairro      = QLineEdit(_val("bairro",""))
+        self.uf          = QLineEdit(_val("uf",""))
+        self.cod_mun     = QLineEdit(_val("cod_mun",""))
+        self.cep         = QLineEdit(_val("cep",""))
+        self.telefone    = QLineEdit(_val("telefone",""))
+        self.email       = QLineEdit(_val("email",""))
+
         layout = QFormLayout(self)
 
         # Versão do leiaute
@@ -1362,24 +1548,33 @@ class ParametrosDialog(QDialog):
             self.ident.setInputMask("000.000.000-00;_")
 
     def salvar(self):
+        p = {
+            "version":     self.version.text().strip(),
+            "ind_ini_per": self.ind_ini_per.currentText().split(" - ")[0],
+            "sit_especial": self.sit_especial.currentText().split(" - ")[0],
+            "ident":       self.ident.text().strip(),
+            "nome":        self.nome.text().strip(),
+            "logradouro":  self.logradouro.text().strip(),
+            "numero":      self.numero.text().strip(),
+            "complemento": self.complemento.text().strip(),
+            "bairro":      self.bairro.text().strip(),
+            "uf":          self.uf.text().strip(),
+            "cod_mun":     self.cod_mun.text().strip(),
+            "cep":         self.cep.text().strip(),
+            "telefone":    self.telefone.text().strip(),
+            "email":       self.email.text().strip(),
+        }
+
+        # 1) SQL (fonte de verdade por perfil)
+        self.db.upsert_perfil_param(CURRENT_PROFILE, p)
+
+        # 2) Espelho no QSettings (compatibilidade com partes da UI já prontas)
         s = self.settings
-        s = self.settings
-        s.setValue("param/version",     self.version.text())
-        s.setValue("param/ind_ini_per", self.ind_ini_per.currentText().split(" - ")[0])
-        s.setValue("param/sit_especial", self.sit_especial.currentText().split(" - ")[0])
-        s.setValue("param/ident",       self.ident.text())
-        s.setValue("param/nome",        self.nome.text())
-        s.setValue("param/logradouro",  self.logradouro.text())
-        s.setValue("param/numero",      self.numero.text())
-        s.setValue("param/complemento", self.complemento.text())
-        s.setValue("param/bairro",      self.bairro.text())
-        s.setValue("param/uf",          self.uf.text())
-        s.setValue("param/cod_mun",     self.cod_mun.text())
-        s.setValue("param/cep",         self.cep.text())
-        s.setValue("param/telefone",    self.telefone.text())
-        s.setValue("param/email",       self.email.text())
+        for k, v in p.items():
+            s.setValue(f"param/{k}", v)
         s.sync()
-        QMessageBox.information(self, "Sucesso", "Parâmetros salvos com sucesso!")
+
+        QMessageBox.information(self, "Sucesso", "Parâmetros salvos no banco de dados.")
         self.accept()
 
 # --- DIALOG DE RELATÓRIO POR PERÍODO ---
@@ -1424,7 +1619,8 @@ class DashboardWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        self.settings = QSettings("Automatize Tech", "AgroApp")
+        self.settings = profile_settings()
+
         self.layout = QVBoxLayout(self)
         self._build_filter_ui()
         self._build_cards_ui()
@@ -3383,7 +3579,6 @@ class MainWindow(QMainWindow):
     def _create_menu(self):
         mb = self.menuBar(); m1 = mb.addMenu("&Arquivo")
         m1.addAction(QAction("Novo Lançamento", self, triggered=self.novo_lancamento))
-        m1.addAction(QAction("Exportar Dados", self, triggered=self.exportar_dados)); m1.addSeparator()
         m1.addAction(QAction("Sair", self, triggered=self.close))
         m2 = mb.addMenu("&Cadastros")
         for txt, fn in [("Imóvel Rural", lambda: self.cad_imovel()),
@@ -3670,26 +3865,13 @@ class MainWindow(QMainWindow):
     def cad_conta(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(1)
     def cad_participante(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(2)
 
-    def exportar_dados(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar Dados", "", "CSV (*.csv)")
-        if not path: return
-        try:
-            lancs = self.db.fetch_all("SELECT * FROM lancamento")
-            with open(path, 'w', newline='', encoding='utf-8') as f:
-                w = csv.writer(f, delimiter=';')
-                w.writerow(["ID", "Data", "Imóvel", "Conta", "Documento", "Tipo Doc", "Histórico", "Participante", "Tipo", "Entrada", "Saída", "Saldo", "Natureza", "Categoria"])
-                for l in lancs: w.writerow(l[1:])
-            QMessageBox.information(self, "Exportação", "Dados exportados com sucesso!")
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro na exportação: {e}")
-
     def gerar_txt(self, path: str):
         import os, re, unicodedata
         from decimal import Decimal, ROUND_HALF_UP
         from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QMessageBox
 
-        settings = QSettings("Automatize Tech", "AgroApp")
+        settings = profile_settings()  # helper abaixo
 
         # ===== helpers =====
         NL = "\r\n"  # CRLF exigido pelo manual
@@ -3893,7 +4075,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
         if not path: return
         if not path.lower().endswith(('.xlsx', '.xls')): path += '.xlsx'
-        import pandas as pd; rows = []; settings = QSettings("Automatize Tech", "AgroApp")
+        import pandas as pd; rows = []; settings = profile_settings()  # helper abaixo
         ver = settings.value("param/version", "0013"); iden = settings.value("param/ident", "")
         nome = settings.value("param/nome", ""); ind_ini = settings.value("param/ind_ini_per", "0"); sit_esp = settings.value("param/sit_especial", "0")
         dt1 = self.dt_ini.date().toString("ddMMyyyy"); dt2 = self.dt_fim.date().toString("ddMMyyyy")
