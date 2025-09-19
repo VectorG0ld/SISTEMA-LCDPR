@@ -4572,11 +4572,7 @@ class MainWindow(QMainWindow):
         btn_folha.clicked.connect(lambda: (dlg.accept(), self.open_automacao_folha_tab()))
         btn_cte.clicked.connect(lambda: (dlg.accept(), self.open_importador_cte_tab()))
         btn_talao.clicked.connect(_open_talao)
-<<<<<<< HEAD
         btn_scan.clicked.connect(lambda: (dlg.accept(), self.open_nfs_digitalizadas_tab()))
-=======
-        btn_scan.clicked.connect(lambda: _placeholder("Notas digitalizadas"))
->>>>>>> origin/main
 
         for b in (btn_danfe, btn_folha, btn_cte, btn_talao, btn_scan):
             b.setFixedHeight(34)
@@ -4701,7 +4697,6 @@ class MainWindow(QMainWindow):
         spec.loader.exec_module(mod)
         return mod
 
-<<<<<<< HEAD
     def _load_automacao_nfs_digitalizadas_module(self):
         import importlib.util, os, sys
         mod_path = os.path.join(os.path.dirname(__file__), "Importação NFs Digitalizadas", "automacao_NFS Digitalizada.py")
@@ -4714,8 +4709,6 @@ class MainWindow(QMainWindow):
         spec.loader.exec_module(mod)
         return mod
 
-=======
->>>>>>> origin/main
     def open_automacao_energia_tab(self):
         # Evita duplicar a aba
         for i in range(self.tabs.count()):
@@ -4735,7 +4728,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(energia_widget, "Automação de Energia")
         self.tabs.setCurrentWidget(energia_widget)
 
-<<<<<<< HEAD
     def open_nfs_digitalizadas_tab(self):
         TAB_OBJ_NAME = 'tab_automacao_nfs_digitalizadas'
         TAB_TITLE    = 'NFS-e Digitalizadas'
@@ -4763,8 +4755,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(widget, TAB_TITLE)
         self.tabs.setCurrentWidget(widget)
 
-=======
->>>>>>> origin/main
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":
     app = QApplication(sys.argv)
