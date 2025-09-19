@@ -35,8 +35,10 @@ import io
 import glob
 from dataclasses import dataclass, field, replace
 from typing import Dict, List, Tuple, Optional, Union
+import time  # ✅ usar perf_counter para cronometrar
 
 import pdfplumber
+
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance
 import pytesseract
 
@@ -1841,8 +1843,10 @@ def main():
             log_f.write(f"== LOTE: {lot_name} ==\n")
             log_f.write(f"Pasta: {lot_dir}\n")
             log_f.write(f"Arquivos PDF: {len(pdfs)}\n\n")
+        
 
             for pdf_file in pdfs:
+                _t_ini_nota = time.perf_counter()
                 if _cancelled():
                     print("⛔ Cancelado — interrompendo leitura das notas deste lote.", flush=True)
                     return
@@ -2050,11 +2054,27 @@ def main():
                 # 7.1) Guardar a resposta bruta da IA no TXT (auditoria)
                 log_f.write("\n" + (resumo_ia or "").strip() + "\n")
 
-                # 7.2) Formatar para leitura (console + TXT) e exibir
+                # 7.2) Extrai campos do resumo e prepara duração
                 campos = parse_campos_from_resumo(resumo_ia)
+                
+                elapsed_sec = time.perf_counter() - _t_ini_nota
+                elapsed_str = f"{elapsed_sec:.0f}s" if elapsed_sec >= 1 else f"{elapsed_sec:.1f}s"
+                
+                # ——— Bloco compacto por nota (título forte + linhas com emojis, organizado)
+                print(f"📄 {pdf_file}", flush=True)
+                print(f"   📁 Lote: {lot_name}", flush=True)
+                print(f"   📍 Caminho: {pdf_path}", flush=True)
+                print(f"   🧩 Layout: {layout.name} | 🧱 Páginas: {len(pngs)} | 🎚️ DPI: {DPI}", flush=True)
+                print(f"   🔎 Nº: {campos.get('numero') or '-'} | 🗓️ Emissão: {campos.get('data') or '-'}", flush=True)
+                print(f"   🏷️ Prestador: {campos.get('prestador') or '-'}", flush=True)
+                print(f"   🧾 CNPJ: {campos.get('cnpj') or '-'} | 💰 Valor: {campos.get('valor') or '-'}", flush=True)
+                print(f"   🕒 Duração: {elapsed_str}", flush=True)
+                
+                # 7.3) RESUMO FINAL DA NOTA (em formato “kv” para aparecer em negrito na UI)
                 resumo_fmt = _format_resumo_campos(campos)
                 print(resumo_fmt, flush=True)
                 log_f.write("\n" + resumo_fmt + "\n")
+
 
                 # 7.3) Se a IA não extraiu nada útil, também mostre o bruto no console para diagnóstico
                 def _nz(v): 
@@ -2420,23 +2440,29 @@ def _classify_line_kind(s: str) -> str:
     if not st:
         return "blank"
 
-    # Linhas de separador (não colocar emoji, virar <divider> visual)
+    # Linhas de separador (vão virar <divider> visual)
     if re.match(r"^([=\-·\.─—_]|[═─·]){6,}$", st):
         return "divider"
 
-    # Cabeçalho do bloco-resumo
+    # Cabeçalhos principais: tratamos como "title" para negrito forte e faixa colorida
     if st.startswith("📘 RESUMO FINAL DA NOTA"):
         return "title"
+    if st.startswith("📄 "):  # <— NOVO: cada nota vira um bloco com título forte
+        return "title"
 
-    # Se já começa com emoji conhecido, não aplicar outro
+    # Linhas key: value do resumo (ex.: "  Número.............: 12")
+    if re.match(r"^\s*(número|numero|data\s+de\s+emiss[aã]o|fazenda|prestador|cnpj\s+prestador|valor\s+total/l[ií]quido)\s*\.{0,}\s*:", st, flags=re.I):
+        return "kv"  # <— NOVO: tipo especial para renderizar a chave em negrito
+
+    # Se a linha já começa com emoji conhecido, mantemos "raw"
     if st[:1] in {"📌","🔎","🧾","✅","⚠️","❌","ℹ️","📄","📘"}:
         return "raw"
 
-    # Heurísticas padrão
+    # Heurísticas gerais
     if any(k in tl for k in ("falha", "erro", "exception", "traceback")): return "error"
     if any(k in tl for k in ("aviso", "atenção", "warning")):            return "warning"
     if any(k in tl for k in ("concluído", "finalizado", "pronto", "sucesso")): return "success"
-    if any(k in tl for k in ("iniciando", "gerando", "processando", "lendo arquivo")): return "title"
+    if any(k in tl for k in ("iniciando", "gerando", "processando", "lendo nota", "lendo arquivo")): return "title"
     return "info"
 
 class _EmittingTextIO(io.TextIOBase):
@@ -2511,6 +2537,9 @@ class WorkerSeparar(BaseWorker):
 
             mod_path = Path(__file__).parent / "Separador PDF Nota por Nota.py"
             mod = _load_module_from(mod_path, "sep_nfs")
+            
+            # ✅ injeta callback de cancelamento para o script de separação
+            setattr(mod, "is_cancelled", lambda: self._cancel)
 
             # Palavras chave do próprio script (respeitando defaults do arquivo original)
             general_keywords = getattr(mod, "DEFAULT_GENERAL_KEYWORDS", None) or [
@@ -2580,12 +2609,15 @@ class WorkerTxtEImport(BaseWorker):
             mod_path = Path(__file__).parent / "gerar_txt_lancamentos.py"
             mod = _load_module_from(mod_path, "txt_gen")
 
-            # Preferimos passar via argv (o script já aceita 2 args)
+            # ✅ injeta callback de cancelamento para o gerador de TXT
+            setattr(mod, "is_cancelled", lambda: self._cancel)
+
+            setattr(mod, "is_cancelled", lambda: self._cancel)  # ✅ permite Cancelar no TXT
+
             self._emit("Gerando TXT a partir da planilha…", "title")
             with self._capture_prints():
                 with _temp_argv(["gerar_txt_lancamentos.py", xlsx, out_txt]):
                     mod.main()
-
             self._emit(f"TXT gerado em: {out_txt}", "success")
             self._emit("Processo concluído.", "success")
             self.finished_sig.emit(out_txt)
@@ -2850,7 +2882,6 @@ class AutomacaoNFSDigitalizadasUI(QWidget):
     # —— Log estilizado (mesmo visual do Energia, com emojis)
     def log_msg(self, message: str, msg_type: str = "info"):
         msg = (message or "")
-        # Tipos especiais
         if msg_type == "blank":
             return
         if msg_type == "divider":
@@ -2859,12 +2890,13 @@ class AutomacaoNFSDigitalizadasUI(QWidget):
 
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         palette = {
-            "info":   {"emoji":"ℹ️","text":"#FFFFFF","accent":"#3A3C3D","weight":"500"},
+            "info":   {"emoji":"ℹ️","text":"#FFFFFF","accent":"#3A3C3D","weight":"600"},  # ← peso um pouco maior
             "success":{"emoji":"✅","text":"#A7F3D0","accent":"#2F7D5D","weight":"700"},
-            "warning":{"emoji":"⚠️","text":"#FFFFFF","accent":"#8A6D3B","weight":"600"},
+            "warning":{"emoji":"⚠️","text":"#FFFFFF","accent":"#8A6D3B","weight":"700"},
             "error":  {"emoji":"❌","text":"#FF6B6B","accent":"#7A2E2E","weight":"800"},
             "title":  {"emoji":"📌","text":"#FFFFFF","accent":"#1e5a9c","weight":"800"},
             "raw":    {"emoji":"","text":"#E0E0E0","accent":"#3A3C3D","weight":"500"},
+            "kv":     {"emoji":"ℹ️","text":"#FFFFFF","accent":"#3A3C3D","weight":"600"},  # ← NOVO
         }
         p = palette.get(msg_type, palette["info"])
 
@@ -2872,19 +2904,27 @@ class AutomacaoNFSDigitalizadasUI(QWidget):
         lead = msg.lstrip()[:1]
         add_emoji = (p["emoji"] and lead not in {"📌","🔎","🧾","✅","⚠️","❌","ℹ️","📄","📘"})
 
+        # NOVO: se for "kv", deixa a parte da chave em negrito (antes dos dois-pontos)
+        msg_render = msg
+        if msg_type == "kv":
+            import re
+            m = re.match(r"^(\s*)([^:]+:)(\s*)(.*)$", msg)
+            if m:
+                indent, key, sp, rest = m.groups()
+                msg_render = f'{indent}<span style="font-weight:800;">{key}</span>{sp}{rest}'
+
         emoji_html = f' <span style="margin:0 6px 0 8px;">{p["emoji"]}</span>' if add_emoji else " "
         html = (
             f'<div style="border-left:3px solid {p["accent"]}; padding:6px 10px; margin:2px 0;">'
             f'<span style="opacity:.7; font-family:monospace;">[{now}]</span>'
             f'{emoji_html}'
-            f'<span style="color:{p["text"]}; font-weight:{p["weight"]}; white-space:pre-wrap;">{msg}</span>'
+            f'<span style="color:{p["text"]}; font-weight:{p["weight"]}; white-space:pre-wrap;">{msg_render}</span>'
             f'</div>'
         )
         self.log.append(html)
         sb = self.log.verticalScrollBar()
         if sb:
             sb.setValue(sb.maximum())
-
 
     def _log_divider(self):
         self.log.append('<div style="border-top:1px solid #3A3C3D; margin:10px 0;"></div>')

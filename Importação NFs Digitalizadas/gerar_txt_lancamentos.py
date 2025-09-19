@@ -6,6 +6,22 @@ import os
 import re
 from openpyxl import load_workbook
 
+# ---------- LOG UI ----------
+from datetime import datetime
+
+# ---------- LOG (compatível com a UI) ----------
+def log_info(msg): print(msg, flush=True)
+def log_ok(msg):   print(msg, flush=True)
+def log_warn(msg): print(msg, flush=True)
+def log_err(msg):  print(msg, flush=True)
+
+def _cancelled():
+    try:
+        cb = globals().get("is_cancelled", None)
+        return bool(cb and callable(cb) and cb())
+    except Exception:
+        return False
+
 DEFAULT_XLSX = r"C:\Users\conta\Downloads\PNG_\lancamentos.xlsx"
 
 def only_digits(s: str) -> str:
@@ -37,31 +53,27 @@ def norm_date_dash(s: str) -> str:
     return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
 
 def main():
-    # Caminho da planilha:
-    # 1) 1º argumento de linha de comando
-    # 2) se não houver, usa DEFAULT_XLSX (C:\Users\conta\Downloads\PNG_\lancamentos.xlsx)
-    xlsx_path = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_XLSX
-    if not os.path.exists(xlsx_path):
-        print(f"[ERRO] Planilha não encontrada: {xlsx_path}")
-        sys.exit(1)
+    log_info("Geração de TXT — Lançamentos LCDPR")
 
-    # Caminho do TXT de saída (opcional 2º argumento)
+    # Caminho da planilha:
+    xlsx_path = sys.argv[1] if len(sys.argv) >= 2 else DEFAULT_XLSX
     out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.join(os.path.dirname(xlsx_path), "saida_lancamentos.txt")
+
+    if _cancelled():
+        log_warn("Cancelado pelo usuário.")
+        return
 
     try:
         wb = load_workbook(xlsx_path, data_only=True)
+        log_info("Workbook aberto.")
     except Exception as e:
-        print(f"[ERRO] Falha ao abrir planilha: {e}")
+        log_err(f"Falha ao abrir planilha: {e}")
         sys.exit(1)
 
-    # tenta aba 'lancamentos', senão pega a primeira
     sh = wb["lancamentos"] if "lancamentos" in wb.sheetnames else wb[wb.sheetnames[0]]
+    log_info(f"Aba utilizada: '{sh.title}'")
 
-    # LAYOUT SUPORTADO:
-    #  A:Data | B:CodFazenda | C:Conta | D:NumeroNF | E:Historico | F:CNPJ | G:Tipo | H:Padrao | [I:CaminhoNF opcional] | (Valor1) | (Valor2) | (Flag)
-    #  -> Se "CaminhoNF" existir, Valor1/Valor2/Flag ficam em J/K/L; caso contrário, em I/J/K.
-
-    # mapa de cabeçalhos por nome (case-insensitive)
+    # mapeia cabeçalho
     header_idx = {}
     for c in range(1, sh.max_column + 1):
         name = str(sh.cell(1, c).value or "").strip().lower()
@@ -86,45 +98,72 @@ def main():
     i_flag   = col("Flag",   i_valor2 + 1)
 
     rows = []
-    for r in range(2, sh.max_row + 1):
-        data            = norm_date_dash(str(sh.cell(r, i_data).value   or "").strip())
-        cod_faz         = str(sh.cell(r, i_codfaz).value                or "").strip()
-        conta           = str(sh.cell(r, i_conta).value                 or "").strip() or "001"
-        numero_nf       = str(sh.cell(r, i_numero).value                or "").strip()
-        historico       = str(sh.cell(r, i_hist).value                  or "").strip()
-        cnpj_raw        = str(sh.cell(r, i_cnpj).value                  or "").strip()
-        tipo            = str(sh.cell(r, i_tipo).value                  or "").strip() or "2"
-        padrao          = str(sh.cell(r, i_padrao).value                or "").strip() or "000"
-        valor1          = str(sh.cell(r, i_valor1).value                or "").strip()
-        valor2          = str(sh.cell(r, i_valor2).value                or "").strip()
-        flag            = str(sh.cell(r, i_flag).value                  or "").strip() or "N"
+    total = validas = puladas = 0
+    log_info(f"Total de linhas (inclui cabeçalho): {sh.max_row}")
 
-        # mínimos obrigatórios para o TXT (se faltar, pula a linha)
-        if not data or not cod_faz or not numero_nf or not valor1 or not valor2:
+    for r in range(2, sh.max_row + 1):
+        if _cancelled():
+            log_warn("Cancelado pelo usuário.")
+            break
+        total += 1
+
+        data      = norm_date_dash(str(sh.cell(r, i_data).value   or "").strip())
+        cod_faz   = str(sh.cell(r, i_codfaz).value                or "").strip()
+        conta     = str(sh.cell(r, i_conta).value                 or "").strip() or "001"
+        numero_nf = str(sh.cell(r, i_numero).value                or "").strip()
+        historico = str(sh.cell(r, i_hist).value                  or "").strip()
+        cnpj_raw  = str(sh.cell(r, i_cnpj).value                  or "").strip()
+        tipo      = str(sh.cell(r, i_tipo).value                  or "").strip() or "2"
+        padrao    = str(sh.cell(r, i_padrao).value                or "").strip() or "000"
+        valor1    = str(sh.cell(r, i_valor1).value                or "").strip()
+        valor2    = str(sh.cell(r, i_valor2).value                or "").strip()
+        flag      = str(sh.cell(r, i_flag).value                  or "").strip() or "N"
+
+        faltas = []
+        if not data:      faltas.append("Data")
+        if not cod_faz:   faltas.append("CodFazenda")
+        if not numero_nf: faltas.append("NumeroNF")
+        if not valor1:    faltas.append("Valor1")
+        if not valor2:    faltas.append("Valor2")
+
+        if faltas:
+            puladas += 1
+            log_warn(f"Linha {r}: pulada (faltando: {', '.join(faltas)}).")
             continue
 
-        # CNPJ no TXT: somente dígitos se válido; caso contrário 'INVALIDO'
         cnpj_out = "INVALIDO"
         if cnpj_raw and cnpj_raw.upper() != "INVALIDO":
             d = only_digits(cnpj_raw)
-            cnpj_out = d if (d and cnpj_is_valid(d)) else "INVALIDO"
+            if d and cnpj_is_valid(d):
+                cnpj_out = d
+            else:
+                log_warn(f"Linha {r}: CNPJ inválido — gravado como 'INVALIDO'.")
 
         linha = f"{data}|{cod_faz}|{conta}|{numero_nf}|1|{historico}|{cnpj_out}|{tipo}|{padrao}|{valor1}|{valor2}|{flag}"
         rows.append(linha)
+        validas += 1
 
+    if _cancelled():
+        log_warn("Processo de TXT cancelado.")
+        return
 
     if not rows:
-        print("[AVISO] Nenhuma linha válida encontrada para gerar TXT.")
+        log_warn("Nenhuma linha válida encontrada. Nada a escrever.")
         sys.exit(0)
 
     try:
         with open(out_path, "w", encoding="utf-8", newline="") as f:
             for ln in rows:
                 f.write(ln + "\n")
-        print(f"[OK] TXT gerado: {out_path} ({len(rows)} linha(s))")
+        log_ok(f"TXT gerado: {out_path} ({len(rows)} linha(s)).")
     except Exception as e:
-        print(f"[ERRO] Falha ao escrever TXT: {e}")
+        log_err(f"Falha ao escrever TXT: {e}")
         sys.exit(1)
+
+    log_info(f"Linhas total lidas: {total}")
+    log_info(f"Linhas válidas escritas: {validas}")
+    log_info(f"Linhas puladas: {puladas}")
+    log_ok("Concluído.")
 
 if __name__ == "__main__":
     main()

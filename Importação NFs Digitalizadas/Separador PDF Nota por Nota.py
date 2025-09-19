@@ -7,30 +7,149 @@ import concurrent.futures
 from PyPDF2 import PdfReader, PdfWriter
 import unicodedata
 
+# ---------- HELPERS DE LOG E RESUMO (compatível com a UI) ----------
+import os, time
+from typing import List
+
+# ---------- CANCELAMENTO + helpers de log ----------
+def _cancelled() -> bool:
+    try:
+        cb = globals().get("is_cancelled", None)
+        return bool(cb and callable(cb) and cb())
+    except Exception:
+        return False
+
+def _divider():
+    print("─" * 60, flush=True)  # separador visual
+
+# "negrito" universal via caracteres Unicode em negrito (funciona em UI de texto puro)
+_BOLD_TRANS = str.maketrans({
+    # A–Z
+    **{c: b for c, b in zip(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭"
+    )},
+    # a–z
+    **{c: b for c, b in zip(
+        "abcdefghijklmnopqrstuvwxyz",
+        "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇"
+    )},
+    # 0–9 (bold sans-serif)
+    **{c: b for c, b in zip(
+        "0123456789",
+        "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟟𝟠𝟡"
+    )}
+})
+def _bold(s: str) -> str:
+    return (s or "").translate(_BOLD_TRANS)
+
+def _short_path(p: str, max_len: int = 90) -> str:
+    p = str(p)
+    if len(p) <= max_len: return p
+    return f"{p[:14]}...{p[-50:]}"
+
+def _first_page_idx(seg: dict) -> int:
+    try:
+        return int((seg.get("pages") or [])[0])
+    except Exception:
+        return -1
+
+
+def _format_pairs(receb_list: list, nota_list: list) -> str:
+    # monta algo tipo: "Receb[0] → NF[1]; Receb[2] → NF[3]"
+    m = min(len(receb_list), len(nota_list))
+    if m == 0:
+        return "—"
+    pairs = []
+    for i in range(m):
+        rpg = receb_list[i].get('pages', [])[0] if receb_list[i].get('pages') else '?'
+        npg = nota_list[i].get('pages', [])[0] if nota_list[i].get('pages') else '?'
+        pairs.append(f"Receb[{rpg}] → NF[{npg}]")
+    return "; ".join(pairs)
+
+def print_resumo_arquivo(filename: str,
+                         paginas: int,
+                         dpi: int,
+                         threads: int,
+                         receb_qtd: int,
+                         nf_qtd: int,
+                         ign_qtd: int,
+                         pairing_str: str,
+                         out_paths: List[str],
+                         duracao_s: float):
+    out_display = out_paths[0] if out_paths else "—"
+    print(
+        "📄 " + filename + "\n"
+        f"   🧱 Páginas: {paginas} | 🎚️ DPI: {dpi} | 🧵 Threads: {threads}\n"
+        f"   🧩 Segm.: Receb={receb_qtd} | NF={nf_qtd} | Ign={ign_qtd}\n"
+        f"   🤝 Pareamento: {pairing_str}\n"
+        f"   📤 PDF: {_short_path(out_display)}\n"
+        f"   🕒 Duração: {int(round(duracao_s))}s",
+        flush=True
+    )
+
 # ---------- OCR ----------
 def process_page(image, page_num, lang="por"):
+    if _cancelled():
+        return ""
     try:
         text = pytesseract.image_to_string(image, lang=lang)
-        print(f"Página {page_num} concluída.")
         return text or ""
-    except Exception as e:
-        print(f"Erro no OCR da página {page_num}: {e}")
+    except Exception:
         return ""
 
 def ocr_pdf_pages(pdf_path, dpi=150, lang="por"):
+    # Retorna (texts:list[str], num_pages:int, threads:int)
+    if _cancelled():
+        return [], 0, 0
     try:
         images = convert_from_path(pdf_path, dpi=dpi)
     except Exception as e:
-        print(f"Erro ao converter '{pdf_path}' em imagens: {e}")
-        return []
+        print(f"❌ Erro ao converter '{pdf_path}' em imagens: {e}", flush=True)
+        return [], 0, 0
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    num_pages = len(images)
+    max_workers = max(1, min((os.cpu_count() or 4), 8))
+    if _cancelled():
+        return [], num_pages, max_workers
+
+    results = [None] * num_pages
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_page, img, i, lang): i for i, img in enumerate(images, start=1)}
-        results = [None] * len(images)
         for future in concurrent.futures.as_completed(futures):
+            if _cancelled():
+                return [], num_pages, max_workers
             idx = futures[future] - 1
-            results[idx] = future.result()
-    return results
+            try:
+                results[idx] = future.result()
+            except Exception:
+                results[idx] = ""
+    return [t or "" for t in results if t is not None], num_pages, max_workers
+
+def _first_page_idx(seg: dict) -> int:
+    try:
+        return int((seg.get("pages") or [])[0])
+    except Exception:
+        return -1
+
+def print_note_summary(file: str,
+                       num_pages: int,
+                       dpi: int,
+                       threads: int,
+                       receb_count: int,
+                       nf_count: int,
+                       ign_count: int,
+                       pairs_text: str,
+                       out_paths: list[str],
+                       duration_s: float):
+    print(f"📄 {_bold(file)}", flush=True)
+    print(f"   🧱 Páginas: {num_pages} | 🎚️ DPI: {dpi} | 🧵 Threads: {threads}", flush=True)
+    print(f"   🧩 Segm.: Receb={receb_count} | NF={nf_count} | Ign={ign_count}", flush=True)
+    print(f"   🤝 Pareamento: {pairs_text or '—'}", flush=True)
+    print(f"   📤 PDF: {(_short_path(out_paths[0]) if out_paths else '—')}", flush=True)
+    print(f"   🕒 Duração: {int(round(duration_s))}s", flush=True)
+    _divider()
+    print("", flush=True)  # 🔹 uma linha em branco entre blocos
 
 # ---------- Detecção / Segmentação ----------
 def normalize_text(s: str) -> str:
@@ -122,49 +241,31 @@ def find_names(text_norm: str, names_keywords: list[str]) -> set[str]:
     return found
 
 def build_segments(pages_text: list[str], nf_keywords: list[str], names_keywords: list[str], ignore_keywords: list[str]):
-    """
-    MODO ESTRITO:
-    Cria um segmento POR PÁGINA marcada. Apenas páginas que contenham
-    'recebimento de mercadoria' (ou variações) ou palavras-chave de NF
-    viram segmentos. Páginas sem marca NÃO são anexadas a nenhum segmento.
-    """
-    receb_list = []
-    nota_list = []
-    page_types = []  # 'receb', 'nota', or None
-    page_names = []
+    receb_list, nota_list = [], []
+    page_types, page_names = [], []
+    ignoradas = 0
 
     for i, t in enumerate(pages_text):
         tn = normalize_text(t)
-        names = find_names(tn, names_keywords)  # set()
-
-        # << NOVO: checar palavras proibidas >>
+        names = find_names(tn, names_keywords)
         ignored = contains_ignored(tn, t, ignore_keywords)
 
         if is_recebimento(tn, t):
             if ignored:
-                page_types.append(None)
-                page_names.append(names)
-                print(f"[IGNORADO] Página {i+1}: Recebimento ignorado por palavra bloqueada.")
-                continue
-            page_types.append('receb')
-            page_names.append(names)
+                page_types.append(None); page_names.append(names); ignoradas += 1; continue
+            page_types.append('receb'); page_names.append(names)
             receb_list.append({'type': 'receb', 'pages': [i], 'names': set(names)})
 
         elif is_nota(tn, nf_keywords):
             if ignored:
-                page_types.append(None)
-                page_names.append(names)
-                print(f"[IGNORADO] Página {i+1}: NF ignorada por palavra bloqueada.")
-                continue
-            page_types.append('nota')
-            page_names.append(names)
+                page_types.append(None); page_names.append(names); ignoradas += 1; continue
+            page_types.append('nota'); page_names.append(names)
             nota_list.append({'type': 'nota', 'pages': [i], 'names': set(names)})
 
         else:
-            page_types.append(None)
-            page_names.append(names)
+            page_types.append(None); page_names.append(names)
 
-    return receb_list, nota_list, page_types, page_names
+    return receb_list, nota_list, page_types, page_names, ignoradas
 
 # ---------- Pareamento e Export ----------
 def choose_owner_name(names_from_segments: list[set[str]], names_priority: list[str]) -> str | None:
@@ -200,115 +301,81 @@ def export_pdf_segments(original_pdf_path: str,
                         segs_pages: list[list[int]],
                         seg_labels: list[str],
                         owner_name: str | None):
-    """
-    Exporta APENAS as páginas dos segmentos recebidos (NF/Recebimento), em um novo PDF.
-    O nome do arquivo de saída preserva o nome do PDF original; se já existir, acrescenta _1, _2...
-    """
+    if _cancelled():
+        return None
+
     reader = PdfReader(original_pdf_path)
     writer = PdfWriter()
 
-    # Adiciona SOMENTE as páginas dos segmentos, na MESMA ORDEM do PDF original
     flat_pages = []
     for pages in segs_pages:
-        flat_pages.extend(pages)
+        flat_pages.extend(pages or [])
 
-    # Mantém apenas índices válidos e ordena pelo número da página (ordem original)
     valid_sorted = sorted({p for p in flat_pages if 0 <= p < len(reader.pages)})
-
     for p in valid_sorted:
+        if _cancelled(): return None
         writer.add_page(reader.pages[p])
 
     titular = owner_name if owner_name else "Sem_Titular"
     out_dir = os.path.join(output_base, titular)
     ensure_dir(out_dir)
 
-    out_path = unique_outpath(out_dir, original_pdf_path)  # mantém nome original; numera se necessário
+    out_path = unique_outpath(out_dir, original_pdf_path)
+    if _cancelled():
+        return None
     with open(out_path, "wb") as f:
         writer.write(f)
-    print(f"Gerado: {out_path}")
+    return out_path
 
 def pair_and_export(pdf_path: str,
                     separated_base_folder: str,
                     receb_list: list[dict],
                     nota_list: list[dict],
                     names_keywords: list[str]):
-    """
-    Pareia Recebimento->NF na ordem.
-    Se houver RECEBIMENTOS SOBRANDO e existir ao menos 1 par no PDF,
-    ANEXA os recebimentos restantes ao ÚLTIMO par daquele PDF.
-    Se não houver nenhum par, recebimentos sobrando NÃO são movidos.
-    NFs sobrando continuam saindo solo.
-    """
+    out_paths = []
+    if _cancelled(): return out_paths
+
     min_pairs = min(len(receb_list), len(nota_list))
     pair_idx = 1
 
     if min_pairs == 0:
-        # Não há par algum; NFs, se houver, saem solo; Recebimentos não se movem.
-        for k in range(0, len(nota_list)):
-            n = nota_list[k]
+        for n in nota_list:
+            if _cancelled(): return out_paths
             owner = choose_owner_name([n['names']], names_keywords)
-            export_pdf_segments(
-                original_pdf_path=pdf_path,
-                output_base=separated_base_folder,
-                pair_index=pair_idx,
-                segs_pages=[n['pages']],
-                seg_labels=["nf"],
-                owner_name=owner
-            )
+            p = export_pdf_segments(pdf_path, separated_base_folder, pair_idx, [n['pages']], ["nf"], owner)
+            if p: out_paths.append(p)
             pair_idx += 1
+        return out_paths
 
-        if len(receb_list) > 0:
-            for j in range(0, len(receb_list)):
-                print(f"[AVISO] Recebimento sem NF (segmento #{j+1}) — mantido no PDF original.")
-        return
-
-    # Monta os pares básicos
     pairs = []
     for i in range(min_pairs):
-        r = receb_list[i]
-        n = nota_list[i]
-        pairs.append({
-            "pages_list": [r['pages'], n['pages']],
-            "labels":     ["receb", "nf"],
-            "names_sets": [r['names'], n['names']]
-        })
+        if _cancelled(): return out_paths
+        r, n = receb_list[i], nota_list[i]
+        pairs.append({"pages_list": [r['pages'], n['pages']], "names_sets": [r['names'], n['names']]})
 
-    # Se houver recebimentos sobrando, ANEXA todos ao ÚLTIMO par
     if len(receb_list) > min_pairs:
-        last_pair = pairs[-1]
-        for j in range(min_pairs, len(receb_list)):
-            r_extra = receb_list[j]
-            last_pair["pages_list"].append(r_extra['pages'])
-            last_pair["labels"].append("receb")          # mantém a marcação
-            last_pair["names_sets"].append(r_extra['names'])
-            print(f"[INFO] Recebimento extra anexado ao último par (segmento extra #{j+1}).")
+        last = pairs[-1]
+        for extra in receb_list[min_pairs:]:
+            if _cancelled(): return out_paths
+            last["pages_list"].insert(0, extra['pages'])
+            last["names_sets"].insert(0, extra['names'])
 
-    # Exporta os pares (o último pode ter anexos extras)
-    for p in pairs:
-        owner = choose_owner_name(p["names_sets"], names_keywords)
-        export_pdf_segments(
-            original_pdf_path=pdf_path,
-            output_base=separated_base_folder,
-            pair_index=pair_idx,
-            segs_pages=p["pages_list"],
-            seg_labels=p["labels"],
-            owner_name=owner
-        )
+    for pinfo in pairs:
+        if _cancelled(): return out_paths
+        owner = choose_owner_name(pinfo["names_sets"], names_keywords)
+        p = export_pdf_segments(pdf_path, separated_base_folder, pair_idx, pinfo["pages_list"], ["receb","nf"], owner)
+        if p: out_paths.append(p)
         pair_idx += 1
 
-    # NFs sobrando saem solo
     for k in range(min_pairs, len(nota_list)):
+        if _cancelled(): return out_paths
         n = nota_list[k]
         owner = choose_owner_name([n['names']], names_keywords)
-        export_pdf_segments(
-            original_pdf_path=pdf_path,
-            output_base=separated_base_folder,
-            pair_index=pair_idx,
-            segs_pages=[n['pages']],
-            seg_labels=["nf"],
-            owner_name=owner
-        )
+        p = export_pdf_segments(pdf_path, separated_base_folder, pair_idx, [n['pages']], ["nf"], owner)
+        if p: out_paths.append(p)
         pair_idx += 1
+
+    return out_paths
 
 # ---------- Pipeline ----------
 def process_pdfs(source_folder,
@@ -319,47 +386,68 @@ def process_pdfs(source_folder,
                  dpi=150,
                  lang="por"):
 
-    print(f"Processando arquivos no diretório: {source_folder}")
-
+    # (a UI já mostra "Iniciando…"; não duplicar)
+    print(f"🔎 Pasta de origem: {source_folder}", flush=True)
     ensure_dir(separated_base_folder)
 
-    total_files = 0
-    processed = 0
-
     for file in os.listdir(source_folder):
+        if _cancelled():
+            print("⚠️ Cancelado pelo usuário.", flush=True)
+            break
         if not file.lower().endswith(".pdf"):
             continue
 
-        total_files += 1
         file_path = os.path.join(source_folder, file)
-        print(f"\n--- OCR '{file_path}' ---")
-        pages_text = ocr_pdf_pages(file_path, dpi=dpi, lang=lang)
-        if not pages_text:
-            print(f"[!] Não foi possível extrair texto de '{file_path}'. Pulando.")
+
+        import time
+        t0 = time.perf_counter()
+
+        texts, num_pages, threads = ocr_pdf_pages(file_path, dpi=dpi, lang=lang)
+        if _cancelled():
+            print("⚠️ Cancelado pelo usuário.", flush=True)
+            break
+        if not texts:
+            print(f"❌ Nenhum texto extraído de '{file_path}'. Pulando.", flush=True)
+            _divider(); print("", flush=True)
             continue
 
-        # Segmenta
-        receb_list, nota_list, page_types, page_names = build_segments(
-            pages_text, general_keywords, names_keywords, ignore_keywords
+        # ⬇️ CORREÇÃO: build_segments retorna 5 valores (inclui 'ignoradas')
+        receb_list, nota_list, page_types, page_names, ignoradas = build_segments(
+            texts, general_keywords, names_keywords, ignore_keywords
         )
 
         if not receb_list and not nota_list:
-            print("Nenhum 'Recebimento' nem 'NF' detectado. Pulando.")
+            print("⚠️ Nenhum 'Recebimento' nem 'NF' detectado. Pulando.", flush=True)
+            _divider(); print("", flush=True)
             continue
 
-        print(f"Documentos detectados -> Recebimentos: {len(receb_list)} | Notas: {len(nota_list)}")
-        pair_and_export(
+        # string de pareamento para o resumo
+        m = min(len(receb_list), len(nota_list))
+        pairs_text = ", ".join(
+            [f"Receb[{_first_page_idx(receb_list[i])}] → NF[{_first_page_idx(nota_list[i])}]" for i in range(m)]
+        )
+
+        out_paths = pair_and_export(
             pdf_path=file_path,
             separated_base_folder=separated_base_folder,
             receb_list=receb_list,
             nota_list=nota_list,
             names_keywords=names_keywords
         )
-        processed += 1
 
-    print(f"\nTotal de PDFs encontrados: {total_files}")
-    print(f"Total de PDFs processados: {processed}")
-    print("Concluído!")
+        dt = time.perf_counter() - t0
+        print_note_summary(
+            file=file,
+            num_pages=num_pages,
+            dpi=dpi,
+            threads=threads,
+            receb_count=len(receb_list),
+            nf_count=len(nota_list),
+            ign_count=ignoradas,        # ✅ usa o valor correto
+            pairs_text=pairs_text,
+            out_paths=out_paths,
+            duration_s=dt
+        )
 
 # ---------- MAIN ----------
 if __name__ == "__main__":
