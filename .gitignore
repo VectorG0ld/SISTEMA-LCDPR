@@ -1,0 +1,9 @@
+Importação Energia/json/config_energia.json
+<<<<<<< HEAD
+/Importação NFs Digitalizadas/json/config_nfs_digitalizadas.json
+__pycache__/
+*.pyc
+/logs/
+/*.log
+=======
+>>>>>>> origin/main

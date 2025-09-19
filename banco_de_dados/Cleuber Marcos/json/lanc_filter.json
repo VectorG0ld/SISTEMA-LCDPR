@@ -1,0 +1,36 @@
+{
+  "lancamentos": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "contas": [
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "imoveis": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "participantes": [
+    true,
+    true,
+    true,
+    true
+  ]
+}
