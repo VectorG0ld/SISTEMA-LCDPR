@@ -30,6 +30,7 @@ from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from decimal import Decimal
 
+
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
     nums = re.sub(r'\D', '', cpf)
@@ -4081,7 +4082,7 @@ class MainWindow(QMainWindow):
         """
         from PySide6.QtWidgets import QFileDialog, QMessageBox
         import pandas as pd
-    
+
         # 1) Pergunta onde salvar
         path, _ = QFileDialog.getSaveFileName(
             self,
@@ -4093,11 +4094,11 @@ class MainWindow(QMainWindow):
             return
         if not path.lower().endswith(('.xlsx', '.xls')):
             path += '.xlsx'
-    
+
         # 2) Intervalo de datas → **usar data_ord** (indexado e consistente)
         d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
-    
+
         # 3) Mapeamentos legíveis
         map_tipo_doc = {
             1: "Nota Fiscal",
@@ -4112,7 +4113,7 @@ class MainWindow(QMainWindow):
             2: "Despesa",
             3: "Adiantamento",
         }
-    
+
         # 4) Busca no banco – agora filtra por data_ord
         rows = self.db.fetch_all("""
             SELECT
@@ -4139,20 +4140,20 @@ class MainWindow(QMainWindow):
             WHERE l.data_ord BETWEEN ? AND ?
             ORDER BY l.data_ord, l.id
         """, [d1_ord, d2_ord])
-    
+
         if not rows:
             QMessageBox.information(self, "Exportar Planilha LCDPR",
                                     "Nenhum lançamento encontrado no período selecionado.")
             return
-    
+
         # 5) Converte para DataFrame com os cabeçalhos pedidos
         data = []
         for (data_fmt, cod_imovel, conta_bancaria, cod_conta, participante, cpf_cnpj,
              num_doc, tipo_doc, historico, tipo_lanc, valor_entrada, valor_saida) in rows:
-    
+
             tipo_doc_desc  = map_tipo_doc.get(int(tipo_doc) if tipo_doc is not None else 0, "")
             tipo_lanc_desc = map_tipo_lanc.get(int(tipo_lanc) if tipo_lanc is not None else 0, "")
-    
+
             data.append({
                 "DATA":                data_fmt or "",
                 "IMOVEL RURAL":        cod_imovel or "",
@@ -4167,7 +4168,7 @@ class MainWindow(QMainWindow):
                 "VALOR ENTRADA":       float(valor_entrada or 0),
                 "VALOR SAIDA":         float(valor_saida or 0),
             })
-    
+
         df = pd.DataFrame(data, columns=[
             "DATA",
             "IMOVEL RURAL",
@@ -4182,7 +4183,7 @@ class MainWindow(QMainWindow):
             "VALOR ENTRADA",
             "VALOR SAIDA",
         ])
-    
+
         # 6) Salva no Excel com largura razoável
         try:
             with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
@@ -4194,10 +4195,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Exportar Planilha LCDPR", f"Erro ao salvar planilha:\n{e}")
             return
-    
+
         QMessageBox.information(self, "Exportar Planilha LCDPR",
                                 f"Planilha gerada com sucesso em:\n{path}")
-    
+
     def show_export_dialog(self, parent_dialog):
         parent_dialog.hide(); dlg = QDialog(self); dlg.setWindowTitle("Exportar Arquivo LCDPR"); dlg.setMinimumSize(400, 120)
         layout = QVBoxLayout(dlg); hl = QHBoxLayout()
