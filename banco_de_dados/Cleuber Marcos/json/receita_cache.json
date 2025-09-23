@@ -14866,5 +14866,86 @@
       "free": true,
       "database": true
     }
+  },
+  "cnpj:27428590000961": {
+    "abertura": "08/07/2019",
+    "situacao": "ATIVA",
+    "tipo": "FILIAL",
+    "nome": "EXPRESSO SATELITE AZUL LTDA",
+    "fantasia": "SATELITE AZUL",
+    "porte": "DEMAIS",
+    "natureza_juridica": "206-2 - Sociedade Empresária Limitada",
+    "atividade_principal": [
+      {
+        "code": "49.22-1-02",
+        "text": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, interestadual"
+      }
+    ],
+    "atividades_secundarias": [
+      {
+        "code": "49.22-1-01",
+        "text": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, intermunicipal, exceto em região metropolitana"
+      },
+      {
+        "code": "49.29-9-02",
+        "text": "Transporte rodoviário coletivo de passageiros, sob regime de fretamento, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "49.30-2-02",
+        "text": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional"
+      },
+      {
+        "code": "52.50-8-03",
+        "text": "Agenciamento de cargas, exceto para o transporte marítimo"
+      },
+      {
+        "code": "52.50-8-04",
+        "text": "Organização logística do transporte de carga"
+      },
+      {
+        "code": "77.11-0-00",
+        "text": "Locação de automóveis sem condutor"
+      },
+      {
+        "code": "79.11-2-00",
+        "text": "Agências de viagens"
+      }
+    ],
+    "logradouro": "AVENIDA MIGUEL SUTIL",
+    "numero": "00",
+    "complemento": "SALA D.V.O.P BOX 36",
+    "municipio": "CUIABA",
+    "bairro": "ALVORADA",
+    "uf": "MT",
+    "cep": "78.048-000",
+    "email": "juridico@satelitenorte.com.br",
+    "telefone": "(62) 3565-1900",
+    "data_situacao": "08/07/2019",
+    "cnpj": "27.428.590/0009-61",
+    "ultima_atualizacao": "2025-08-10T23:59:59.000Z",
+    "status": "OK",
+    "efr": "",
+    "motivo_situacao": "",
+    "situacao_especial": "",
+    "data_situacao_especial": "",
+    "capital_social": "2000000.00",
+    "qsa": [],
+    "simples": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "simei": {
+      "optante": false,
+      "data_opcao": null,
+      "data_exclusao": null,
+      "ultima_atualizacao": "2025-08-10T23:59:59.000Z"
+    },
+    "extra": {},
+    "billing": {
+      "free": true,
+      "database": true
+    }
   }
 }

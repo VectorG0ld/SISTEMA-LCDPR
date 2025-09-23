@@ -1,0 +1,16 @@
+🧾 Geração de TXT — 23/09/2025
+⏳ Início: 11:59:31 • 3 subpastas • 7 PDFs
+
+👤 Cleuber  —  ⏱️ 5s (11:59:31 → 11:59:37)
+📄 Talão 1 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 527,61  •  🧾 NF: 003912258
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 11:59:34  •  📌 Talão processado
+📄 Talão 2 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 454,41  •  🧾 NF: 004111249
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 11:59:37  •  📌 Talão processado
+🗂️ TXT gerado: C:\Users\conta\OneDrive\Documentos\ENERGIA\TESTE\Cleuber.txt (11:59:37 | +5s)
+💵 Subtotal Cleuber: R$ 982,02

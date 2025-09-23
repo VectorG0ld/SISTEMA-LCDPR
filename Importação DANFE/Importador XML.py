@@ -755,6 +755,8 @@ class RuralXmlImporter(QWidget):
             self.config["base_dados_path"] = base_file
             self.config["testes_path"] = testes_file
             self.save_config()
+            self.base_dados_path = base_file
+            self.testes_path = testes_file
             self.log_msg("Caminhos salvos em json/config.json", "success")
 
             # Iniciar varredura via QProcess
@@ -861,8 +863,10 @@ class RuralXmlImporter(QWidget):
     def open_config(self):
         dialog = ConfigDialog(self.config, self)
         if dialog.exec() == QDialog.Accepted:
-            self.config = dialog.get_config()
-            self.excel_path = self.config.get('excel_path', '')
+            # MESCLA ao invés de sobrescrever (preserva base_dados_path e testes_path)
+            new_cfg = dialog.get_config() or {}
+            self.config.update(new_cfg)
+            self.excel_path  = self.config.get('excel_path', '')
             self.isento_path = self.config.get('isento_path', '')
             self.save_config()
             self.log_msg("Configurações atualizadas", "success")

@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QPushButton, QLineEdit,
-    QFileDialog, QMessageBox, QTextEdit
+    QFileDialog, QMessageBox, QTextEdit, QDialog, QDialogButtonBox, QFormLayout, QGroupBox
 )
 
 # ===========================
@@ -153,6 +153,14 @@ TOMADOR_MAP = {
     },
 }
 
+# ===== MAPEAMENTO GLOBAL: IE (inscrição estadual) -> CÓDIGO DO IMÓVEL =====
+# Sempre digitos! (sem pontos/traços). Ex.: "115449965": "008"
+IE_TO_CODE = {
+    "115449965": "008",  # FAZENDA ESTRELA
+    "111739837": "005",  # FAZENDA ALIANÇA
+    # ... adicione as demais aqui
+}
+
 def _cte_tomador_endereco(xml_path: str) -> dict:
     """
     Extrai o endereço do tomador (toma4 ou papel de toma3) para
@@ -245,16 +253,20 @@ def _read_cte_fields(xml_path: str) -> dict:
     dEmi  = fx(f".//{ns}ide/{ns}dEmi")
     data  = _fmt_ddmmYYYY_from_iso(dhEmi or dEmi)
 
-    # Cidades possíveis (ordem de preferência)
+    # CIDADE do TOMADOR (prioridade absoluta)
+    # Usa _cte_tomador_endereco para achar <xMun> do tomador (toma4 ou toma3->papel)
+    tom_end = _cte_tomador_endereco(xml_path)  # ← já existe no arquivo
+    xMunToma = (tom_end.get("xMun") or "").strip()
+    # fallback (se não tiver no tomador, mantém os antigos)
     xMunFim  = fx(f".//{ns}ide/{ns}xMunFim") or ""
     xMunDest = fx(f".//{ns}dest/{ns}enderDest/{ns}xMun") or ""
     xMunRecb = fx(f".//{ns}receb/{ns}enderReceb/{ns}xMun") or ""
-    cidade   = next((c for c in (xMunFim, xMunDest, xMunRecb) if c), "")
+    cidade   = next((c for c in (xMunToma, xMunFim, xMunDest, xMunRecb) if c), "")
 
-    # IE possíveis
+    # IE possíveis (dest/receb/tomador)
     ie_dest = fx(f".//{ns}dest/{ns}IE") or ""
     ie_recb = fx(f".//{ns}receb/{ns}IE") or ""
-    ie_toma = fx(f".//{ns}ide/{ns}toma4/{ns}IE") or ""
+    ie_toma = fx(f".//{ns}ide/{ns}toma4/{ns}IE") or (tom_end.get("IE") if tom_end else "")
     ie_any  = re.sub(r"\D", "", (ie_dest or ie_recb or ie_toma or ""))
 
     # Emitente e destinatário
@@ -283,7 +295,8 @@ def _read_cte_fields(xml_path: str) -> dict:
         "perfil": perfil,
         "emitente": emit_nome, "destinatario": dest_nome,
         "arquivo": os.path.basename(xml_path),
-        "cidade": cidade, "ie": ie_any
+        "cidade": cidade,
+        "ie": ie_any, 
     }
 
 def _make_line(d: dict) -> str:
@@ -292,6 +305,43 @@ def _make_line(d: dict) -> str:
         d["historico"], d["cpf_cnpj"], d["tipo_lanc"], d["cent_ent"],
         d["cent_sai"], d["cent_saldo"], d["nat"]
     ])
+
+class ConfigDialog(QDialog):
+    def __init__(self, config: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("⚙️ Configurações — CT-e")
+        self.setFixedSize(520, 220)
+        self.config = config or {}
+
+        lay = QVBoxLayout(self)
+
+        grp = QGroupBox("Caminhos de Trabalho")
+        grp.setObjectName("cfgGrp")
+        grp.setStyleSheet("#cfgGrp{border:1px solid #1e5a9c; border-radius:12px; background:transparent;} #cfgGrp::title{left:10px; padding:0 6px; color:#E0E0E0;}")
+        form = QFormLayout(grp)
+
+        # Pasta CT-e
+        self.cte_dir_edit = QLineEdit(self.config.get("cte_dir", ""))
+        self.cte_dir_edit.setPlaceholderText("Pasta onde estão os XMLs de CT-e…")
+        btn_browse = QPushButton("Procurar")
+        btn_browse.clicked.connect(self._browse_cte_dir)
+        row = QHBoxLayout(); row.addWidget(self.cte_dir_edit, 1); row.addWidget(btn_browse)
+        form.addRow("📂 Pasta CT-e:", row)
+
+        lay.addWidget(grp)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
+        lay.addWidget(btns)
+
+    def _browse_cte_dir(self):
+        start = self.cte_dir_edit.text().strip() or os.getcwd()
+        d = QFileDialog.getExistingDirectory(self, "Selecione a pasta de CT-e", start)
+        if d:
+            self.cte_dir_edit.setText(d)
+
+    def get_config(self) -> dict:
+        return {"cte_dir": self.cte_dir_edit.text().strip()}
 
 # ===========================
 # Widget principal
@@ -393,12 +443,15 @@ class ImportadorCTe(QWidget):
         title_box.addWidget(subtitle)
         lay.addLayout(title_box, 1)
 
+        btn_cfg = QToolButton(); btn_cfg.setText("⚙️ Configurar")
+        btn_cfg.clicked.connect(self.open_config)
+
         btn_help = QToolButton(); btn_help.setText("❓ Ajuda")
         btn_help.clicked.connect(lambda: QMessageBox.information(
             self, "Ajuda",
-            "1) Defina a pasta dos XMLs de CT-e.\n"
-            "2) Use “📤 Importar XMLs (CT-e) → Gerar TXT”.\n"
-            "3) Se quiser, “📥 Importar Lançamentos” para subir o TXT.\n"
+            "1) Clique em ⚙️ Configurar para definir a pasta dos XMLs de CT-e.\n"
+            "2) Use 📤 Importar XMLs (CT-e) → Gerar TXT.\n"
+            "3) (Opcional) 📥 Importar Lançamentos para subir o TXT.\n"
             "4) Acompanhe os logs e salve o histórico."
         ))
 
@@ -416,7 +469,9 @@ class ImportadorCTe(QWidget):
         btn_close.clicked.connect(_close_self_tab)
 
         row = QHBoxLayout(); row.setSpacing(8)
-        row.addWidget(btn_help); row.addWidget(btn_close)
+        row.addWidget(btn_cfg)
+        row.addWidget(btn_help)
+        row.addWidget(btn_close)
         lay.addLayout(row, 0)
 
         _add_shadow(self, card, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
@@ -426,18 +481,7 @@ class ImportadorCTe(QWidget):
         card = QFrame()
         card.setStyleSheet("QFrame{border:1px solid #1e5a9c; border-radius:12px;}")
         lay = QVBoxLayout(card); lay.setContentsMargins(14,12,14,12); lay.setSpacing(10)
-    
-        # Linha 1 — Pasta CT-e
-        l1 = QHBoxLayout()
-        self.ed_dir = QLineEdit(self.config.get("cte_dir", ""))
-        self.ed_dir.setPlaceholderText("Pasta onde estão os XMLs de CT-e…")
-        btn_browse = QPushButton("Selecionar Pasta"); btn_browse.clicked.connect(self._choose_dir)
-        btn_save   = QPushButton("Salvar Pasta");     btn_save.clicked.connect(self._save_dir)
-        l1.addWidget(QLabel("📂 Pasta CT-e:"))
-        l1.addWidget(self.ed_dir, 1)
-        l1.addWidget(btn_browse)
-        l1.addWidget(btn_save)
-    
+
         # Linha 2 — Ações principais
         actions = QHBoxLayout(); actions.setSpacing(10)
         self.btn_xmls = QPushButton("📤 Importar XMLs (CT-e) → Gerar TXT")
@@ -482,8 +526,7 @@ class ImportadorCTe(QWidget):
         chips_row.addWidget(self.lbl_stat_ok)
         chips_row.addWidget(self.lbl_stat_err)
         chips_row.addStretch()
-    
-        lay.addLayout(l1)
+
         lay.addLayout(actions)
         lay.addLayout(chips_row)
     
@@ -498,6 +541,14 @@ class ImportadorCTe(QWidget):
         self.lbl_last_status.setText("PROCESSO CANCELADO PELO USUARIO")
         self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
 
+    def open_config(self):
+        dlg = ConfigDialog(self.config, self)
+        if dlg.exec() == QDialog.Accepted:
+            new_cfg = dlg.get_config() or {}
+            self.config.update(new_cfg)
+            self.save_config()
+            self.log_msg("Configurações atualizadas (Pasta CT-e).", "success")
+    
     def _log_card(self) -> QFrame:
         card = QFrame()
         card.setObjectName("logCard")
@@ -521,18 +572,6 @@ class ImportadorCTe(QWidget):
         body_lay.addWidget(self.log)
         lay.addWidget(body)
         return card
-
-
-    # ---------- Ações ----------
-    def _choose_dir(self):
-        start = self.ed_dir.text().strip() or os.getcwd()
-        d = QFileDialog.getExistingDirectory(self, "Selecione a pasta de CT-e", start)
-        if d: self.ed_dir.setText(d)
-
-    def _save_dir(self):
-        self.config["cte_dir"] = self.ed_dir.text().strip()
-        self.save_config()
-        self.log_msg(f"Pasta salva: {self.config.get('cte_dir','')}", "success")
 
     # ===== NOVO: garante cadastro de participante (CNPJ/CPF) =====
     def _ensure_participante(self, cpf_cnpj: str, nome: str, tipo: int = TIPO_FORNECEDOR) -> int | None:
@@ -645,9 +684,10 @@ class ImportadorCTe(QWidget):
 
 
     def importar_xmls_cte(self):
-        base_dir = self.ed_dir.text().strip()
+        base_dir = self.config.get("cte_dir", "").strip()
         if not base_dir or not os.path.isdir(base_dir):
-            QMessageBox.warning(self, "Pasta inválida", "Defina uma pasta válida dos XMLs de CT-e.")
+            QMessageBox.warning(self, "Pasta não configurada",
+                                "Defina a ‘Pasta CT-e’ em ⚙️ Configurar antes de importar.")
             return
 
         xmls = [str(p) for p in Path(base_dir).glob("*.xml")]
@@ -658,7 +698,10 @@ class ImportadorCTe(QWidget):
         self.stat_total = len(xmls); self.stat_ok = 0; self.stat_err = 0; self._upd_stats()
         self._cancel = False; self.btn_cancel.setEnabled(True)
         self.log.clear()
-        self.log_msg(f"Iniciando processamento de {len(xmls)} arquivo(s)…", "info")
+        start_now = datetime.now()
+        self.log_msg(f"🧾 <b>Importação CT-e — {start_now.strftime('%d/%m/%Y')}</b>", "raw")
+        self.log_msg(f"⏳ <b>Início:</b> {start_now.strftime('%H:%M:%S')} • <b>{len(xmls)} XML(s)</b>", "raw")
+        self.log_msg("", "divider")
 
         QTimer.singleShot(0, lambda: self._process_xmls(xmls))
 
@@ -668,7 +711,7 @@ class ImportadorCTe(QWidget):
                 resumo = {}    # (perfil, cod_imovel) -> total_centavos
 
                 # Salvar na MESMA pasta dos XMLs
-                base_dir = self.ed_dir.text().strip() or os.getcwd()
+                base_dir = self.config.get("cte_dir", "").strip() or os.getcwd()
 
                 # --- mapeamentos do Cleuber (cidade/IE -> apelido de fazenda) ---
                 CODIGOS_CIDADES = {
@@ -757,15 +800,49 @@ class ImportadorCTe(QWidget):
                         rec["cod_conta"] = "001"           # conta 001 do perfil do tomador
                         rec["_tomador_cpf"] = tomador_cpf
 
-                        # ------- resolver cod_imovel (tomador-específico) -------
+                        # ------- resolver cod_imovel (PRIORIDADE IE -> depois cidade/alias) -------
                         cod_imovel = "001"; origem = "default"
                         tom_cfg = TOMADOR_MAP.get(tomador_cpf, {})
 
-                        if tom_cfg.get("modo") == "cleuber":
-                            # mantém lógica dinâmica por cidade/IE (Cleuber)
-                            cidade = rec.get("cidade") or ""
-                            ie     = rec.get("ie") or ""
+                        cidade = rec.get("cidade") or ""
+                        ie     = re.sub(r"\D", "", rec.get("ie") or "")
 
+                        orig_label = None  # rótulo humano para o log (ex.: "Estrela", "Barragem", "RIALMA - FAZENDA FORMIGA")
+
+                        # (A) IE GLOBAL → código direto (NUNCA sobrescrever depois)
+                        if ie and ie in IE_TO_CODE:
+                            cod_imovel, origem = IE_TO_CODE[ie], f"IE:map:{ie}"
+                            # rótulo bonito: usa FARM_MAPPING (IE -> nome/alias da fazenda) se existir
+                            try:
+                                # FARM_MAPPING está definido acima no método (_process_xmls)
+                                orig_label = FARM_MAPPING.get(ie) or f"IE {ie}"
+                            except Exception:
+                                orig_label = f"IE {ie}"
+                            rec["_auto_imovel"] = False
+
+                        # (B) Se ainda não definiu por IE e o perfil é 'fixo' (Gilson/Lucas/Adriana)
+                        elif tom_cfg.get("modo") == "fixo":
+                            # tenta IE no banco primeiro
+                            if ie:
+                                cod_db = _query_cod_by_ie(ie)
+                                if cod_db:
+                                    cod_imovel, origem = cod_db, f"IE:{ie}"
+                                else:
+                                    cod_imovel, origem = tom_cfg["cod_imovel"], "tomador:fixo"
+                            else:
+                                cod_imovel, origem = tom_cfg["cod_imovel"], "tomador:fixo"
+
+                            # prepara auto-cadastro (mantém comportamento existente)
+                            addr = _cte_tomador_endereco(path)
+                            rec["_auto_imovel"] = True
+                            rec["_imovel_payload"] = {
+                                "cod_imovel": cod_imovel,
+                                "nome_imovel": tom_cfg.get("nome_imovel", ""),
+                                "addr": addr,
+                            }
+
+                        # (C) Cleuber (dinâmico): se NÃO foi pela IE, tenta por cidade/alias; depois IE no banco; depois IE->alias
+                        else:
                             alias = CIDADES_NORM.get(_norm(cidade))
                             if alias:
                                 cod = _query_cod_by_alias(alias)
@@ -777,24 +854,15 @@ class ImportadorCTe(QWidget):
                                 if cod:
                                     cod_imovel, origem = cod, f"IE:{ie}"
                                 else:
-                                    alias2 = IE_TO_ALIAS.get(re.sub(r"\D","", ie))
+                                    alias2 = IE_TO_ALIAS.get(ie)
                                     if alias2:
                                         cod = _query_cod_by_alias(alias2)
                                         if cod:
                                             cod_imovel, origem = cod, f"IE→alias:{alias2}"
-                        else:
-                            # GILSON / LUCAS / ADRIANA — código fixo + prepara auto-cadastro
-                            cod_imovel = tom_cfg["cod_imovel"]
-                            origem = "tomador:fixo"
-                            addr = _cte_tomador_endereco(path)  # endereço do tomador no XML
-                            rec["_auto_imovel"] = True
-                            rec["_imovel_payload"] = {
-                                "cod_imovel": cod_imovel,
-                                "nome_imovel": tom_cfg["nome_imovel"],
-                                "addr": addr,
-                            }
 
                         rec["cod_imovel"] = cod_imovel
+                        # salva rótulo humano para o card
+                        rec["_orig_label"] = orig_label or origem
 
                         grupos.setdefault(rec["perfil"], []).append(rec)
 
@@ -845,7 +913,7 @@ class ImportadorCTe(QWidget):
                             f.write(_make_line(r) + "\n")
                     por_perfil[perfil] = str(fname)
 
-                # Blocos de log por perfil (fora do loop acima, para não duplicar)
+                # Blocos de log por perfil — cabeçalho clean + cards + subtotal
                 EMOJI_PERFIL = {
                     "Cleuber Marcos": "🧑‍🌾",
                     "Gilson Oliveira": "🧔",
@@ -855,18 +923,49 @@ class ImportadorCTe(QWidget):
                 for perfil, lst in grupos.items():
                     if not lst:
                         continue
-                    self._log_section(perfil.split()[0], EMOJI_PERFIL.get(perfil, "🚚"))
-                    self._log_header()
-                    for r in lst:
-                        self._log_row_table(r)
-                    self.log.append("<div style='text-align:center;color:#2e3d56;font-family:monospace;'>======================</div>")
+                    
+                    # Cabeçalho clean do perfil
+                    self.log_msg("<div style='border-top:1px solid #3A3C3D; margin:18px 0 10px 0;'></div>", "raw")
+                    self.log_msg(
+                        f"<div style='font-weight:800; font-size:14px; margin:2px 0 8px 0;'>"
+                        f"{EMOJI_PERFIL.get(perfil,'🚚')} {perfil}</div>",
+                        "raw"
+                    )
 
-                # Resumo organizado
+                    # Cards dos CT-e do perfil
+                    subtotal_cents = 0
+                    for r in lst:
+                        try:
+                            subtotal_cents += int(r.get("cent_sai", 0))
+                        except Exception:
+                            pass
+                        # reaproveita o card já pronto (com origem calculada antes)
+                        self.log_line(r, origem="perfil")
+
+                    # Subtotal do perfil (R$)
+                    sub_val = "R$ " + f"{(subtotal_cents/100.0):,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+                    self.log_msg(f"💵 <b>Subtotal {perfil.split()[0]}:</b> <b>{sub_val}</b>", "raw")
+
+                # Resumo final clean
+                self.log_msg("<div style='border-top:1px solid #3A3C3D; margin:16px 0 10px 0;'></div>", "raw")
+                self.log_msg("<div style='font-weight:800; font-size:14px; margin:2px 0 12px 0;'>🏁 Resumo Final</div>", "raw")
+                
+                tot_reg = sum(len(v) for v in grupos.values())
+                tot_cent = sum(int(v) for v in resumo.values()) if resumo else 0
+                tot_val  = "R$ " + f"{(tot_cent/100.0):,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+                
+                # Por perfil/imóvel
                 if resumo:
-                    self.log_msg("\n—— Resumo por Perfil/Imóvel ——", "info")
+                    self.log_msg("• 📊 <b>Totais por Perfil / Imóvel</b>", "raw")
                     for (perfil, imv), cents in sorted(resumo.items(), key=lambda x:(x[0][0], x[0][1])):
-                        reais = cents/100.0
-                        self.log_msg(f"  • {perfil:>16s} | Imóvel {imv:<6s} | Total R$ {reais:,.2f}".replace(",", "X").replace(".", ",").replace("X","."), "success")
+                        reais = "R$ " + f"{(cents/100.0):,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
+                        self.log_msg(f"&nbsp;&nbsp;• {perfil} — Imóvel <b>{imv}</b> — <b>{reais}</b>", "raw")
+                
+                # TXT(s) gerados
+                self.log_msg("• 🧾 <b>Arquivos TXT</b>", "raw")
+                self.log_msg(f"&nbsp;&nbsp;• TODOS: <code>{all_txt}</code>", "raw")
+                for p, fp in por_perfil.items():
+                    self.log_msg(f"&nbsp;&nbsp;• {p}: <code>{fp}</code>", "raw")
 
                 self.log_msg(f"\nTXT(s) gerados na pasta dos XMLs:\n  • TODOS: {all_txt}\n" + "\n".join([f"  • {p}: {fp}" for p, fp in por_perfil.items()]), "success")
                 self.lbl_last_status.setText("TXT(s) gerados ✅")
@@ -1025,22 +1124,58 @@ class ImportadorCTe(QWidget):
     def _log_header(self):
         self.log.append("<b style='color:#a9c7ff;'>ARQ".ljust(6) + " │ DATA │ PERFIL          │ DOC │ CIDADE → IMÓVEL │ VALOR │ EMITENTE</b>")
         self.log.append("<span style='color:#2e3d56;'>──────┼──────┼────────────────┼─────┼────────────────┼──────┼────────────────────────────────────</span>")
-    
-    def log_line(self, rec: dict, origem: str):
-        arq = rec['arquivo'][:12]
-        data = rec['data_br']
-        perf = rec['perfil']
-        doc  = rec.get('num_doc') or "-"
-        cid  = rec.get('cidade') or "-"
-        imv  = rec['cod_imovel']
-        val  = f"R$ {int(rec['cent_sai'])/100:,.2f}".replace(",", "X").replace(".", ",").replace("X",".")
-        emi  = (rec.get('emitente') or "")
-        texto = f"{arq} • {data} • {perf} • Doc {doc} • {cid}→{imv} • {val} • {emi}  ({origem})"
-        self.log_msg(texto, "info" if origem == "default" else "success")
 
-    
+    def log_line(self, rec: dict, origem: str):
+        """
+        Exibe um CARD clean por CT-e:
+        - Arquivo + Nº do documento
+        - Data, Valor, Cidade → Imóvel
+        - Emitente (e tomador/origem do mapeamento)
+        """
+        # helpers locais
+        def _fmt_money_cent(cents: int|str) -> str:
+            try:
+                v = int(cents) / 100.0
+            except Exception:
+                v = 0.0
+            s = f"{v:,.2f}"
+            return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+        fname   = rec.get("arquivo") or ""
+        data_br = (rec.get("data_br") or "").replace("-", "/")
+        perf    = rec.get("perfil") or ""
+        doc     = rec.get("num_doc") or "-"
+        cid     = rec.get("cidade") or "-"
+        imv     = rec.get("cod_imovel") or "-"
+        val     = _fmt_money_cent(rec.get("cent_sai", 0))
+        emit    = rec.get("emitente") or ""
+        # rótulo humano prioriza rec["_orig_label"] (ex.: "Estrela", "Barragem")
+        _show = rec.get("_orig_label") or origem
+        origem_tag = f"<span style='opacity:.75;'>({_show})</span>" if _show else ""
+
+        # CARD
+        self.log_msg(
+            "<div style='border:1px solid #3A3C3D; border-radius:8px; padding:10px 12px; margin:16px 0;'>"
+            f"<div style='font-weight:700; margin-bottom:6px;'>🚚 CT-e <b>{doc}</b>"
+            f" <span style='opacity:.75; font-weight:500;'>— {fname}</span></div>"
+            f"<div>🗓️ Data: <b>{data_br}</b> &nbsp;•&nbsp; 💰 Valor: <b>{val}</b></div>"
+            f"<div>🌆 Cidade: <b>{cid}</b> &nbsp;→&nbsp; 🏠 Imóvel: <b>{imv}</b></div>"
+            f"<div>🏢 Emitente: <b>{emit}</b></div>"
+            f"<div style='margin-top:6px; opacity:.85;'>👤 Perfil: <b>{perf}</b> &nbsp;•&nbsp; {origem_tag}</div>"
+            "</div>",
+            "raw"
+        )
+        self.log_msg("<div style='height:28px;'></div>", "raw")
+
     def log_msg(self, message: str, msg_type: str = "info"):
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        # suporte a mensagens cruas (HTML pronto, sem timestamp/moldura)
+        if msg_type == "raw":
+            self.log.append(message)
+            sb = self.log.verticalScrollBar()
+            if sb: sb.setValue(sb.maximum())
+            return
+        
         palette = {
             "info":   {"emoji": "ℹ️", "text": "#FFFFFF", "accent": "#3A3C3D", "weight": "500"},
             "success":{"emoji": "✅", "text": "#A7F3D0", "accent": "#2F7D5D", "weight": "700"},

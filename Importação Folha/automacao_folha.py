@@ -565,70 +565,144 @@ class FolhaWorker(QThread):
     # ---------- Execução ----------
     def run(self):
         try:
+            # ---------- helpers locais p/ exibição ----------
+            def _fmt_hms(dt: datetime) -> str:
+                return dt.strftime("%H:%M:%S")
+    
+            def _fmt_money_cents(cents_str: str) -> str:
+                try:
+                    v = int(''.join(ch for ch in str(cents_str) if ch.isdigit())) / 100.0
+                except Exception:
+                    v = 0.0
+                s = f"{v:,.2f}"
+                return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+    
+            def _br_slash(date_br_hifen: str) -> str:
+                # entra "dd-mm-aaaa", sai "dd/mm/aaaa"
+                return (date_br_hifen or "").replace("-", "/")
+    
+            # ---------- cabeçalho da sessão ----------
+            session_start = datetime.now()
+            self._emit(f"🧾 <b>Geração de TXT — {session_start.strftime('%d/%m/%Y')}</b>", "raw")
+            self._emit(f"⏳ <b>Início:</b> {_fmt_hms(session_start)}", "raw")
+            self._emit("", "divider")
+    
+            # estatísticas de sessão
+            self.total = 0
+            self.ok = 0
+            self.err = 0
+            valor_total_sessao = 0.0
+            meses_processados = []
+    
+            # var de saída (linhas do TXT)
             linhas = []
-            self._emit("Iniciando leitura da planilha…", "title")
-
+    
+            # percorre meses do período
             for m, y in _iter_mes_ano(self.inicio, self.fim):
                 if self._cancel:
                     self._emit("Processo cancelado.", "warning")
                     self.finished_sig.emit("Cancelado", "")
                     return
-
-                # Lê mês/ano
+    
+                # leitura da planilha para o mês/ano
                 try:
                     funcs, trib, imovel_trib = _read_planilha(self.planilha, m, y)
-                    self._emit(f"Leitura {m:02d}/{y}: {len(funcs)} funcionários – INSS={trib['INSS']} IRRF={trib['IRRF']} FGTS={trib['FGTS']}", "info")
                 except Exception as e:
                     self.err += 1
                     self._emit_stats()
-                    self._emit(f"Erro ao ler {m:02d}/{y}: {e}", "error")
+                    self._emit(f"❌ Erro ao ler {m:02d}/{y}: {e}", "error")
                     continue
-
+                
+                # contabiliza total esperado (funcionários + tributos com valor)
+                trib_count = sum(1 for k in ("INSS","IRRF","FGTS") if str(trib.get(k,"0")) != "0")
+                self.total += len(funcs) + trib_count
+                self._emit_stats()
+    
+                mes_start = datetime.now()
+                meses_processados.append(f"{m:02d}/{y}")
+    
+                # cabeçalho do mês (clean)
+                head = (
+                    "<div style='border-top:1px solid #3A3C3D; margin:16px 0 10px 0;'></div>"
+                    f"<div style='font-weight:800; font-size:14px; margin:2px 0 12px 0;'>"
+                    f"📆 {m:02d}/{y} &nbsp;—&nbsp; Funcionários: <b>{len(funcs)}</b> "
+                    f"&nbsp;•&nbsp; Tributos: <b>{trib_count}</b>"
+                    "</div>"
+                )
+                self._emit(head, "raw")
+    
+                # datas
                 data_func = _dia_ajustado(y, m, 5)
                 data_trib = _dia_ajustado(y, m, 20)
-                data_func_br = _fmt_dd_mm_yyyy(data_func)
+                data_func_br = _fmt_dd_mm_yyyy(data_func)  # dd-mm-aaaa
                 data_trib_br = _fmt_dd_mm_yyyy(data_trib)
-
-                # Funcionários
+    
+                subtotal_mes = 0.0
+    
+                # ---------- funcionários (um card por pagamento) ----------
                 for f in funcs:
                     if self._cancel:
                         self._emit("Cancelado pelo usuário.", "warning")
                         self.finished_sig.emit("Cancelado", "")
                         return
-
+    
                     cpf   = _digits(f.get("cpf"))
                     nome  = (f.get("nome") or "").strip()
                     cents = str(f.get("centavos") or "0")
-                    imovel = (f.get("imovel") or "001").strip()
-
+                    imov  = (f.get("imovel") or "001").strip()
+    
                     if not nome:
-                        self._emit("Linha ignorada: sem nome.", "warning");  continue
+                        self._emit("⚠️ Linha ignorada: sem nome.", "warning")
+                        continue
                     if not cpf:
-                        self._emit(f"Linha ignorada (sem CPF): {nome}", "warning");  continue
+                        self._emit(f"⚠️ Linha ignorada (sem CPF): {nome}", "warning")
+                        continue
                     if cents in ("", "0"):
-                        self._emit(f"Linha ignorada (valor zero): {nome}", "warning");  continue
-
-                    key = (_norm(nome), data_func_br)  # dedupe intra-execução
+                        self._emit(f"⚠️ Linha ignorada (valor zero): {nome}", "warning")
+                        continue
+                    
+                    # dedupe por sessão
+                    key = (_norm(nome), data_func_br)
                     if key in self._vistos:
-                        self._emit(f"↩️ DUP ignorado (sessão): {nome} {data_func_br}", "warning")
+                        self._emit(f"↩️ DUP ignorado (sessão): {nome} {_br_slash(data_func_br)}", "warning")
                         continue
                     self._vistos.add(key)
-
+    
                     historico = f"FOLHA DE PAGAMENTO REF. {m:02d}/{y} ({nome})"
-
-                    # dedupe no banco (na MESMA thread — conexão própria)
-                    if self._exists_in_db(data_func_br, imovel, cpf, cents, historico):
-                        self._emit(f"↩️ DUP no banco: {nome} {data_func_br}", "warning")
+    
+                    # dedupe no banco
+                    if self._exists_in_db(data_func_br, imov, cpf, cents, historico):
+                        self._emit(f"↩️ DUP no banco: {nome} {_br_slash(data_func_br)}", "warning")
                         continue
-
+                    
+                    # linha do TXT (12 colunas)
                     linha = _make_line(
-                        data_func_br, imovel, self.COD_CONTA,
+                        data_func_br, imov, self.COD_CONTA,
                         "N", "1", historico, cpf, "2", "000", cents, cents, "N"
                     )
                     linhas.append(linha)
-                    self.ok += 1; self._emit_stats()
-
-                # Tributos do mês
+                    self.ok += 1
+                    self._emit_stats()
+    
+                    # valores para exibir
+                    money = _fmt_money_cents(cents)
+                    subtotal_mes += float(money.replace("R$ ","").replace(".","").replace(",","."))
+                    valor_total_sessao += float(money.replace("R$ ","").replace(".","").replace(",","."))
+                    agora = _fmt_hms(datetime.now())
+    
+                    # CARD clean do funcionário
+                    self._emit(
+                        "<div style='border:1px solid #3A3C3D; border-radius:8px; padding:10px 12px; margin:18px 0;'>"
+                        f"<div style='font-weight:700; margin-bottom:6px;'>👤 Funcionário: <b>{nome}</b>"
+                        f" <span style='opacity:.75; font-weight:500;'>— CPF: {_digits(cpf)}</span></div>"
+                        f"<div>🗓️ Data: <b>{_br_slash(data_func_br)}</b> &nbsp;•&nbsp; 💰 Pago: <b>{money}</b></div>"
+                        f"<div>🏠 Imóvel: <b>{imov}</b> &nbsp;•&nbsp; 🧾 Histórico: <span style='opacity:.9;'>{historico}</span></div>"
+                        f"<div style='margin-top:6px; opacity:.85;'>✅ OK <b>{agora}</b> &nbsp;•&nbsp; 📌 Pagamento processado</div>"
+                        "</div>",
+                        "raw"
+                    )
+    
+                # ---------- tributos (cards) ----------
                 for rotulo, cents in (("INSS", trib.get("INSS","0")), ("IRRF", trib.get("IRRF","0")), ("FGTS", trib.get("FGTS","0"))):
                     if self._cancel:
                         self._emit("Cancelado pelo usuário.", "warning")
@@ -636,34 +710,78 @@ class FolhaWorker(QThread):
                         return
                     if not cents or str(cents) == "0":
                         continue
-
-                    historico = f"FOLHA DE PAGAMENTO REF. {m:02d}/{y} {rotulo}"
+                    
                     cnpj = TRIBUTOS_CNPJ.get(rotulo, "")
-                    imovel_use = imovel_trib or "001"
-
-                    if self._exists_in_db(data_trib_br, imovel_use, cnpj, str(cents), historico):
-                        self._emit(f"↩️ DUP no banco: {rotulo} {data_trib_br}", "warning")
+                    historico = f"FOLHA DE PAGAMENTO REF. {m:02d}/{y} {rotulo}"
+                    imov_use = imovel_trib or "001"
+    
+                    if self._exists_in_db(data_trib_br, imov_use, cnpj, str(cents), historico):
+                        self._emit(f"↩️ DUP no banco: {rotulo} {_br_slash(data_trib_br)}", "warning")
                         continue
-
+                    
                     linha = _make_line(
-                        data_trib_br, imovel_use, self.COD_CONTA,
+                        data_trib_br, imov_use, self.COD_CONTA,
                         "N", "1", historico, cnpj, "2", "000", str(cents), str(cents), "N"
                     )
                     linhas.append(linha)
-                    self.ok += 1; self._emit_stats()
-
+                    self.ok += 1
+                    self._emit_stats()
+    
+                    money = _fmt_money_cents(cents)
+                    subtotal_mes += float(money.replace("R$ ","").replace(".","").replace(",","."))
+                    valor_total_sessao += float(money.replace("R$ ","").replace(".","").replace(",","."))
+                    agora = _fmt_hms(datetime.now())
+    
+                    # CARD clean do tributo
+                    self._emit(
+                        "<div style='border:1px dashed #3A3C3D; border-radius:8px; padding:10px 12px; margin:14px 0;'>"
+                        f"<div style='font-weight:700; margin-bottom:6px;'>🏛️ Tributo: <b>{rotulo}</b>"
+                        f" <span style='opacity:.75; font-weight:500;'>— CNPJ: {_digits(cnpj)}</span></div>"
+                        f"<div>🗓️ Data: <b>{_br_slash(data_trib_br)}</b> &nbsp;•&nbsp; 💰 Valor: <b>{money}</b></div>"
+                        f"<div>🏠 Imóvel: <b>{imov_use}</b> &nbsp;•&nbsp; 🧾 Histórico: <span style='opacity:.9;'>{historico}</span></div>"
+                        f"<div style='margin-top:6px; opacity:.85;'>✅ OK <b>{agora}</b> &nbsp;•&nbsp; 📌 Tributo processado</div>"
+                        "</div>",
+                        "raw"
+                    )
+    
+                # ---------- subtotal do mês ----------
+                mes_end = datetime.now()
+                tempo_mes = (mes_end - mes_start).total_seconds()
+                subtotal_fmt = "R$ " + f"{subtotal_mes:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                self._emit(f"💵 <b>Subtotal {m:02d}/{y}:</b> <b>{subtotal_fmt}</b> &nbsp;—&nbsp; ⏱️ <b>{int(tempo_mes)}s</b> "
+                           f"(<span style='opacity:.8;'>{_fmt_hms(mes_start)} → {_fmt_hms(mes_end)}</span>)", "raw")
+                self._emit("", "divider")
+    
+            # ---------- finalizar: salvamento ----------
             if not linhas:
                 self._emit("Nenhuma linha para salvar.", "warning")
                 self.finished_sig.emit("Vazio", "")
                 return
-
+    
             out_dir = Path(self.planilha).parent
             fname = out_dir / f"folha_{self.inicio.replace('/','-')}_a_{self.fim.replace('/','-')}.txt"
             with open(fname, "w", encoding="utf-8") as f:
                 f.write("\n".join(linhas))
-
+    
+            # resumo final
+            session_end = datetime.now()
+            total_secs = int((session_end - session_start).total_seconds())
+            total_fmt = "R$ " + f"{valor_total_sessao:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            self._emit(
+                "<div style='border-top:1px solid #3A3C3D; margin:16px 0 10px 0;'></div>"
+                "<div style='font-weight:800; font-size:14px; margin:2px 0 12px 0;'>🏁 Resumo Final</div>",
+                "raw"
+            )
+            self._emit(f"• 🗓️ <b>Período:</b> {self.inicio} → {self.fim}", "raw")
+            self._emit(f"• 📦 <b>Registros processados:</b> {self.ok}", "raw")
+            self._emit(f"• 🧾 <b>TXT:</b> <code>{fname}</code>", "raw")
+            self._emit(f"• ⏱️ <b>Tempo total:</b> <b>{total_secs}s</b> ({_fmt_hms(session_start)} → {_fmt_hms(session_end)})", "raw")
+            self._emit(f"• 💰 <b>Valor total:</b> <b>{total_fmt}</b>", "raw")
+    
+            # status final + caminho
             self._emit(f"TXT gerado: {fname}", "success")
             self.finished_sig.emit("Concluído", str(fname))
+    
         except Exception:
             self.err += 1
             self._emit_stats()
@@ -675,7 +793,7 @@ class FolhaWorker(QThread):
                     self._conn.close()
             except Exception:
                 pass
-
+            
 # ============================
 # Diálogo de Configurar
 # ============================
@@ -1125,6 +1243,14 @@ class AutomacaoFolhaUI(QWidget):
         if msg_type == "divider":
             self.log.append('<div style="border-top:1px solid #3A3C3D; margin:10px 0;"></div>')
             return
+
+        # Mensagem crua (HTML pronto, sem timestamp nem moldura)
+        if msg_type == "raw":
+            self.log.append(message)
+            sb = self.log.verticalScrollBar()
+            if sb: sb.setValue(sb.maximum())
+            return
+
         p = palette.get(msg_type, palette["info"])
         html = (
             f'<div style="border-left:3px solid {p["accent"]}; padding:6px 10px; margin:2px 0;'

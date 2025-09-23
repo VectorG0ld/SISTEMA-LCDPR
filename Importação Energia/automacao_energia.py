@@ -117,6 +117,7 @@ FARM_MAP_GILSON = {
 
 FARM_MAP_ADRIANA = {
     "FAZENDA DUERE": "002",
+    "Duere": "002",
     "FAZENDA BARRAGEM GRANDE": "001",
     "MONTIVIDIU DO NORTE": "001",
 }
@@ -127,25 +128,57 @@ FARM_MAP_LUCAS = {
 
 def _farm_code_by_owner(owner: str, upper_text: str):
     """
-    Retorna o código do imóvel conforme OWNER, procurando por chaves no texto (uppercase).
-    Usa FARM_CODES para Cleuber; FARM_MAP_* para os demais.
+    Retorna o código do imóvel conforme OWNER, procurando por chaves (fazenda OU cidade)
+    no texto. Match robusto com normalização e borda de palavra.
+    Prioridade: match exato por fazenda/cidade > fallback anterior.
     """
-    def scan(mapping: dict):
-        for key, code in mapping.items():
-            if key.upper() in upper_text:
-                return code
-        return None
+    import unicodedata
 
+    def _norm(s: str) -> str:
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+        s = re.sub(r"\s+", " ", s).strip().upper()
+        return s
+
+    def _word_hit(hay: str, needle: str) -> bool:
+        # borda de palavra para evitar falsos positivos (ex.: 'DUERE' não pega 'DUERES')
+        pattern = r"(?<!\w)" + re.escape(needle) + r"(?!\w)"
+        return re.search(pattern, hay) is not None
+
+    # normaliza todo o texto de busca
+    textN = _norm(upper_text)
+
+    # seleciona o mapa do titular
     if owner == "Cleuber":
-        return scan(FARM_CODES)
-    if owner == "Gilson":
-        return scan(FARM_MAP_GILSON)
-    if owner == "Adriana":
-        return scan(FARM_MAP_ADRIANA)
-    if owner == "Lucas":
-        return scan(FARM_MAP_LUCAS)
-    return None
+        mapping = FARM_CODES
+    elif owner == "Gilson":
+        mapping = FARM_MAP_GILSON
+    elif owner == "Adriana":
+        mapping = FARM_MAP_ADRIANA
+    elif owner == "Lucas":
+        mapping = FARM_MAP_LUCAS
+    else:
+        mapping = {}
 
+    # 1) Tenta hits por chave (fazenda/cidade) normalizada, com borda de palavra
+    best_code = None
+    for key, code in mapping.items():
+        kN = _norm(key)
+        if not kN:
+            continue
+        if _word_hit(textN, kN):
+            best_code = code
+            break
+
+    if best_code:
+        return best_code
+
+    # 2) Fallback: comportamento antigo (substring simples, já normalizada)
+    for key, code in mapping.items():
+        kN = _norm(key)
+        if kN and kN in textN:
+            return code
+
+    return None
 
 def _prompt_base_for(owner: str) -> str:
     """
@@ -386,6 +419,8 @@ class SeparadorWorker(BaseWorker):
                 return
             
             self._emit_log(f"Iniciando separação por titular ({self.total} arquivos)...", "title")
+
+            owners_seen = set()
             
             for i, any_path in enumerate(alvos, start=1):
                 if self._cancel:
@@ -425,6 +460,7 @@ class SeparadorWorker(BaseWorker):
                 txt_lower   = text.lower()
                 fname_lower = any_path.name.lower()
                 final = "UNKNOWN"
+                
                 for n in NAMES:
                     nlow = n.lower()
                     if nlow in fname_lower or nlow in txt_lower:
@@ -432,6 +468,12 @@ class SeparadorWorker(BaseWorker):
                         break
                     
                 self._emit_log(f"Identificado: {final}", "info")
+
+                # Cabeçalho por perfil (uma vez por titular)
+                if final != "UNKNOWN" and final not in owners_seen:
+                    owners_seen.add(final)
+                    self._emit_log("", "divider")      # divisor visual
+                    self._emit_log(final, "bigtitle")
                 
                 if final != "UNKNOWN":
                     dest = Path(self.base_dir) / final
@@ -469,11 +511,9 @@ class GerarTXTWorker(BaseWorker):
             model = "gpt-4o-mini"
             base_dir = Path(self.base_dir)
 
-            # Lista alvo de trabalho: subpastas fixas
+            # Subpastas alvo
             subfolders = [base_dir / n for n in NAMES if (base_dir / n).is_dir()]
-            self.total = sum(
-                len([f for f in os.listdir(sf) if f.lower().endswith(".pdf")]) for sf in subfolders
-            )
+            self.total = sum(len([f for f in os.listdir(sf) if f.lower().endswith(".pdf")]) for sf in subfolders)
             self._emit_stats()
 
             if self.total == 0:
@@ -481,10 +521,39 @@ class GerarTXTWorker(BaseWorker):
                 self.finished_sig.emit("Nenhum PDF")
                 return
 
-            self._emit_log(f"Iniciando geração de TXT para {len(subfolders)} subpastas, {self.total} PDFs no total...", "title")
+            # ===== Helpers locais =====
+            def _fmt_money_br(v: float) -> str:
+                s = f"{v:,.2f}"
+                return "R$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+            def _to_dd_mm_aaaa(s: str) -> str:
+                s = (s or "").strip()
+                m = re.match(r"^(\d{2})[/-](\d{2})[/-](\d{4})$", s)
+                if m: return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+                m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+                if m: return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+                m = re.match(r"^(\d{2})(\d{2})(\d{4})$", s)
+                if m: return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+                return s
+
+            def _fmt_hms(dt: datetime) -> str:
+                return dt.strftime("%H:%M:%S")
+
+            def _secs(delta) -> int:
+                return int(delta.total_seconds())
+
+            # ===== Cabeçalho da sessão (será reimpresso no resumo final com total/tempo) =====
+            session_start = datetime.now()
+            n_sub = len(subfolders)
+            self._emit_log(f"🧾 <b>Geração de TXT — {session_start.strftime('%d/%m/%Y')}</b>", "raw")
+            self._emit_log(f"⏳ <b>Início:</b> {_fmt_hms(session_start)} • <b>{n_sub} subpastas</b> • <b>{self.total} PDFs</b>", "raw")
+            self._emit_log("", "divider")
 
             processed = 0
+            grand_total_val = 0.0
+            generated_txts = []
 
+            # ===== Processa por titular (subpasta) — bloco inteiro é BUFFERIZADO e impresso ao final =====
             for sf in subfolders:
                 if self._cancel:
                     self._emit_log("Processo cancelado pelo usuário.", "warning")
@@ -495,8 +564,13 @@ class GerarTXTWorker(BaseWorker):
                 out_txt  = base_dir / f"{name}.txt"
                 log_path = sf / f"{name}_leitura_detalhada.txt"
                 lines = []
-
                 pdfs = sorted([f for f in os.listdir(sf) if f.lower().endswith(".pdf")])
+
+                # Buffer do bloco para imprimir “de uma vez”, já com tempos calculados
+                blk = []
+                prof_start = datetime.now()
+                talao_idx = 0
+                subtotal_val = 0.0
 
                 with open(log_path, "w", encoding="utf-8") as log_f:
                     for fname in pdfs:
@@ -507,7 +581,9 @@ class GerarTXTWorker(BaseWorker):
 
                         processed += 1
                         self._emit_step(processed, self.total)
-                        self._emit_log(f"[{name}] Lendo: {fname}", "info")
+
+                        talao_idx += 1
+                        t_start = datetime.now()
 
                         path = sf / fname
                         # Extrai texto
@@ -515,62 +591,62 @@ class GerarTXTWorker(BaseWorker):
                             with pdfplumber.open(path) as pdf:
                                 full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
                         except Exception as e:
-                            self._emit_log(f"Erro ao abrir PDF: {e}", "error")
                             self.err += 1; self._emit_stats()
+                            blk.append(f"<div>❌ Erro ao abrir PDF: {fname} — {e}</div>")
                             continue
 
                         if not full_text.strip():
                             if self.use_ocr:
-                                log_f.write(f"\n>>> Usando OCR para {fname}\n")
                                 try:
                                     full_text = self._ocr_pdf(str(path))
                                 except Exception as e:
-                                    self._emit_log(f"OCR falhou: {e}", "error")
                                     self.err += 1; self._emit_stats()
+                                    blk.append(f"<div>❌ OCR falhou: {fname} — {e}</div>")
                                     continue
                             else:
-                                self._emit_log("Sem texto extraível e OCR desativado. Pulando.", "warning")
                                 self.err += 1; self._emit_stats()
+                                blk.append(f"<div>⚠️ Sem texto extraível e OCR desativado: {fname}</div>")
                                 continue
 
+                        # Log técnico para auditoria
                         sep = "="*60
                         prompt_owner = _prompt_base_for(name)
                         log_f.write(f"\n{sep}\nPROMPT ENVIADO PARA IA ({name}):\n{prompt_owner}\n\nNome do arquivo: {fname}\nConteúdo extraído:\n{full_text}\n")
-                        
-                        # Chamada à IA (prompt específico por titular)
+
+                        # Chamada à IA
                         try:
                             json_text = run_chat(model, [
                                 {"role":"system","content":prompt_owner},
                                 {"role":"user","content":f"Nome do arquivo: {fname}\nConteúdo extraído:\n{full_text}"}
                             ], temperature=0)
-
                             data = json.loads(json_text)
-                            # limpa numero_nf
                             if 'numero_nf' in data and isinstance(data['numero_nf'], str):
                                 data['numero_nf'] = re.sub(r"[.\-]", "", data['numero_nf'])
-
                             log_f.write("\nRESPOSTA DA IA (JSON):\n" + json.dumps(data, indent=4, ensure_ascii=False) + "\n")
                         except Exception as e:
-                            log_f.write(f"\nERRO na chamada à IA: {e}\n")
-                            self._emit_log(f"Erro IA em {fname}: {e}", "error")
                             self.err += 1; self._emit_stats()
+                            blk.append(f"<div>❌ Erro IA em {fname}: {e}</div>")
                             continue
 
-                        # Monta linha
+                        # Normaliza campos
                         df = str(data.get("data_vencimento", "") or "")
                         vf_raw = str(data.get("valor", "") or "")
 
-                        # limpa prefixo R$ e pontos de milhar
+                        # valor numérico
                         vf_clean = re.sub(r"R\$\s*", "", vf_raw).replace(".", "")
                         try:
                             num = float(vf_clean.replace(',', '.'))
                             vf = f"{num:.2f}".replace('.', ',')
+                            num_val = float(vf.replace(",", "."))
                         except Exception:
                             vf = vf_clean
+                            try:
+                                num_val = float(vf_clean.replace(",", "."))
+                            except Exception:
+                                num_val = 0.0
 
                         nf = str(data.get("numero_nf", "") or "")
                         pc = str(data.get("codigo_participante", "") or "")
-                        # prioridade: mesma lógica do Cleuber (match por NOME no texto/arquivo), mas por TITULAR
                         ic = str(data.get("codigo_imovel", "") or "")
                         txt_upper = (full_text + " " + fname).upper()
                         code_match = _farm_code_by_owner(name, txt_upper)
@@ -578,77 +654,117 @@ class GerarTXTWorker(BaseWorker):
                             ic = code_match
                         else:
                             ic = ic or "001"
-                        
 
-                        # pula PDFs com valor zerado
-                        if vf in ("0", "0,00", ""):
-                            self._emit_log(f"[{name}] Valor zero detectado em {fname}; pulando.", "warning")
+                        if vf in ("0", "0,00", "") or num_val == 0.0:
+                            blk.append(f"<div>⚠️ Valor zero detectado em <i>{fname}</i>; pulando.</div>")
                             continue
 
+                        # Data para LCDPR + exibição
+                        data_br = _to_dd_mm_aaaa(df)
+                        data_show = (data_br or "").replace("-", "/")
+
+                        # Monta linha do TXT
                         if len(df) == 8:
                             mes, ano = df[2:4], df[4:8]
                             history = f"TALAO DE ENERGIA {mes}/{ano}"
                         else:
                             history = "TALAO DE ENERGIA"
 
-                        def _to_dd_mm_aaaa(s: str) -> str:
-                            s = (s or "").strip()
-                            # aceita formatos comuns e normaliza
-                            m = re.match(r"^(\d{2})[/-](\d{2})[/-](\d{4})$", s)      # 20/09/2025 ou 20-09-2025
-                            if m: return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-                            m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)            # 2025-09-20
-                            if m: return f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-                            m = re.match(r"^(\d{2})(\d{2})(\d{4})$", s)              # 20092025
-                            if m: return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-                            return s  # deixa como veio se já estiver OK
-
-                        data_br = _to_dd_mm_aaaa(df)
-                        # Para energia é despesa => tipo_lanc = 2; tipo_doc = 4 (Fatura)
                         tipo_doc = "4"
                         tipo_lanc = "2"
                         valor_entrada = "000"
-                        valor_saida   = vf
+                        valor_saida   = f"{num_val:.2f}".replace(".", ",")
                         saldo_dummy   = "000"
-                        natureza      = "N"  # ignorado pelo importador
+                        natureza      = "N"
 
-                        # cod_conta: use a conta bancária que sai o pagamento (CREDIT_ACCOUNT)
-                        # cod_imovel: já extraído (ic), com exceção feita para Gilson/Adriana/Lucas = "001"
-                        # participante: podemos passar o ID (seu mapa PARTICIPANT_CODES) ou CPF/CNPJ
                         cols = [
                             data_br,         # 1 data (DD-MM-AAAA)
                             ic,              # 2 cod_imovel
-                            CREDIT_ACCOUNT,  # 3 cod_conta (conta bancária)
+                            CREDIT_ACCOUNT,  # 3 cod_conta
                             nf,              # 4 num_doc
-                            tipo_doc,        # 5 tipo_doc (4=fatura)
+                            tipo_doc,        # 5 tipo_doc
                             history,         # 6 historico
-                            pc,              # 7 cpf_cnpj OU id (seu mapa)
-                            tipo_lanc,       # 8 tipo_lanc (2=Despesa)
-                            valor_entrada,   # 9 valor_entrada
+                            pc,              # 7 cpf_cnpj/participante
+                            tipo_lanc,       # 8 tipo_lanc
+                            "000",           # 9 valor_entrada
                             valor_saida,     # 10 valor_saida
-                            saldo_dummy,     # 11 saldo (não usado)
-                            natureza         # 12 natureza (não usado)
+                            "000",           # 11 saldo
+                            "N"              # 12 natureza
                         ]
-                        line = "|".join(str(x or "") for x in cols)
-                        lines.append(line)
+                        lines.append("|".join(str(x or "") for x in cols))
 
+                        # Stats
                         self.ok += 1; self._emit_stats()
-                        self._emit_log(f"[{name}] OK: {fname}", "success")
+                        subtotal_val += num_val
+                        grand_total_val += num_val
 
-                # salva TXT por titular
-                try:
-                    with open(out_txt, "w", encoding="utf-8") as f:
-                        f.write("\n".join(lines))
-                    self._emit_log(f"[{name}] TXT gerado: {out_txt}", "success")
-                except Exception as e:
-                    self._emit_log(f"[{name}] Falha ao salvar TXT: {e}", "error")
-                    self.err += 1; self._emit_stats()
+                        # Bloco de exibição do talão (CLEAN)
+                        elapsed_now = _fmt_hms(datetime.now())
+                        blk.append(
+                            "<div style='border:1px solid #3A3C3D; border-radius:8px; padding:10px 12px; margin:10px 0;'>"
+                            f"<div style='font-weight:700; margin-bottom:6px;'>📄 Talão {talao_idx} "
+                            f"<span style='opacity:.75; font-weight:500;'>— {fname}</span></div>"
+                            f"<div>🗓️ Venc.: <b>{data_show}</b> &nbsp;•&nbsp; 💰 <b>{_fmt_money_br(num_val)}</b> &nbsp;•&nbsp; 🧾 NF: <b>{nf}</b></div>"
+                            f"<div>🏢 Fornecedor: <b>{str(data.get('nome_fornecedor','') or '').strip()}</b></div>"
+                            f"<div>🧩 Participante: <b>{pc}</b> &nbsp;•&nbsp; 🏠 Imóvel: <b>{ic}</b></div>"
+                            f"<div style='margin-top:6px; opacity:.85;'>✅ OK <b>{elapsed_now}</b> &nbsp;•&nbsp; 📌 Talão processado</div>"
+                            "</div>"
+                        )
+                        # Espaçador extra entre talões
+                        blk.append("<div style='height:14px;'></div>")
 
-            self._emit_log("Geração de TXT concluída.", "success")
+                    # Salva TXT por titular
+                    try:
+                        with open(out_txt, "w", encoding="utf-8") as f:
+                            f.write("\n".join(lines))
+                        generated_txts.append((name, str(out_txt)))
+                    except Exception as e:
+                        self.err += 1; self._emit_stats()
+                        blk.append(f"<div>❌ Falha ao salvar TXT de {name}: {e}</div>")
+
+                # Imprime bloco do titular com cabeçalho e subtotal
+                prof_end = datetime.now()
+                prof_secs = _secs(prof_end - prof_start)
+                head = (
+                    "<div style='border-top:1px solid #3A3C3D; margin:14px 0 10px 0;'></div>"
+                    f"<div style='font-weight:800; font-size:14px; margin:2px 0 8px 0;'>"
+                    f"👤 {name} &nbsp;—&nbsp; ⏱️ <b>{prof_secs}s</b> "
+                    f"(<span style='opacity:.8;'>{_fmt_hms(prof_start)} → {_fmt_hms(prof_end)}</span>)"
+                    "</div>"
+                )
+
+                self._emit_log(head, "raw")
+                for piece in blk:
+                    self._emit_log(piece, "raw")
+
+                # Rodapé do titular
+                txt_tuple = [t for t in generated_txts if t[0] == name]
+                txt_line = f"🗂️ TXT gerado: <code>{txt_tuple[-1][1]}</code> <b>({_fmt_hms(prof_end)} | +{_secs(prof_end - session_start)}s)</b>" if txt_tuple else ""
+                if txt_line:
+                    self._emit_log(txt_line, "raw")
+                self._emit_log(f"💵 <b>Subtotal {name}:</b> <b>{_fmt_money_br(subtotal_val)}</b>", "raw")
+                self._emit_log("", "divider")
+
+            # ===== Resumo final =====
+            session_end = datetime.now()
+            total_secs = _secs(session_end - session_start)
+            txt_list = ", ".join([n for n, _ in generated_txts]) or "—"
+            self._emit_log(
+                "<pre style='font-family:monospace; color:#E0E0E0; margin:6px 0;'>"
+                "================================================================\n"
+                "🏁 <b>Resumo Final</b>\n"
+                "</pre>", "raw"
+            )
+            self._emit_log(f"• 📦 <b>PDFs processados:</b> {self.total}", "raw")
+            self._emit_log(f"• 🧾 <b>TXTs gerados:</b> {len(generated_txts)} ({txt_list})", "raw")
+            self._emit_log(f"• ⏱️ <b>Tempo total:</b> <b>{total_secs}s</b> ({_fmt_hms(session_start)} → {_fmt_hms(session_end)})", "raw")
+            self._emit_log(f"• 💰 <b>Valor total processado:</b> <b>{_fmt_money_br(grand_total_val)}</b>", "raw")
+            self._emit_log("✅ <b>Status:</b> Concluído com sucesso.", "raw")
+
             self.finished_sig.emit("Concluído")
         except Exception:
             self._emit_log(f"Falha geral na geração de TXT:\n{traceback.format_exc()}", "error")
             self.finished_sig.emit("Erro")
-
 
 # ============================
 # Interface Principal (estilo Importador XML)
@@ -661,6 +777,7 @@ class AutomacaoEnergiaUI(QWidget):
             self.setWindowIcon(QIcon(str(ICON_PATH)))
 
         self.setStyleSheet(STYLE_SHEET)
+        self._last_action = None
 
         # Estado
         self.cfg = self._load_config()
@@ -944,6 +1061,24 @@ class AutomacaoEnergiaUI(QWidget):
         if msg_type == "divider":
             self.log.append('<div style="border-top:1px solid #3A3C3D; margin:10px 0;"></div>')
             return
+        # Mensagem crua (HTML pronto), sem carimbo [hora] e sem moldura
+        if msg_type == "raw":
+            self.log.append(message)
+            sb = self.log.verticalScrollBar()
+            if sb: sb.setValue(sb.maximum())
+            return
+        
+        # Título grande com faixas e ícone de perfil
+        if msg_type == "bigtitle":
+            self.log.append(
+                "<pre style='font-family:monospace; color:#E0E0E0; margin:6px 0;'>"
+                "================================================================\n"
+                f"👤 {message}\n"
+                "================================================================"
+                "</pre>"
+            )
+            return
+
         p = palette.get(msg_type, palette["info"])
         html = (
             f'<div style="border-left:3px solid {p["accent"]}; padding:6px 10px; margin:2px 0;">'
@@ -1044,7 +1179,8 @@ class AutomacaoEnergiaUI(QWidget):
         if not os.environ.get("OPENAI_API_KEY"):
             QMessageBox.warning(self, "OpenAI", "Defina a API Key da OpenAI primeiro.")
             return
-
+        
+        self._last_action = "separar"
         self._reset_stats_ui()
         self.btn_cancel.setEnabled(True)
         self.lbl_last_status.setText("Separador em execução…")
@@ -1063,6 +1199,8 @@ class AutomacaoEnergiaUI(QWidget):
         if not os.environ.get("OPENAI_API_KEY"):
             QMessageBox.warning(self, "OpenAI", "Defina a API Key da OpenAI primeiro.")
             return
+
+        self._last_action = "gerar"
 
         self._reset_stats_ui()
         self.btn_cancel.setEnabled(True)
@@ -1093,8 +1231,8 @@ class AutomacaoEnergiaUI(QWidget):
         self.lbl_last_status.setText(f"{status.upper()}")
         self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         self.log_msg(f"Processo finalizado: {status}", "success" if status=="Concluído" else "warning")
-        # AO FINAL DE _on_worker_finished(), APÓS OS LOGS:
-        if status == "Concluído":
+        # IMPORTAR APENAS SE A AÇÃO FOI "GERAR"
+        if status == "Concluído" and self._last_action == "gerar":
             resp = QMessageBox.question(
                 self, "Importar agora?",
                 "TXT gerado para Cleuber, Gilson, Lucas e Adriana.\n\n"
