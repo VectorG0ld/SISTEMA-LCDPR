@@ -4072,66 +4072,132 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
 
     def _exportar_planilha_lcdpr(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Salvar Planilha LCDPR", load_last_txt_path(), "Excel (*.xlsx *.xls)")
-        if not path: return
-        if not path.lower().endswith(('.xlsx', '.xls')): path += '.xlsx'
-        import pandas as pd; rows = []; settings = profile_settings()  # helper abaixo
-        ver = settings.value("param/version", "0013"); iden = settings.value("param/ident", "")
-        nome = settings.value("param/nome", ""); ind_ini = settings.value("param/ind_ini_per", "0"); sit_esp = settings.value("param/sit_especial", "0")
-        dt1 = self.dt_ini.date().toString("ddMMyyyy"); dt2 = self.dt_fim.date().toString("ddMMyyyy")
-
-        rows.append({"registro":"0000","campo1":"LCDPR","versao":ver,"ident":iden,"nome":nome,
-                     "ind_ini_per":ind_ini,"sit_especial":sit_esp,"vazio":"","data_ini":dt1,"data_fim":dt2})
-        rows.append({"registro": "0010", "valor": "1"})
-
-        logradouro = settings.value("param/logradouro", ""); numero = settings.value("param/numero", ""); complemento = settings.value("param/complemento", "")
-        bairro = settings.value("param/bairro", ""); uf = settings.value("param/uf", ""); cod_mun = settings.value("param/cod_mun", "")
-        cep = settings.value("param/cep", ""); telefone = settings.value("param/telefone", ""); email = settings.value("param/email", "")
-        rows.append({"registro": "0030", "logradouro": logradouro, "numero": numero, "complemento": complemento, "bairro": bairro,
-                     "uf": uf, "cod_mun": cod_mun, "cep": cep, "telefone": telefone, "email": email})
-
-        cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp, bai, uf, mun, cep, tipo_expl, part, *_ = im
-        rows.append({
-            "registro": "0040",
-            "cod_imovel": str(cod or ""),
-            "pais": str(pais or ""),
-            "moeda": str(moeda or ""),
-            "cad_itr": str(cad_itr or ""),
-            "caepf": str(caepf or ""),
-            "insc_estadual": str(ie or ""),
-            "nome_imovel": str(nome_imovel or ""),
-            "endereco": str(end or ""),
-            "num": str(num or ""),
-            "compl": str(comp or ""),
-            "bairro": str(bai or ""),
-            "uf": str(uf or ""),
-            "cod_mun": str(mun or ""),
-            "cep": str(cep or ""),
-            "tipo_exploracao": str(tipo_expl or ""),
-            "participacao": f"{int(Decimal(str(part or 0)).quantize(Decimal('0.01'))*100):05d}"
-        })
-
-        for cod_cta, pais_cta, banco, nome_banco, agencia, num_cta in self.db.fetch_all(
-            "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"
-        ):
-            rows.append({
-                "registro": "0050",
-                "cod_conta": str(cod_cta or ""),
-                "pais_cta": str(pais_cta or ""),
-                "banco": str(banco or ""),
-                "nome_banco": str(nome_banco or ""),
-                "agencia": str(agencia or ""),
-                "num_conta": str(num_cta or "")
+        """
+        Exporta TODOS os lançamentos do período selecionado em uma planilha Excel,
+        com as colunas solicitadas e mapeamentos legíveis de tipo de doc e tipo de lançamento.
+        Layout:
+        DATA | IMOVEL RURAL | CONTA BANCARIA | CODIGO DA CONTA | PARTICIPANTE | CPF/CNPJ |
+        NUMERO DO DOCUMENTO | TIPO | HISTORICO | TIPO DE LANÇAMENTO | VALOR ENTRADA | VALOR SAIDA
+        """
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        import pandas as pd
+    
+        # 1) Pergunta onde salvar
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Planilha LCDPR",
+            load_last_txt_path(),
+            "Excel (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(('.xlsx', '.xls')):
+            path += '.xlsx'
+    
+        # 2) Intervalo de datas → **usar data_ord** (indexado e consistente)
+        d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+        d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+    
+        # 3) Mapeamentos legíveis
+        map_tipo_doc = {
+            1: "Nota Fiscal",
+            2: "Recibo",
+            3: "Boleto",
+            4: "Fatura",
+            5: "Folha",
+            6: "Outros",
+        }
+        map_tipo_lanc = {
+            1: "Receita",
+            2: "Despesa",
+            3: "Adiantamento",
+        }
+    
+        # 4) Busca no banco – agora filtra por data_ord
+        rows = self.db.fetch_all("""
+            SELECT
+                CASE
+                    WHEN instr(l.data,'/') > 0
+                        THEN substr(l.data,1,2) || '/' || substr(l.data,4,2) || '/' || substr(l.data,7,4)
+                    ELSE strftime('%d/%m/%Y', l.data)
+                END                                   AS data_fmt,
+                ir.cod_imovel                         AS cod_imovel,
+                COALESCE(cb.nome_banco, '')           AS conta_bancaria,
+                COALESCE(cb.cod_conta, '')            AS cod_conta,
+                COALESCE(p.nome, '')                  AS participante,
+                COALESCE(p.cpf_cnpj, '')              AS cpf_cnpj,
+                COALESCE(l.num_doc, '')               AS num_doc,
+                l.tipo_doc                            AS tipo_doc,
+                COALESCE(l.historico, '')             AS historico,
+                l.tipo_lanc                           AS tipo_lanc,
+                COALESCE(l.valor_entrada, 0)          AS valor_entrada,
+                COALESCE(l.valor_saida, 0)            AS valor_saida
+            FROM lancamento l
+            LEFT JOIN imovel_rural    ir ON ir.id = l.cod_imovel
+            LEFT JOIN conta_bancaria  cb ON cb.id = l.cod_conta
+            LEFT JOIN participante    p  ON p.id  = l.id_participante
+            WHERE l.data_ord BETWEEN ? AND ?
+            ORDER BY l.data_ord, l.id
+        """, [d1_ord, d2_ord])
+    
+        if not rows:
+            QMessageBox.information(self, "Exportar Planilha LCDPR",
+                                    "Nenhum lançamento encontrado no período selecionado.")
+            return
+    
+        # 5) Converte para DataFrame com os cabeçalhos pedidos
+        data = []
+        for (data_fmt, cod_imovel, conta_bancaria, cod_conta, participante, cpf_cnpj,
+             num_doc, tipo_doc, historico, tipo_lanc, valor_entrada, valor_saida) in rows:
+    
+            tipo_doc_desc  = map_tipo_doc.get(int(tipo_doc) if tipo_doc is not None else 0, "")
+            tipo_lanc_desc = map_tipo_lanc.get(int(tipo_lanc) if tipo_lanc is not None else 0, "")
+    
+            data.append({
+                "DATA":                data_fmt or "",
+                "IMOVEL RURAL":        cod_imovel or "",
+                "CONTA BANCARIA":      conta_bancaria,
+                "CODIGO DA CONTA":     cod_conta,
+                "PARTICIPANTE":        participante,
+                "CPF/CNPJ":            cpf_cnpj,
+                "NUMERO DO DOCUMENTO": num_doc,
+                "TIPO":                tipo_doc_desc,
+                "HISTORICO":           historico,
+                "TIPO DE LANÇAMENTO":  tipo_lanc_desc,
+                "VALOR ENTRADA":       float(valor_entrada or 0),
+                "VALOR SAIDA":         float(valor_saida or 0),
             })
-
-        for (data, im_id, ct_id, num_doc, tipo_doc, historico, part_id, tipo_lanc, ent, sai, saldo_f, nat) in self.db.fetch_all("SELECT data,cod_imovel,cod_conta,num_doc,tipo_doc,historico,id_participante,tipo_lanc,valor_entrada,valor_saida,saldo_final,natureza_saldo FROM lancamento"):
-            rows.append({"registro": "Q100", "data": data, "cod_imovel": str(im_id), "cod_conta": str(ct_id), "num_doc": num_doc or "", "tipo_doc": str(tipo_doc),
-                         "historico": historico, "id_participante": str(part_id or ""), "tipo_lanc": str(tipo_lanc),
-                         "valor_entrada": f"{ent:.2f}", "valor_saida": f"{sai:.2f}", "saldo_final": f"{saldo_f:.2f}", "natureza": nat})
-
-        rows.append({"registro": "9999", "EOF": ""}); df = pd.DataFrame(rows); df.to_excel(path, index=False, engine='openpyxl')
-        save_last_txt_path(path); QMessageBox.information(self, "Sucesso", f"Planilha {os.path.basename(path)} gerada!")
-
+    
+        df = pd.DataFrame(data, columns=[
+            "DATA",
+            "IMOVEL RURAL",
+            "CONTA BANCARIA",
+            "CODIGO DA CONTA",
+            "PARTICIPANTE",
+            "CPF/CNPJ",
+            "NUMERO DO DOCUMENTO",
+            "TIPO",
+            "HISTORICO",
+            "TIPO DE LANÇAMENTO",
+            "VALOR ENTRADA",
+            "VALOR SAIDA",
+        ])
+    
+        # 6) Salva no Excel com largura razoável
+        try:
+            with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="LCDPR")
+                ws = writer.sheets["LCDPR"]
+                for idx, col in enumerate(df.columns, start=1):
+                    col_width = max(12, min(60, int(df[col].astype(str).str.len().quantile(0.90)) + 4))
+                    ws.set_column(idx-1, idx-1, col_width)
+        except Exception as e:
+            QMessageBox.critical(self, "Exportar Planilha LCDPR", f"Erro ao salvar planilha:\n{e}")
+            return
+    
+        QMessageBox.information(self, "Exportar Planilha LCDPR",
+                                f"Planilha gerada com sucesso em:\n{path}")
+    
     def show_export_dialog(self, parent_dialog):
         parent_dialog.hide(); dlg = QDialog(self); dlg.setWindowTitle("Exportar Arquivo LCDPR"); dlg.setMinimumSize(400, 120)
         layout = QVBoxLayout(dlg); hl = QHBoxLayout()
