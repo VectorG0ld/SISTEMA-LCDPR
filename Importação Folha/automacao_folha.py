@@ -358,26 +358,63 @@ def _read_sheet_with_xlwings(filepath: str, mes: int, ano: int):
     try:
         import xlwings as xw
     except Exception as e:
-        raise RuntimeError("xlwings não disponível. Instale xlwings para recálculo automático.") from e
+        raise RuntimeError("xlwings não disponível. Instale xlwings (pip install xlwings).") from e
 
     app = None
     wb = None
-
     try:
         app = xw.App(visible=False, add_book=False)
-        wb = app.books.open(filepath, update_links=False, read_only=False)
+        app.display_alerts = False
+        app.screen_updating = False
+
+        # abre o arquivo (caminho absoluto ajuda o Excel/COM)
+        wb = app.books.open(str(Path(filepath).resolve()), update_links=False, read_only=False)
         sh = wb.sheets[0]
 
-        # Seleciona o mês na C1 (MM/AAAA)
+        # 1) Define C1 no formato esperado pela sua planilha (MM/AAAA)
         sh.range("C1").value = f"{mes:02d}/{ano}"
-        app.api.Calculation = -4105  # Automatic
-        wb.api.CalculateFullRebuild()
-        time.sleep(0.2)
 
-        inss = _to_cent(sh.range("F3").value or 0)
-        irrf = _to_cent(sh.range("G3").value or 0)
-        fgts = _to_cent(sh.range("H3").value or 0)
+        # 2) Força recálculo completo
+        try:
+            wb.api.CalculateFullRebuild()
+        except Exception:
+            pass
+        try:
+            app.api.CalculateFullRebuild()
+        except Exception:
+            pass
 
+        # 3) Calcula a planilha ativa (reforço)
+        try:
+            sh.api.Calculate()
+        except Exception:
+            pass
+
+        # 4) Aguarda os valores aparecerem (até 8 tentativas)
+        def _to_cent_safe(v):
+            try:
+                return _to_cent(v or 0)
+            except Exception:
+                return "0"
+
+        inss = irrf = fgts = None
+        for _ in range(8):
+            time.sleep(0.25)  # pequeno intervalo pro Excel concluir
+            vF = sh.range("F3").value
+            vG = sh.range("G3").value
+            vH = sh.range("H3").value
+            if vF is not None or vG is not None or vH is not None:
+                inss = _to_cent_safe(vF)
+                irrf = _to_cent_safe(vG)
+                fgts = _to_cent_safe(vH)
+                break
+        if inss is None:
+            # última leitura mesmo que None (vira "0")
+            inss = _to_cent_safe(sh.range("F3").value)
+            irrf = _to_cent_safe(sh.range("G3").value)
+            fgts = _to_cent_safe(sh.range("H3").value)
+
+        # 5) Linhas de funcionários (A5..D?)
         funcionarios, imoveis = [], []
         r = 5
         while True:
@@ -391,22 +428,27 @@ def _read_sheet_with_xlwings(filepath: str, mes: int, ano: int):
             owner = _owner_from_text(a_txt)
             imovel_nome = _extract_imovel_name(a_txt)
             cod_imovel = _cod_imovel_from_colA(a_txt, owner)
-            
+
             if cod_imovel:
                 imoveis.append(cod_imovel)
-            
+
             funcionarios.append({
                 "cpf": cpf,
                 "nome": nome,
                 "centavos": _to_cent(val),
                 "imovel": cod_imovel,          # código usado no TXT
-                "imovel_nome": imovel_nome,    # agora acessado
-                "titular": owner               # agora acessado
+                "imovel_nome": imovel_nome,    # opcional p/ log/auditoria
+                "titular": owner               # opcional p/ log/auditoria
             })
             r += 1
 
         imovel_tributos = _mode_or_default(imoveis, default="001")
         return funcionarios, {"INSS": inss, "IRRF": irrf, "FGTS": fgts}, imovel_tributos
+
+    except Exception as e:
+        # Propaga o erro real com contexto (sem mascarar)
+        raise RuntimeError(f"Falha no Excel/xlwings ao ler '{filepath}' para {mes:02d}/{ano}: {e}") from e
+
     finally:
         try:
             if wb:
@@ -463,18 +505,28 @@ def _read_sheet_with_openpyxl(filepath: str, mes: int, ano: int):
 
     return funcionarios, {"INSS": inss, "IRRF": irrf, "FGTS": fgts}, imovel_tributos
 
-def _read_planilha(filepath: str, mes: int, ano: int):
+def _read_planilha(filepath: str, mes: int, ano: int, force_xlwings: bool = False):
+    """
+    Se force_xlwings=True, usa xlwings (Excel) e propaga o erro real se falhar.
+    Caso contrário, tenta xlwings e, se não houver, usa openpyxl (sem recálculo).
+    """
+    if force_xlwings:
+        # usa xlwings e propaga a exceção real (sem mascarar)
+        return _read_sheet_with_xlwings(filepath, mes, ano)
+
+    # modo flexível: tenta xlwings, cai para openpyxl se faltar
     try:
         return _read_sheet_with_xlwings(filepath, mes, ano)
     except Exception:
         return _read_sheet_with_openpyxl(filepath, mes, ano)
 
 class FolhaWorker(QThread):
-    log_sig = Signal(str, str)               # (mensagem, tipo)
-    stats_sig = Signal(int, int, int)        # total, ok, err
-    finished_sig = Signal(str, str)          # status, caminho_txt (ou "")
+    # sinais da thread (mensagens, estatísticas e término)
+    log_sig = Signal(str, str)           # (mensagem_html_ou_texto, nivel: info/success/warning/error/raw/divider)
+    stats_sig = Signal(int, int, int)    # (total, ok, err)
+    finished_sig = Signal(str, str)      # (status, caminho_txt)
 
-    def __init__(self, planilha: str, inicio: str, fim: str, db_path: str | None = None, parent=None):
+    def __init__(self, planilha: str, inicio: str, fim: str, db_path: str | None = None, parent=None, force_xlwings: bool = False):
         super().__init__(parent)
         self.planilha = planilha
         self.inicio = inicio
@@ -488,9 +540,11 @@ class FolhaWorker(QThread):
         self._vistos = set()
         self._linhas = []
 
-        # conexão PRÓPRIA da thread (só leitura) p/ dedupe
         self._db_path = db_path
         self._conn = None
+
+        self._force_xlwings = bool(force_xlwings)  # <- NOVO
+
 
     def cancel(self):
         self._cancel = True
@@ -603,16 +657,22 @@ class FolhaWorker(QThread):
                     self._emit("Processo cancelado.", "warning")
                     self.finished_sig.emit("Cancelado", "")
                     return
-    
-                # leitura da planilha para o mês/ano
+                
+                if self._force_xlwings:
+                    self._emit("⚙️ Engine: <b>Excel (xlwings)</b> — fórmulas recalculadas.", "raw")
+                else:
+                    self._emit("⚙️ Engine: <b>Automática</b> (tenta xlwings; se ausente, lê cache via openpyxl).", "raw")
+
+                # leitura da planilha para o mês/ano (seta C1 = MM/AAAA e recalcula se xlwings)
+                self._emit(f"🔄 Ajustando C1 → <b>{m:02d}/{y}</b> e lendo dados…", "raw")
                 try:
-                    funcs, trib, imovel_trib = _read_planilha(self.planilha, m, y)
+                    funcs, trib, imovel_trib = _read_planilha(self.planilha, m, y, force_xlwings=self._force_xlwings)
                 except Exception as e:
                     self.err += 1
                     self._emit_stats()
                     self._emit(f"❌ Erro ao ler {m:02d}/{y}: {e}", "error")
                     continue
-                
+
                 # contabiliza total esperado (funcionários + tributos com valor)
                 trib_count = sum(1 for k in ("INSS","IRRF","FGTS") if str(trib.get(k,"0")) != "0")
                 self.total += len(funcs) + trib_count
@@ -829,6 +889,12 @@ class ConfigDialog(QDialog):
         grp_lay.setHorizontalSpacing(10)
         grp_lay.setVerticalSpacing(10)
 
+        # Opção: Forçar recálculo com Excel (xlwings)
+        from PySide6.QtWidgets import QCheckBox
+        self.chk_xlwings = QCheckBox("Recalcular com Excel (xlwings)")
+        self.chk_xlwings.setChecked(bool(self._cfg.get("force_xlwings", True)))
+        grp_lay.addRow("", self.chk_xlwings)
+
         # Campo: Planilha de Folha
         self.ed_planilha = QLineEdit(self._cfg.get("folha_xlsx", ""))
         btn_browse = QPushButton("Procurar…")
@@ -858,6 +924,7 @@ class ConfigDialog(QDialog):
 
         def _save():
             self._cfg["folha_xlsx"] = self.ed_planilha.text().strip()
+            self._cfg["force_xlwings"] = bool(self.chk_xlwings.isChecked())  # <- NOVO
             self.accept()
 
         btns.accepted.connect(_save)
@@ -1395,7 +1462,8 @@ class AutomacaoFolhaUI(QWidget):
 
         # depois:
         db_path = self._get_db_path()
-        self.worker = FolhaWorker(planilha, ini, fim, db_path=db_path, parent=self)
+        force_xlwings = bool((self.cfg or {}).get("force_xlwings", True))
+        self.worker = FolhaWorker(planilha, ini, fim, db_path=db_path, parent=self, force_xlwings=force_xlwings)
         self.worker.log_sig.connect(self._on_worker_log)
         self.worker.stats_sig.connect(self._update_stats)
         self.worker.finished_sig.connect(self._on_worker_finished)
