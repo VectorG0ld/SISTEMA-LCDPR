@@ -253,71 +253,60 @@ class RegisterUserDialog(QDialog):
         self.setWindowIcon(QIcon(LOCK_ICON))
         self.setStyleSheet(STYLE_SHEET)
         self.setModal(True)
-        self.resize(380, 160)
+        self.resize(420, 160)
 
         layout = QVBoxLayout(self)
         form   = QFormLayout()
 
-        self.ed_user = QLineEdit(); self.ed_user.setPlaceholderText("ex.: victor")
-        self.ed_pass = QLineEdit(); self.ed_pass.setEchoMode(QLineEdit.Password)
-        self.ed_pass.setPlaceholderText("senha")
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("ex.: victor")
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("mín. 6 caracteres")
 
-        form.addRow("Usuário:", self.ed_user)
-        form.addRow("Senha:  ", self.ed_pass)
+        form.addRow("Usuário:", self.username)
+        form.addRow("Senha:  ", self.password)
         layout.addLayout(form)
 
         btns = QHBoxLayout()
-        btn_ok = QPushButton("Criar usuário"); btn_ok.clicked.connect(self._create_user)
-        btn_cancel = QPushButton("Cancelar");  btn_cancel.clicked.connect(self.reject)
-        for b in (btn_ok, btn_cancel):
-            b.setFixedHeight(28); btns.addWidget(b)
+        btn_ok = QPushButton("Criar usuário")
+        btn_ca = QPushButton("Cancelar")
+        btn_ok.clicked.connect(self._create_user)
+        btn_ca.clicked.connect(self.reject)
+        for b in (btn_ok, btn_ca):
+            b.setFixedHeight(28)
+            btns.addWidget(b)
         layout.addLayout(btns)
 
     def _create_user(self):
-        u = (self.ed_user.text() or "").strip()
-        p = (self.ed_pass.text() or "").strip()
-        if len(u) < 3 or len(p) < 4:
-            QMessageBox.warning(self, "Atenção", "Usuário mínimo 3 caracteres e senha mínimo 4.")
-            return
-        try:
-            from cloud_sync import app_create_user_blocking
-            new_id = app_create_user_blocking(u, p)  # exige ADM logado no Auth
-            QMessageBox.information(self, "Ok", f"Usuário '{u}' criado.")
-            self.accept()
-        except Exception as e:
-            QMessageBox.warning(self, "Atenção", f"Erro ao criar usuário: {e}")
+        from cloud_sync import app_create_user_blocking  # RPC create_app_user
+        u = self.username.text().strip()
+        p = self.password.text().strip()
 
-    def _criar_usuario(self):
-        # usa o campo "E-mail" como USUÁRIO (sem @)
-        username = (self.email.text() if hasattr(self, "email") else "").strip().lower()
-        pwd      = (self.senha.text() if hasattr(self, "senha") else "").strip()
-    
-        if not username or not pwd:
-            QMessageBox.warning(self, "Atenção", "Informe usuário e senha.")
+        if len(u) < 3:
+            QMessageBox.warning(self, "Atenção", "Usuário deve ter ao menos 3 caracteres.")
             return
-        if "@" in username or "|" in username:
-            QMessageBox.warning(self, "Atenção", "Usuário não pode conter '@' nem '|'.")
+        if len(p) < 6:
+            QMessageBox.warning(self, "Atenção", "Senha deve ter ao menos 6 caracteres.")
             return
-    
-        try:
-            from cloud_sync import app_create_user_blocking
-            new_id = app_create_user_blocking(username, pwd)  # exige ADM autenticado
-            QMessageBox.information(self, "Pronto", f"Usuário '{username}' criado com sucesso.")
-            self.accept()
-        except Exception as e:
-            QMessageBox.warning(self, "Atenção", f"Erro ao criar usuário: {e}")
 
-    def on_save(self):
-        u, p, p2 = self.user_edit.text().strip(), self.pw_edit.text(), self.pw2_edit.text()
-        if not u or not p:
-            QMessageBox.warning(self, "Erro", "Preencha usuário e senha."); return
-        if p != p2:
-            QMessageBox.warning(self, "Erro", "As senhas não conferem."); return
-        users = load_users()
-        if u in users:
-            QMessageBox.warning(self, "Erro", "Usuário já existe."); return
-        users[u] = p; save_users(users)
-        QMessageBox.information(self, "Sucesso", f"Usuário '{u}' cadastrado."); self.accept()
+        try:
+            # ADM já deve estar autenticado (AdminLoginDialog)
+            new_id = app_create_user_blocking(u, p)  # retorna UUID do novo usuário
+        except Exception as e:
+            msg = str(e)
+            # mensagem amigável quando violar a UNIQUE do username
+            if "username already exists" in msg or "duplicate key" in msg:
+                QMessageBox.warning(self, "Atenção", "Esse usuário já existe. Escolha outro.")
+                return
+            QMessageBox.warning(self, "Atenção", f"Erro ao criar usuário: {msg}")
+            return
+
+        if new_id:
+            QMessageBox.information(self, "Pronto", "Usuário criado com sucesso.")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Atenção", "Não foi possível criar o usuário.")
 
 # ── (3) Diálogo principal de login (Supabase) ───────────────────────
 from PySide6.QtWidgets import (
@@ -460,50 +449,59 @@ class LoginDialog(QDialog):
 
         layout = QVBoxLayout(self)
         form   = QFormLayout()
-        self.username = QLineEdit(); self.username.setPlaceholderText("usuário")
-        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("usuário")
+
+        self.password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("senha")
+
         form.addRow("Usuário:", self.username)
-        form.addRow("Senha: ", self.password)
+        form.addRow("Senha:  ", self.password)
         layout.addLayout(form)
 
         btns = QHBoxLayout()
-        btn_login    = QPushButton("Logar");     btn_login.clicked.connect(self.try_login)
-        btn_register = QPushButton("Registrar"); btn_register.clicked.connect(self.try_register)
+        btn_login    = QPushButton("Logar")
+        btn_register = QPushButton("Registrar")
+        btn_login.clicked.connect(self.try_login)
+        btn_register.clicked.connect(self.try_register)
         for b in (btn_login, btn_register):
-            b.setFixedHeight(28); btns.addWidget(b)
+            b.setFixedHeight(28)
+            btns.addWidget(b)
         layout.addLayout(btns)
 
     def try_login(self):
+        from cloud_sync import app_login_blocking  # login via RPC
         user = self.username.text().strip()
         pwd  = self.password.text().strip()
         if not user or not pwd:
             QMessageBox.warning(self, "Falha", "Informe usuário e senha.")
             return
         try:
-            from cloud_sync import app_login_blocking
-            data = app_login_blocking(user, pwd)  # -> {id, username} ou None
-            if data:
-                global CURRENT_USER
-                CURRENT_USER = data["username"]  # mostra só o nome, sem e-mail
-                self.accept()
-            else:
-                QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
+            rec = app_login_blocking(user, pwd)  # {id, username} ou None
         except Exception as e:
             QMessageBox.warning(self, "Falha", f"Erro ao autenticar: {e}")
-
-    def try_register(self):
-        # 1) Login do ADM (Supabase). Pode ser o próprio dono do projeto.
-        adm = AdminLoginDialog(self)
-        adm.setStyleSheet(STYLE_SHEET)
-        if adm.exec() != QDialog.Accepted or not adm.is_ok():
             return
 
-        # 2) Tela de cadastro (cria usuário no Supabase Auth)
-        dlg = RegisterUserDialog(self)
+        if rec:
+            global CURRENT_USER
+            CURRENT_USER = rec["username"]
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
+
+    def try_register(self):
+        # 1) pede login ADM (Auth por e-mail/senha do Supabase)
+        dlg = AdminLoginDialog(self)   # sua tela de ADM já existente
         dlg.setStyleSheet(STYLE_SHEET)
-        dlg.exec()
-        
+        if dlg.exec() != QDialog.Accepted:
+            return
+        # 2) abre cadastro de usuário do APP (username + senha)
+        reg = RegisterUserDialog(self)
+        reg.setStyleSheet(STYLE_SHEET)
+        reg.exec()
+
 # ─── Passo 2: Ajuste da classe Database ───
 class Database:
     def __init__(self, filename: str = None):
