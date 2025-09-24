@@ -1329,21 +1329,74 @@ class CadastroImovelDialog(CadastroBaseDialog):
         for w in [self.area_total, self.area_utilizada]: w.setFixedHeight(25)
 
     def _load_data(self):
-        if not self.imovel_id: return
-        row = self.db.fetch_one("""SELECT cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
-            nome_imovel, endereco, num, compl, bairro, uf, cod_mun, cep,
-            tipo_exploracao, participacao, area_total, area_utilizada
-            FROM imovel_rural WHERE id=?""", (self.imovel_id,))
-        if not row: return
-        (cod, pais, moeda, cad, caepf, ie, nome, end, num, comp, bar, uf, mun, cep, tipo, part, at, au) = row
-        self.cod_imovel.setText(cod); self.pais.setCurrentText(pais); self.moeda.setCurrentText(moeda)
-        self.cad_itr.setText(cad or ""); self.caepf.setText(caepf or ""); self.insc_estadual.setText(ie or "")
-        self.nome_imovel.setText(nome); self.endereco.setText(end); self.num.setText(num or "")
-        self.compl.setText(comp or ""); self.bairro.setText(bar); self.uf.setText(uf)
-        self.cod_mun.setText(mun); self.cep.setText(cep); self.tipo_exploracao.setCurrentIndex(tipo-1)
-        self.participacao.setText(f"{part:.2f}"); self.area_total.setText(f"{at or 0:.2f}")
-        self.area_utilizada.setText(f"{au or 0:.2f}")
-
+        if not self.lanc_id:
+            return
+    
+        row = self.db.fetch_one(
+            "SELECT data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, "
+            "id_participante, tipo_lanc, valor_entrada, valor_saida, natureza_saldo "
+            "FROM lancamento WHERE id = ?",
+            (self.lanc_id,)
+        )
+    
+        if not row:
+            # Fallback: busca direto no Supabase
+            try:
+                from cloud_sync import get_lancamento_blocking
+                r = get_lancamento_blocking(self.lanc_id)
+            except Exception:
+                r = None
+            if not r:
+                return
+            data = r.get("data")
+            data = data if (data and "/" in data) else (
+                f"{data[8:10]}/{data[5:7]}/{data[0:4]}" if data else ""
+            )
+            row = (
+                data,
+                r.get("cod_imovel"),
+                r.get("cod_conta"),
+                r.get("num_doc"),
+                r.get("tipo_doc"),
+                r.get("historico"),
+                r.get("id_participante"),
+                r.get("tipo_lanc"),
+                r.get("valor_entrada"),
+                r.get("valor_saida"),
+                r.get("natureza_saldo"),
+            )
+    
+        (data, imovel_id, conta_id, num_doc, tipo_doc,
+         historico, part_id, tipo_lanc, ent, sai, nat) = row
+    
+        _d = QDate.fromString(data or "", "dd/MM/yyyy")
+        if not _d.isValid():
+            _d = QDate.currentDate()
+        self.data.setDate(_d)
+    
+        idx_im = self.imovel.findData(imovel_id)
+        if idx_im >= 0:
+            self.imovel.setCurrentIndex(idx_im)
+    
+        idx_ct = self.conta.findData(conta_id)
+        if idx_ct >= 0:
+            self.conta.setCurrentIndex(idx_ct)
+    
+        self.num_doc.setText(num_doc or "")
+        if isinstance(tipo_doc, int) and 1 <= tipo_doc <= 6:
+            self.tipo_doc.setCurrentIndex(tipo_doc - 1)
+    
+        self.historico.setText(historico or "")
+        idx_pr = self.participante.findData(part_id)
+        if idx_pr >= 0:
+            self.participante.setCurrentIndex(idx_pr)
+    
+        if isinstance(tipo_lanc, int) and 1 <= tipo_lanc <= 3:
+            self.tipo_lanc.setCurrentIndex(tipo_lanc - 1)
+    
+        self.valor_entrada.setText("" if ent is None else f"{float(ent):.2f}")
+        self.valor_saida.setText("" if sai is None else f"{float(sai):.2f}")
+    
     def salvar(self):
         campos = [self.cod_imovel.text().strip(), self.pais.currentText(), self.moeda.currentText(),
                   self.nome_imovel.text().strip(), self.endereco.text().strip(), self.bairro.text().strip(),
@@ -3898,51 +3951,58 @@ class MainWindow(QMainWindow):
         dlg.exec()
     
     def carregar_lancamentos(self):
-        # 1) Consulta (rápida, indexada)
+        # 1) Consulta na NUVEM (fonte de verdade)
         d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
-        q = """
-        SELECT
-            l.id,
-            CASE
-                WHEN instr(l.data, '/') > 0
-                    THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
-                ELSE strftime('%d/%m/%Y', l.data)
-            END AS data,
-            i.nome_imovel,
-            l.num_doc,
-            p.nome,
-            l.historico,
-            CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END AS tipo,
-            l.valor_entrada,
-            l.valor_saida,
-            (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo,
-            l.usuario
-        FROM lancamento l
-        JOIN imovel_rural i       ON l.cod_imovel = i.id
-        LEFT JOIN participante p  ON l.id_participante = p.id
-        WHERE l.data_ord BETWEEN ? AND ?
-        ORDER BY l.data_ord DESC, l.id DESC
-        """
-        rows = self.db.fetch_all(q, [d1_ord, d2_ord])
-    
+
+        try:
+            from cloud_sync import fetch_lancamentos_range_blocking
+            rows = fetch_lancamentos_range_blocking(d1_ord, d2_ord) or []
+        except Exception as e:
+            # fallback: se der erro de rede, mostra o que tiver local
+            print("Falha ao consultar Supabase, usando cache local:", e)
+            q = """
+            SELECT
+                l.id,
+                CASE
+                    WHEN instr(l.data, '/') > 0
+                        THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
+                    ELSE strftime('%d/%m/%Y', l.data)
+                END AS data,
+                i.nome_imovel,
+                l.num_doc,
+                p.nome,
+                l.historico,
+                CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END AS tipo,
+                l.valor_entrada,
+                l.valor_saida,
+                (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo,
+                l.usuario
+            FROM lancamento l
+            JOIN imovel_rural i       ON l.cod_imovel = i.id
+            LEFT JOIN participante p  ON l.id_participante = p.id
+            WHERE l.data_ord BETWEEN ? AND ?
+            ORDER BY l.data_ord DESC, l.id DESC
+            """
+            rows = self.db.fetch_all(q, [d1_ord, d2_ord])
+
         # 2) Prepara a tabela sem travar a UI
         self.tab_lanc.setSortingEnabled(False)
         self.tab_lanc.setUpdatesEnabled(False)
         self.tab_lanc.clearContents()
         self.tab_lanc.setRowCount(len(rows))
         self.tab_lanc.setUpdatesEnabled(True)
-    
+
         # 3) Estado para carga assíncrona
         self._lanc_rows = rows
         self._lanc_fill_pos = 0
-    
-        # 4) Pinta um primeiro pedaço já (feedback instantâneo)
+
+        # 4) Primeiro pedaço
         self._fill_lanc_chunk(size=300)
-    
-        # 5) Agenda o resto em background (sem travar)
+
+        # 5) Resto em background
         QTimer.singleShot(0, self._fill_lanc_async)
-    
+
     def _fill_lanc_async(self):
         # Ajuste o tamanho do chunk conforme a sua máquina
         self._fill_lanc_chunk(size=400)

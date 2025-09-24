@@ -223,3 +223,87 @@ def admin_sign_out_blocking() -> None:
 def admin_login_blocking(email: str, password: str):
     return sign_in_blocking(email, password)
 
+# === CONSULTAS/CRUD DE LANÇAMENTOS (NUVEM COMO FONTE) =========================
+from typing import List, Tuple
+
+def _fmt_ddmmyyyy(val: str | None) -> str:
+    s = (val or "").strip()
+    if not s:
+        return ""
+    # já vem no formato?
+    if "/" in s and len(s) == 10:
+        return s
+    # tenta YYYY-MM-DD -> DD/MM/YYYY
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+    if m:
+        return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    return s
+
+def fetch_lancamentos_range_blocking(d1_ord: int, d2_ord: int) -> List[Tuple]:
+    """
+    Retorna linhas no MESMO formato esperado pela tabela do sistema:
+    (id, data, nome_imovel, num_doc, nome_participante, historico, tipo, ent, sai, saldo, usuario)
+    """
+    async def _do():
+        cli = sb()
+        # 1) Busca os lançamentos do período
+        res = await cli.table("lancamento").select(
+            "id,data,cod_imovel,num_doc,id_participante,historico,tipo_lanc,"
+            "valor_entrada,valor_saida,saldo_final,natureza_saldo,usuario,data_ord"
+        ).gte("data_ord", d1_ord).lte("data_ord", d2_ord) \
+         .order("data_ord", desc=True).order("id", desc=True).execute()
+        lancs = res.data or []
+
+        # 2) Tabelas auxiliares (nomes)
+        im_ids = sorted({r.get("cod_imovel") for r in lancs if r.get("cod_imovel") is not None})
+        pr_ids = sorted({r.get("id_participante") for r in lancs if r.get("id_participante") is not None})
+
+        im_map = {}
+        pr_map = {}
+        if im_ids:
+            r2 = await cli.table("imovel_rural").select("id,nome_imovel").in_("id", im_ids).execute()
+            im_map = {r["id"]: r["nome_imovel"] for r in (r2.data or [])}
+        if pr_ids:
+            r3 = await cli.table("participante").select("id,nome").in_("id", pr_ids).execute()
+            pr_map = {r["id"]: r["nome"] for r in (r3.data or [])}
+
+        # 3) Monta tuplas
+        out = []
+        for r in lancs:
+            tipo_num = r.get("tipo_lanc")
+            tipo_lbl = "Receita" if tipo_num == 1 else ("Despesa" if tipo_num == 2 else "Adiantamento")
+            saldo = float(r.get("saldo_final") or 0.0)
+            if (r.get("natureza_saldo") or "P") != "P":
+                saldo = -saldo
+            out.append((
+                int(r["id"]),
+                _fmt_ddmmyyyy(r.get("data")),
+                im_map.get(r.get("cod_imovel"), ""),
+                r.get("num_doc"),
+                pr_map.get(r.get("id_participante")),
+                r.get("historico"),
+                tipo_lbl,
+                r.get("valor_entrada"),
+                r.get("valor_saida"),
+                saldo,
+                r.get("usuario"),
+            ))
+        return out
+
+    return run_async(_do())
+
+def get_lancamento_blocking(lanc_id: int) -> dict | None:
+    """Carrega 1 lançamento do Supabase (para diálogo de edição)."""
+    async def _do():
+        res = await sb().table("lancamento").select(
+            "id,data,cod_imovel,cod_conta,num_doc,tipo_doc,historico,"
+            "id_participante,tipo_lanc,valor_entrada,valor_saida,natureza_saldo"
+        ).eq("id", lanc_id).maybe_single().execute()
+        return res.data
+    return run_async(_do())
+
+def delete_lancamento_blocking(lanc_id: int) -> None:
+    """Exclui o lançamento no Supabase."""
+    async def _do():
+        await sb().table("lancamento").delete().eq("id", lanc_id).execute()
+    return run_async(_do())
