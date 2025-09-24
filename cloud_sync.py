@@ -156,15 +156,69 @@ async def _rpc_login_user(username: str, password: str):
     res = await sb().rpc("login_user", {"p_username": username, "p_password": password}).execute()
     return (res.data or None)
 
-def app_login_blocking(username: str, password: str):
-    """Login de usuário do APP (sem Auth). Retorna dict {id, username} ou None."""
-    return run_async(_rpc_login_user(username, password))
-
 async def _rpc_create_app_user(username: str, password: str):
     """Cria usuário do APP via RPC (requer ADM autenticado no Auth)."""
     res = await sb().rpc("create_app_user", {"p_username": username, "p_password": password}).execute()
     return res.data  # uuid
 
-def app_create_user_blocking(username: str, password: str):
-    """Cria usuário do APP de forma bloqueante (ADM precisa estar logado no Auth)."""
-    return run_async(_rpc_create_app_user(username, password))
+
+# --- COLAR NO cloud_sync.py (ADICIONE) -------------------------
+import asyncio
+
+def _run_in_loop(coro):
+    # usa o loop já criado em init_client()
+    from concurrent.futures import TimeoutError
+    global _LOOP
+    fut = asyncio.run_coroutine_threadsafe(coro, _LOOP)
+    return fut.result()
+
+# cloud_sync.py — trechos para registro/login de app_users
+
+def _assert_ready():
+    if _SB is None:
+        raise RuntimeError("Supabase client not initialized. Call init_client() first.")
+
+def app_create_user_blocking(username: str, password: str) -> str:
+    """
+    Cria usuário de aplicativo via RPC 'create_app_user'.
+    Retorna o UUID criado (string). Lança exceção se username já existir.
+    """
+    async def _run():
+        _assert_ready()
+        res = await _SB.rpc('create_app_user', {
+            'p_username': username,
+            'p_password': password
+        }).execute()
+        # supabase-py v2: res.data carrega o retorno da função (uuid)
+        return res.data
+    return run_async(_run())
+
+def app_login_blocking(username: str, password: str) -> bool:
+    """
+    Verifica credenciais do usuário de aplicativo via RPC 'verify_app_user'.
+    Retorna True/False.
+    """
+    async def _run():
+        _assert_ready()
+        res = await _SB.rpc('verify_app_user', {
+            'p_username': username,
+            'p_password': password
+        }).execute()
+        return bool(res.data)
+    return run_async(_run())
+
+def admin_sign_out_blocking() -> None:
+    """
+    Faz logout do ADMIN, limpando a sessão atual do Supabase Auth.
+    """
+    async def _do():
+        try:
+            assert _SB is not None
+            await _SB.auth.sign_out()
+        except Exception as e:
+            print("admin_sign_out_blocking error:", e)
+    return _run_in_loop(_do())
+# --- FIM DO TRECHO ---------------------------------------------
+# --- alias p/ manter compatibilidade com o sistema.py
+def admin_login_blocking(email: str, password: str):
+    return sign_in_blocking(email, password)
