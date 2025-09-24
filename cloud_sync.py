@@ -222,3 +222,4 @@ def admin_sign_out_blocking() -> None:
 # --- alias p/ manter compatibilidade com o sistema.py
 def admin_login_blocking(email: str, password: str):
     return sign_in_blocking(email, password)
+

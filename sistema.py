@@ -30,6 +30,8 @@ from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from decimal import Decimal
 
+# Usuário que fez login
+CURRENT_USER = None
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -185,9 +187,6 @@ USERNAME_DOMAIN = "app.local"
 def _u2email(u: str) -> str:
     u = (u or "").strip()
     return u if "@" in u else f"{u.lower()}@{USERNAME_DOMAIN}"
-
-# Usuário que fez login
-CURRENT_USER = None
 
 def get_profile_db_filename():
     """
@@ -385,46 +384,82 @@ class LoginDialog(QDialog):
         layout.addLayout(btns)
 
     def try_login(self):
-        user = self.username.text().strip()
-        pwd  = self.password.text().strip()
-        try:
-            ok = cloud_sync.app_login_blocking(user, pwd)
-        except Exception as e:
-            QMessageBox.critical(self, "Falha", f"Erro ao autenticar:\n{e}")
-            return
-        if ok:
-            global CURRENT_USER
-            CURRENT_USER = user
-            self.accept()
-        else:
-            QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
+        import cloud_sync as cs
+        global CURRENT_USER
 
+        ident = self.username.text().strip()  # pode ser "usuario" OU "email@..."
+        pwd   = self.password.text().strip()
+
+        if not ident or not pwd:
+            QMessageBox.warning(self, "Falha", "Informe usuário/e-mail e senha.")
+            return
+
+        cs.init_client()  # garante cliente pronto
+
+        try:
+            if "@" in ident:
+                # === LOGIN COMO ADM (Supabase Auth) ===
+                cs.sign_in_blocking(ident, pwd)   # levanta exceção se falhar
+                CURRENT_USER = f"admin:{ident}"
+                self.accept()
+                return
+            else:
+                # === LOGIN COMO USUÁRIO DO APP (tabela app_users) ===
+                ok = cs.app_login_blocking(ident, pwd)  # True/False via RPC
+                if ok:
+                    CURRENT_USER = ident
+                    self.accept()
+                    return
+                else:
+                    QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
+                    return
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao autenticar:\n{e}")
 
     def try_register(self):
-        # Login de ADM (Supabase) só para liberar o cadastro
+        import cloud_sync as cs
+        cs.init_client()
+
+        # se já tem sessão (ADM já logado), abre direto
+        if cs.get_current_user():
+            dlg = RegisterUserDialog(self)
+            dlg.setStyleSheet(STYLE_SHEET)
+            dlg.exec()
+            return
+
+        # senão, pede login de ADM
         email, ok1 = QInputDialog.getText(self, "Admin (Supabase)", "E-mail do ADM:")
         if not ok1:
             return
         pwd, ok2 = QInputDialog.getText(self, "Admin (Supabase)", "Senha do ADM:", QLineEdit.Password)
         if not ok2:
             return
-
         try:
-            import cloud_sync as cs
-            cs.init_client()  # garante cliente pronto
-            ok = cs.admin_login_blocking(email.strip(), pwd.strip())  # RETORNA BOOL
-            if not ok:
-                QMessageBox.warning(self, "Acesso negado", "Falha no login do ADM (e-mail/senha).")
-                return
+            cs.sign_in_blocking(email.strip(), pwd.strip())
+            dlg = RegisterUserDialog(self)
+            dlg.setStyleSheet(STYLE_SHEET)
+            dlg.exec()
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao autenticar ADM:\n{e}")
-            return
+            QMessageBox.warning(self, "Acesso negado", f"Falha no login do ADM:\n{e}")
 
-        # Se ADM ok, abre a tela simples de cadastro (usuário + senha)
+    # --- Login de ADM usado para abrir a tela de “Registrar novo usuário” ---
+    def _admin_login_and_open_register(self):
+        global CURRENT_USER
+        email = self.admin_email.text().strip()
+        pwd   = self.admin_password.text().strip()
+    
+        ok = cloud_sync.admin_login_blocking(email, pwd)
+        if not ok:
+            QMessageBox.warning(self, "Atenção", "Falha no login do ADM.")
+            return
+    
+        # NÃO atribua CURRENT_USER aqui se o ADM não for para “logar no app”.
+        # Se quiser que ADM também logue no app, descomente a linha abaixo:
+        # CURRENT_USER = email
+    
         dlg = RegisterUserDialog(self)
         dlg.setStyleSheet(STYLE_SHEET)
         dlg.exec()
-
 
 # ─── Passo 2: Ajuste da classe Database ───
 class Database:
