@@ -3,7 +3,7 @@ import sys
 import re
 import json
 import csv
-import sqlite3
+from supabase import create_client, Client, create_async_client, AsyncClient
 import pandas as pd
 import requests
 from datetime import datetime
@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTextBrowser, QSplitter
 )
 
-from PySide6.QtCore import Qt, QDate, QSize, QSettings, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
+from PySide6.QtCore import Qt, QDate, QSize, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from PySide6.QtPrintSupport import QPrinter
@@ -28,10 +28,106 @@ import shiboken6
 
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
-from decimal import Decimal
+import threading
+import contextlib
+# --- .env / chaves Supabase ---
 
-# Usuário que fez login
-CURRENT_USER = None
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).with_name(".env"))
+except Exception:
+    pass
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_SCHEMA = os.getenv("SUPABASE_SCHEMA", "public")
+
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    raise RuntimeError("Defina SUPABASE_URL e SUPABASE_ANON_KEY no arquivo .env ou variáveis de ambiente.")
+
+# --- cliente global Supabase (sb) ---
+_SB_CLIENT: Client | None = None
+def sb() -> Client:
+    global _SB_CLIENT
+    if _SB_CLIENT is None:
+        _SB_CLIENT = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+    return _SB_CLIENT
+
+# --- Compat: sb().table(...) via HTTP direto (sem postgrest) -------------------
+import requests as _rq
+
+class _RestResp:
+    def __init__(self, data): self.data = data
+
+class _RestTable:
+    def __init__(self, name: str):
+        self.name = name
+        self.base = f"{SUPABASE_URL}/rest/v1/{name}"
+        self.headers = {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        if SUPABASE_SCHEMA:
+            self.headers["Accept-Profile"]  = SUPABASE_SCHEMA
+            self.headers["Content-Profile"] = SUPABASE_SCHEMA
+        self.params = {}
+        self._select = "*"
+        self._method = "GET"
+        self._payload = None
+
+    # ----- builders -----
+    def select(self, cols: str):
+        self._select = cols or "*"; return self
+    def eq(self, col, val):
+        self.params[col] = f"eq.{val}"; return self
+    def gte(self, col, val):
+        self.params[col] = f"gte.{val}"; return self
+    def lte(self, col, val):
+        self.params[col] = f"lte.{val}"; return self
+    def order(self, col, desc=False):
+        self.params["order"] = f"{col}.{'desc' if desc else 'asc'}"; return self
+    def limit(self, n: int):
+        self.params["limit"] = int(n); return self
+    def insert(self, payload):
+        self._method = "POST"; self._payload = payload; return self
+    def update(self, payload):
+        self._method = "PATCH"; self._payload = payload; return self
+    def upsert(self, payload, on_conflict=None):
+        self._method = "POST"; self._payload = payload
+        if on_conflict: self.params["on_conflict"] = on_conflict
+        self.headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+        return self
+    def delete(self):
+        self._method = "DELETE"; self._payload = None; return self
+
+    # ----- executor -----
+    def execute(self):
+        params = dict(self.params)
+        if self._method == "GET":
+            params["select"] = self._select
+        if   self._method == "GET":
+            r = _rq.get(self.base, headers=self.headers, params=params, timeout=20)
+        elif self._method == "POST":
+            r = _rq.post(self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+        elif self._method == "PATCH":
+            r = _rq.patch(self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+        else:
+            r = _rq.request(self._method, self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+        if r.status_code >= 400:
+            raise Exception(f"PostgREST error {r.status_code}: {r.text}")
+        try:
+            data = r.json()
+        except Exception:
+            data = None
+        return _RestResp(data)
+
+def _table_proxy(self, name: str): return _RestTable(name)
+
+Client.table = _table_proxy
+Client.from_ = _table_proxy
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -46,131 +142,75 @@ def valida_cpf(cpf: str) -> bool:
     d2 = calc_dig(nums[:9] + d1, list(range(11, 1, -1)))
     return nums.endswith(d1 + d2)
 
-# —————— Cache e consulta Receita ——————
-CACHE_FOLDER = 'banco_de_dados'
+# —————— Cache/Prefs 100% Supabase ——————
+# Tabelas:
+#   public.meta_kv (key text primary key, val jsonb, updated_at timestamptz default now())
+# Chaves usadas:
+#   receita_cache::<PROFILE>      -> json (dict)
+#   last_txt_path::<PROFILE>      -> string
 
-def _profile_root():
-    return os.path.join(CACHE_FOLDER, CURRENT_PROFILE)
+def kv_get(key: str, default=None):
+    row = sb().table("meta_kv").select("val").eq("key", key).limit(1).execute().data
+    if row:
+        return row[0]["val"]
+    return default
 
-def _json_dir():
-    p = os.path.join(_profile_root(), 'json')
-    os.makedirs(p, exist_ok=True)
-    return p
+def kv_set(key: str, val):
+    sb().table("meta_kv").upsert({"key": key, "val": val}).execute()
 
-def cache_file_path():
-    return os.path.join(_json_dir(), 'receita_cache.json')
+def load_last_txt_path() -> str:
+    return kv_get(f"last_txt_path::{CURRENT_PROFILE}", "") or ""
 
-def txt_pref_file_path():
-    return os.path.join(_json_dir(), 'lcdpr_txt_path.json')
+def save_last_txt_path(path: str):
+    kv_set(f"last_txt_path::{CURRENT_PROFILE}", path or "")
+
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_BASE_DELAY = 2.0
+MIN_INTERVAL_BETWEEN_CALLS = 1.0
+_RECEITA_LAST_HIT_TS = 0.0
 
 API_URL_CNPJ = 'https://www.receitaws.com.br/v1/cnpj/'
 API_URL_CPF  = 'https://www.receitaws.com.br/v1/cpf/'
 
-# —————— Configuração para salvar último caminho do TXT LCDPR ——————
-TXT_PREF_FILE = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lcdpr_txt_path.json')
-
-def load_last_txt_path():
-    try:
-        with open(txt_pref_file_path(), 'r', encoding='utf-8') as f:
-            return json.load(f).get('last_path', '')
-    except:
-        return ''
-
-def save_last_txt_path(path: str):
-    with open(txt_pref_file_path(), 'w', encoding='utf-8') as f:
-        json.dump({'last_path': path}, f, ensure_ascii=False, indent=2)
-
-def ensure_cache_file():
-    fp = cache_file_path()
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
-    if not os.path.isfile(fp):
-        with open(fp, 'w', encoding='utf-8') as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
-
 def load_cache() -> dict:
-    ensure_cache_file()
-    with open(cache_file_path(), 'r', encoding='utf-8') as f:
-        return json.load(f)
+    return kv_get(f"receita_cache::{CURRENT_PROFILE}", {}) or {}
 
 def save_cache(cache: dict):
-    with open(cache_file_path(), 'w', encoding='utf-8') as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
-
-# Substitua toda a função por esta versão (usa o mesmo cache existente)
-RATE_LIMIT_RETRIES = 4          # nº de tentativas
-RATE_LIMIT_BASE_DELAY = 2.0     # segundos (backoff exponencial: 2,4,8,16)
-MIN_INTERVAL_BETWEEN_CALLS = 1.0  # garante espaçamento mínimo entre hits
-_RECEITA_LAST_HIT_TS = 0.0
+    kv_set(f"receita_cache::{CURRENT_PROFILE}", cache or {})
 
 def consulta_receita(cpf_cnpj: str, tipo: str = 'cnpj') -> dict:
-    """
-    Faz consulta na API ou no cache. Chave = "<tipo>:<cpf_cnpj>"
-    Tenta respeitar limite de requisições e faz backoff em 429/erros transitórios.
-    """
-    import time
+    import time, requests
     cache = load_cache()
     key = f"{tipo}:{cpf_cnpj}"
     if key in cache:
         return cache[key]
 
-    global _RECEITA_LAST_HIT_TS
     url = (API_URL_CPF if tipo == 'cpf' else API_URL_CNPJ) + cpf_cnpj
-
+    global _RECEITA_LAST_HIT_TS
     for attempt in range(RATE_LIMIT_RETRIES):
-        # espaçamento mínimo entre chamadas
         elapsed = time.time() - _RECEITA_LAST_HIT_TS
         if elapsed < MIN_INTERVAL_BETWEEN_CALLS:
             time.sleep(MIN_INTERVAL_BETWEEN_CALLS - elapsed)
-
         try:
             res = requests.get(url, timeout=8)
             _RECEITA_LAST_HIT_TS = time.time()
-
-            # 429 (Too Many Requests) → backoff e tenta de novo
             if res.status_code == 429:
-                time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
-                continue
-
+                time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt)); continue
             res.raise_for_status()
             data = res.json()
-
-            # receitaws retorna {"status":"ERROR","message":"muitas consultas"...}
-            if isinstance(data, dict):
-                status = str(data.get('status', '')).upper()
-                msg = str(data.get('message', '')).lower()
-                if status == 'ERROR' and ('muita' in msg or 'many' in msg or 'limite' in msg):
-                    time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
-                    continue
-
-            cache[key] = data
-            save_cache(cache)
-            return data
-
+            cache[key] = data; save_cache(cache); return data
         except requests.RequestException:
-            # erro transitório → backoff e tenta novamente
-            time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt))
-            continue
-
-    # todas as tentativas falharam → sinaliza erro (sem estourar exceção)
+            time.sleep(RATE_LIMIT_BASE_DELAY * (2 ** attempt)); continue
     return {"status": "ERROR", "message": "RATE_LIMIT_OR_NETWORK"}
 
-def _extract_name_from_historico(historico: str) -> str:
-    """Pega o texto dentro do último parêntese do histórico (para CPF)."""
-    import re
-    if not historico:
-        return ""
-    m = re.findall(r"\(([^)]+)\)", historico)
-    return (m[-1].strip() if m else "")
-
 def _nome_cnpj_from_receita(data: dict) -> str:
-    """Extrai o melhor nome de um retorno da Receita para CNPJ."""
-    if not isinstance(data, dict):
-        return ""
-    for k in ("nome", "razao_social", "razaosocial", "razaoSocial", "fantasia", "nome_fantasia"):
+    if not isinstance(data, dict): return ""
+    for k in ("nome","razao_social","razaosocial","razaoSocial","fantasia","nome_fantasia"):
         v = data.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
     return ""
+
 
 APP_ICON    = 'agro_icon.png'
 
@@ -182,172 +222,63 @@ LOCK_ICON = os.path.join(ICONS_DIR, 'lock.png')
 # Perfil dinâmico
 CURRENT_PROFILE = "Cleuber Marcos"
 
-# Login por usuário (mapeado para e-mail técnico no Supabase)
-USERNAME_DOMAIN = "app.local"
-def _u2email(u: str) -> str:
-    u = (u or "").strip()
-    return u if "@" in u else f"{u.lower()}@{USERNAME_DOMAIN}"
+# Usuário que fez login
+CURRENT_USER = None
 
 def get_profile_db_filename():
-    """
-    Retorna o caminho completo para o banco de dados do perfil selecionado,
-    criando a pasta se necessário.
-    """
-    base = os.path.join(PROJECT_DIR, 'banco_de_dados', CURRENT_PROFILE, 'data')
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, 'lcdpr.db')
+    # legado removido (não há mais SQLite local)
+    return ""
 
-# ── (1) Configuração da pasta de login ─────────────────────────────
-LOGIN_DIR   = os.path.join(PROJECT_DIR, 'banco_de_dados', 'login')
-ADMIN_FILE  = os.path.join(LOGIN_DIR, 'admin.json')
-USERS_FILE  = os.path.join(LOGIN_DIR, 'users.json')
-
-def profile_settings():
-    return QSettings("Automatize Tech", f"AgroApp::{CURRENT_PROFILE}")
-
-def ensure_login_files():
-    os.makedirs(LOGIN_DIR, exist_ok=True)
-    # cria admin.json com senha padrão se não existir
-    if not os.path.isfile(ADMIN_FILE):
-        with open(ADMIN_FILE, 'w', encoding='utf-8') as f:
-            json.dump({"admin_password": "admin123"}, f, ensure_ascii=False, indent=2)
-    # cria users.json vazio se não existir
-    if not os.path.isfile(USERS_FILE):
-        with open(USERS_FILE, 'w', encoding='utf-8') as f:
-            json.dump({}, f, ensure_ascii=False, indent=2)
-
-def load_admin_password() -> str:
-    with open(ADMIN_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f).get("admin_password", "")
-
-def load_users() -> dict:
-    with open(USERS_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+# ── (1) Login 100% Supabase ─────────────────────────────────────────
+# Tabela esperada: public.app_users (username text PK, password text, role text)
+# role: 'admin' | 'user'
 
 def valida_usuario(username: str, password: str) -> bool:
-    """
-    Retorna True se o usuário e senha forem válidos.
-    - Usuário 'admin' é validado contra admin.json
-    - Demais usuários são validados contra users.json
-    """
-    # garante que os arquivos de login existem
-    ensure_login_files()
+    data = (sb().table("app_users")
+              .select("password")
+              .eq("username", username)
+              .limit(1).execute().data)
+    return bool(data and data[0]["password"] == password)
 
-    # trata admin separadamente
-    if username.lower() == "admin":
-        return password == load_admin_password()
+def is_admin_password(pw: str) -> bool:
+    row = (sb().table("app_users")
+             .select("password, role")
+             .eq("username", "admin")
+             .limit(1).execute().data)
+    return bool(row and row[0]["role"] == "admin" and row[0]["password"] == pw)
 
-    # valida demais usuários
-    users = load_users()
-    return users.get(username) == password
+def registrar_usuario(username: str, password: str) -> None:
+    sb().table("app_users").upsert({"username": username, "password": password, "role": "user"}).execute()
 
-def save_users(users: dict):
-    with open(USERS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
 
-# ── (3b) Registrar novo usuário (apenas usuário+senha) ───────────────
+# ── (2) Diálogo de registro de novo usuário ────────────────────────
 class RegisterUserDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Registrar novo usuário")
-        self.setWindowIcon(QIcon(LOCK_ICON))
-        self.setStyleSheet(STYLE_SHEET)
+        self.setWindowTitle("Registrar Novo Usuário")
         self.setModal(True)
-        self.resize(360, 150)
+        layout = QFormLayout(self)
+        self.user_edit = QLineEdit(); layout.addRow("Novo usuário:", self.user_edit)
+        self.pw_edit = QLineEdit(); self.pw_edit.setEchoMode(QLineEdit.Password)
+        layout.addRow("Senha:", self.pw_edit)
+        self.pw2_edit = QLineEdit(); self.pw2_edit.setEchoMode(QLineEdit.Password)
+        layout.addRow("Confirmar senha:", self.pw2_edit)
+        btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel, Qt.Horizontal, self)
+        btns.accepted.connect(self.on_save); btns.rejected.connect(self.reject)
+        layout.addRow(btns)
 
-        layout = QVBoxLayout(self)
-        form   = QFormLayout()
-        self.username = QLineEdit(); self.username.setPlaceholderText("nome de usuário (ex.: victor)")
-        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password); self.password.setPlaceholderText("senha")
-        form.addRow("Usuário:", self.username)
-        form.addRow("Senha:  ", self.password)
-        layout.addLayout(form)
-
-        btns = QHBoxLayout()
-        bt_ok = QPushButton("Criar usuário"); bt_ok.setFixedHeight(28)
-        bt_ca = QPushButton("Cancelar");     bt_ca.setFixedHeight(28)
-        bt_ok.clicked.connect(self._on_create)
-        bt_ca.clicked.connect(self.reject)
-        btns.addWidget(bt_ok); btns.addWidget(bt_ca)
-        layout.addLayout(btns)
-
-    def _on_create(self):
-        u = (self.username.text() or "").strip()
-        p = (self.password.text() or "").strip()
+    def on_save(self):
+        u, p, p2 = self.user_edit.text().strip(), self.pw_edit.text(), self.pw2_edit.text()
         if not u or not p:
-            QMessageBox.warning(self, "Atenção", "Preencha usuário e senha.")
-            return
-        try:
-            cloud_sync.app_create_user_blocking(u, p)
-            QMessageBox.information(self, "Pronto", "Usuário criado com sucesso.")
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao criar usuário:\n{e}")
-
-# ── (3) Diálogo principal de login (Supabase) ───────────────────────
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QHBoxLayout,
-    QMessageBox, QInputDialog, QLabel
-)
-from PySide6.QtGui import QIcon
-# mantém seu STYLE_SHEET e LOCK_ICON já definidos no projeto
-# usa helpers do cloud_sync para autenticar no Supabase
-import cloud_sync
-from cloud_sync import sign_in_blocking
-
-# garante compatibilidade se em algum ambiente existir a função antiga
-def _warn(msg):
-    QMessageBox.warning(None, "Atenção", msg)
-
-import cloud_sync
-cloud_sync.init_client()
-
-# ── Diálogo de login do ADM (protege o "Registrar") ─────────────────
-class AdminLoginDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Login de Administrador")
-        self.setWindowIcon(QIcon(LOCK_ICON))
-        self.setStyleSheet(STYLE_SHEET)
-        self.setModal(True)
-        self.resize(360, 160)
-
-        layout = QVBoxLayout(self)
-        form   = QFormLayout()
-        self.email = QLineEdit();    self.email.setPlaceholderText("email do ADM")
-        self.senha = QLineEdit();    self.senha.setEchoMode(QLineEdit.Password); self.senha.setPlaceholderText("senha")
-        form.addRow("E-mail:", self.email)
-        form.addRow("Senha: ", self.senha)
-        layout.addLayout(form)
-
-        btns = QHBoxLayout()
-        btn_ok = QPushButton("Entrar"); btn_ok.clicked.connect(self._do_login)
-        btn_ca = QPushButton("Cancelar"); btn_ca.clicked.connect(self.reject)
-        for b in (btn_ok, btn_ca): b.setFixedHeight(28); btns.addWidget(b)
-        layout.addLayout(btns)
-
-        self._ok = False
-
-    def _do_login(self):
-        import cloud_sync
-        cloud_sync.init_client()  # garante cliente pronto
-        
-        email = self.email.text().strip()
-        pwd   = self.senha.text().strip()
-        if not email or not pwd:
-            _warn("Informe e-mail e senha do ADM.")
-            return
-        try:
-            # autentica no Supabase; se der certo, consideramos ADM
-            # (se quiser restringir a um domínio/usuário, valide email aqui)
-            sign_in_blocking(email, pwd)
-            self._ok = True
-            self.accept()
-        except Exception as e:
-            _warn(f"Falha no login do ADM.\n{e}")
-
-    def is_ok(self) -> bool:
-        return self._ok
+            QMessageBox.warning(self, "Erro", "Preencha usuário e senha."); return
+        if p != p2:
+            QMessageBox.warning(self, "Erro", "As senhas não conferem."); return
+        # valida duplicidade no Supabase
+        exists = sb().table("app_users").select("username").eq("username", u).limit(1).execute().data
+        if exists:
+            QMessageBox.warning(self, "Erro", "Usuário já existe."); return
+        # apenas fecha; inserção será feita pelo LoginDialog.try_register
+        self.accept()
 
 # ── (3) Diálogo principal de login ──────────────────────────────────
 class LoginDialog(QDialog):
@@ -355,438 +286,551 @@ class LoginDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Login")
         self.setWindowIcon(QIcon(LOCK_ICON))
+        # aplica o mesmo CSS que o MainWindow
         self.setStyleSheet(STYLE_SHEET)
+
         self.setModal(True)
         self.resize(350, 150)
 
         layout = QVBoxLayout(self)
         form   = QFormLayout()
-
-        self.username = QLineEdit()
-        self.username.setPlaceholderText("usuário")
-
-        self.password = QLineEdit()
-        self.password.setEchoMode(QLineEdit.Password)
+        self.username = QLineEdit(); self.username.setPlaceholderText("usuário")
+        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("senha")
-
         form.addRow("Usuário:", self.username)
         form.addRow("Senha:  ", self.password)
         layout.addLayout(form)
 
         btns = QHBoxLayout()
-        btn_login    = QPushButton("Logar")
-        btn_register = QPushButton("Registrar")
-        btn_login.clicked.connect(self.try_login)
-        btn_register.clicked.connect(self.try_register)
+        btn_login    = QPushButton("Logar");    btn_login.clicked.connect(self.try_login)
+        btn_register = QPushButton("Registrar"); btn_register.clicked.connect(self.try_register)
         for b in (btn_login, btn_register):
             b.setFixedHeight(28)
             btns.addWidget(b)
         layout.addLayout(btns)
 
     def try_login(self):
-        import cloud_sync as cs
-        global CURRENT_USER
-
-        ident = self.username.text().strip()  # pode ser "usuario" OU "email@..."
-        pwd   = self.password.text().strip()
-
-        if not ident or not pwd:
-            QMessageBox.warning(self, "Falha", "Informe usuário/e-mail e senha.")
-            return
-
-        cs.init_client()  # garante cliente pronto
-
-        try:
-            if "@" in ident:
-                # === LOGIN COMO ADM (Supabase Auth) ===
-                cs.sign_in_blocking(ident, pwd)   # levanta exceção se falhar
-                CURRENT_USER = f"admin:{ident}"
-                self.accept()
-                return
-            else:
-                # === LOGIN COMO USUÁRIO DO APP (tabela app_users) ===
-                ok = cs.app_login_blocking(ident, pwd)  # True/False via RPC
-                if ok:
-                    CURRENT_USER = ident
-                    self.accept()
-                    return
-                else:
-                    QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
-                    return
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao autenticar:\n{e}")
+        user = self.username.text().strip()
+        pwd  = self.password.text().strip()
+        if valida_usuario(user, pwd):
+            global CURRENT_USER
+            CURRENT_USER = user
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Falha", "Usuário ou senha inválidos.")
 
     def try_register(self):
-        import cloud_sync as cs
-        cs.init_client()
-
-        # se já tem sessão (ADM já logado), abre direto
-        if cs.get_current_user():
-            dlg = RegisterUserDialog(self)
-            dlg.setStyleSheet(STYLE_SHEET)
-            dlg.exec()
-            return
-
-        # senão, pede login de ADM
-        email, ok1 = QInputDialog.getText(self, "Admin (Supabase)", "E-mail do ADM:")
-        if not ok1:
-            return
-        pwd, ok2 = QInputDialog.getText(self, "Admin (Supabase)", "Senha do ADM:", QLineEdit.Password)
-        if not ok2:
-            return
-        try:
-            cs.sign_in_blocking(email.strip(), pwd.strip())
-            dlg = RegisterUserDialog(self)
-            dlg.setStyleSheet(STYLE_SHEET)
-            dlg.exec()
-        except Exception as e:
-            QMessageBox.warning(self, "Acesso negado", f"Falha no login do ADM:\n{e}")
-
-    # --- Login de ADM usado para abrir a tela de “Registrar novo usuário” ---
-    def _admin_login_and_open_register(self):
-        global CURRENT_USER
-        email = self.admin_email.text().strip()
-        pwd   = self.admin_password.text().strip()
-    
-        ok = cloud_sync.admin_login_blocking(email, pwd)
+        # pede a senha de admin (validada no Supabase)
+        senha, ok = QInputDialog.getText(self, "Senha de Administrador", "Digite a senha de administrador:", QLineEdit.Password)
         if not ok:
-            QMessageBox.warning(self, "Atenção", "Falha no login do ADM.")
             return
-    
-        # NÃO atribua CURRENT_USER aqui se o ADM não for para “logar no app”.
-        # Se quiser que ADM também logue no app, descomente a linha abaixo:
-        # CURRENT_USER = email
-    
+        if not is_admin_password(senha):
+            QMessageBox.warning(self, "Acesso negado", "Senha de administrador incorreta.")
+            return
+
+        # diálogo de registro
         dlg = RegisterUserDialog(self)
         dlg.setStyleSheet(STYLE_SHEET)
-        dlg.exec()
+        if dlg.exec() == QDialog.Accepted:
+            u = dlg.user_edit.text().strip()
+            p = dlg.pw_edit.text()
+            registrar_usuario(u, p)
+            QMessageBox.information(self, "Sucesso", f"Usuário '{u}' cadastrado no Supabase.")
 
-# ─── Passo 2: Ajuste da classe Database ───
+
+def _tuplize(rows, cols):
+    """Converte list[dict] -> list[tuple] na ordem de 'cols'."""
+    out = []
+    for r in rows:
+        out.append(tuple(r.get(c) for c in cols))
+    return out
+
 class Database:
-    def __init__(self, filename: str = None):
-        if filename is None:
-            filename = get_profile_db_filename()
+    """
+    Substituto compatível com a API antiga, porém lendo do Supabase.
+    Somente leitura por enquanto (fetch_one/fetch_all).
+    """
+    def __init__(self, perfil_slug: str | None = None):
+        self.sb: Client = sb()
+        self.perfil_id: str | None = None
+        # mantém compat com seu uso atual de CURRENT_PROFILE
         try:
-            self.conn = sqlite3.connect(filename)
-        except sqlite3.OperationalError as e:
-            raise RuntimeError(f"Não foi possível abrir/criar o banco em '{filename}':\n  {e}")
+            self.set_profile(perfil_slug or CURRENT_PROFILE)
+        except NameError:
+            self.set_profile(perfil_slug)
 
-        # Uma única passagem de criação/migração
-        self._create_tables()
-        self._create_views()
-        self._migrate_schema()
-        self._migrate_add_data_ord()
-        self._create_indexes()
+    # -------- perfis ----------
+    def set_profile(self, perfil_slug: str | None):
+        """Ajusta o perfil (produtor rural) em uso. Usa tabela public.perfil(slug)."""
+        self.perfil_slug = perfil_slug
+        if not perfil_slug:
+            self.perfil_id = None
+            return
+        res = (self.sb.table("perfil")
+                   .select("id")
+                   .eq("slug", perfil_slug)
+                   .limit(1).execute()).data
+        self.perfil_id = res[0]["id"] if res else None
 
-        # PRAGMAs de desempenho (apenas aqui)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute("PRAGMA synchronous=NORMAL")
-        self.conn.execute("PRAGMA temp_store=MEMORY")
-        self.conn.execute("PRAGMA cache_size=-200000")  # ~200 MB (ajuste se quiser)
+    # -------- API compatível ----------
+    def close(self):  # compat
+        return
 
-    def _migrate_schema(self):
-        """
-        Migrações estruturais:
-          - Garante coluna 'usuario' em lancamento.
-          - Garante que 'lancamento.id' seja AUTOINCREMENT (migração segura).
-          - Sincroniza sqlite_sequence para não reutilizar IDs apagados.
-        """
-        cur = self.conn.cursor()
+    def execute_query(self, sql: str, params: list | tuple | None = None, autocommit: bool = True):
+        s = (sql or "").strip()
+        s_low = s.lower()
 
-        # 1) Garante coluna 'usuario'
-        try:
-            cur.execute("SELECT usuario FROM lancamento LIMIT 1")
-        except sqlite3.OperationalError:
-            cur.execute("ALTER TABLE lancamento ADD COLUMN usuario TEXT NOT NULL DEFAULT ''")
-            self.conn.commit()
+        # --- SELECTs ---
+        if s_low.startswith("select"):
+            data = self._run_select(sql, params or [])
+            class _Cur:
+                def __init__(self, data): self._data = data
+                def fetchall(self): return data
+                def fetchone(self): return data[0] if data else None
+            return _Cur(data)
 
-        # 2) Checa se a tabela 'lancamento' já possui AUTOINCREMENT
-        row = cur.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='lancamento'"
-        ).fetchone()
-        ddl = (row[0] or "").upper() if row else ""
-        has_autoinc = "AUTOINCREMENT" in ddl
+        # --- INSERT/UPDATE mínimos suportados (sem SQLite) ---
+        # participante
+        if s_low.startswith("insert into participante"):
+            cpf, nome, tipo = params
+            self.sb.table("participante").insert({"cpf_cnpj": cpf, "nome": nome, "tipo_contraparte": tipo}).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-        if not has_autoinc:
-            # Derruba views que dependem de 'lancamento' para evitar conflitos
-            try:
-                cur.executescript("""
-                    DROP VIEW IF EXISTS saldo_contas;
-                    DROP VIEW IF EXISTS resumo_categorias;
-                """)
-            except Exception:
-                pass
+        if s_low.startswith("update participante set"):
+            cpf, nome, tipo, pid = params
+            self.sb.table("participante").update({"cpf_cnpj": cpf, "nome": nome, "tipo_contraparte": tipo}).eq("id", pid).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            # Migração: renomeia, recria com AUTOINCREMENT, copia dados e apaga a antiga
-            cur.execute("ALTER TABLE lancamento RENAME TO lancamento_old")
+        # imovel_rural
+        if s_low.startswith("insert into imovel_rural"):
+            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"]
+            payload = dict(zip(cols, params))
+            if self.perfil_id: payload["perfil_id"] = self.perfil_id
+            self.sb.table("imovel_rural").insert(payload).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            # Cria a nova tabela com a DDL atual (com AUTOINCREMENT)
-            cur.executescript("""
-            CREATE TABLE lancamento (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data DATE NOT NULL,
-                cod_imovel INTEGER NOT NULL,
-                cod_conta INTEGER NOT NULL,
-                num_doc TEXT,
-                tipo_doc INTEGER NOT NULL,
-                historico TEXT NOT NULL,
-                id_participante INTEGER,
-                tipo_lanc INTEGER NOT NULL,
-                valor_entrada REAL DEFAULT 0,
-                valor_saida REAL DEFAULT 0,
-                saldo_final REAL NOT NULL,
-                natureza_saldo TEXT NOT NULL,
-                usuario TEXT NOT NULL,
-                categoria TEXT,
-                data_ord INTEGER,
-                area_afetada INTEGER,
-                quantidade REAL,
-                unidade_medida TEXT,
-                FOREIGN KEY(cod_imovel) REFERENCES imovel_rural(id),
-                FOREIGN KEY(cod_conta) REFERENCES conta_bancaria(id),
-                FOREIGN KEY(id_participante) REFERENCES participante(id),
-                FOREIGN KEY(area_afetada) REFERENCES area_producao(id)
-            );
-            """)
+        if s_low.startswith("update imovel_rural set"):
+            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"]
+            payload = dict(zip(cols, params[:-1])); imovel_id = params[-1]
+            self.sb.table("imovel_rural").update(payload).eq("id", imovel_id).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            # Descobre colunas em comum e copia preservando os IDs existentes
-            old_cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento_old)").fetchall()]
-            new_cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento)").fetchall()]
-            common   = [c for c in old_cols if c in new_cols]  # mantém ordem do antigo
-            col_list = ", ".join(common)
-            cur.execute(f"INSERT INTO lancamento ({col_list}) SELECT {col_list} FROM lancamento_old")
+        # conta_bancaria
+        if s_low.startswith("insert into conta_bancaria"):
+            cols = ["cod_conta","pais_cta","banco","nome_banco","agencia","num_conta","saldo_inicial"]
+            payload = dict(zip(cols, params))
+            if self.perfil_id: payload["perfil_id"] = self.perfil_id
+            self.sb.table("conta_bancaria").insert(payload).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            # Remove tabela antiga
-            cur.execute("DROP TABLE lancamento_old")
+        if s_low.startswith("update conta_bancaria set"):
+            cols = ["cod_conta","pais_cta","banco","nome_banco","agencia","num_conta","saldo_inicial"]
+            payload = dict(zip(cols, params[:-1])); conta_id = params[-1]
+            self.sb.table("conta_bancaria").update(payload).eq("id", conta_id).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            # Recria índices e views
-            self._create_indexes()
-            self._create_views()
+        # --- DELETE genérico: DELETE FROM <tabela> WHERE id = ? ---
+        m = re.match(r"delete\s+from\s+(\w+)\s+where\s+id\s*=\s*\?", s_low)
+        if m:
+            table = m.group(1)
+            rec_id = params[0] if params else None
+            if rec_id is None:
+                raise ValueError("DELETE sem id.")
+            self.sb.table(table).delete().eq("id", rec_id).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-            self.conn.commit()
+        # Compat: "INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)"
+        if s_low.startswith("insert or replace into participante"):
+            cpf, nome, tipo = params
+            self.upsert_participante(cpf, nome, int(tipo))
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-        # 3) Sincroniza sqlite_sequence com o MAX(id) atual (se existir/for aplicável)
-        try:
-            max_id = cur.execute("SELECT IFNULL(MAX(id), 0) FROM lancamento").fetchone()[0] or 0
-            row = cur.execute("SELECT seq FROM sqlite_sequence WHERE name='lancamento'").fetchone()
-            if row is None:
-                cur.execute("INSERT INTO sqlite_sequence(name, seq) VALUES('lancamento', ?)", (max_id,))
-            elif (row[0] or 0) < max_id:
-                cur.execute("UPDATE sqlite_sequence SET seq=? WHERE name='lancamento'", (max_id,))
-            self.conn.commit()
-        except sqlite3.OperationalError:
-            # sqlite_sequence só existe se houver ao menos uma tabela AUTOINCREMENT
-            pass
+        # outros ainda não migrados
+        raise NotImplementedError("Comando não suportado nesta fase (somente leitura + cadastros básicos via Supabase).")
 
-    def get_perfil_param(self, profile: str):
-        sql = """SELECT version, ind_ini_per, sit_especial, ident, nome,
-                        logradouro, numero, complemento, bairro, uf,
-                        cod_mun, cep, telefone, email
-                 FROM perfil_param WHERE profile=?"""
-        return self.fetch_one(sql, (profile,))
-
-    def upsert_perfil_param(self, profile: str, p: dict):
-        sql = """
-        INSERT INTO perfil_param (
-          profile, version, ind_ini_per, sit_especial, ident, nome,
-          logradouro, numero, complemento, bairro, uf, cod_mun, cep,
-          telefone, email, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-        ON CONFLICT(profile) DO UPDATE SET
-          version=excluded.version,
-          ind_ini_per=excluded.ind_ini_per,
-          sit_especial=excluded.sit_especial,
-          ident=excluded.ident,
-          nome=excluded.nome,
-          logradouro=excluded.logradouro,
-          numero=excluded.numero,
-          complemento=excluded.complemento,
-          bairro=excluded.bairro,
-          uf=excluded.uf,
-          cod_mun=excluded.cod_mun,
-          cep=excluded.cep,
-          telefone=excluded.telefone,
-          email=excluded.email,
-          updated_at=CURRENT_TIMESTAMP
-        """
-        params = (
-            profile, p["version"], p["ind_ini_per"], p["sit_especial"], p["ident"], p["nome"],
-            p["logradouro"], p["numero"], p["complemento"], p["bairro"], p["uf"],
-            p["cod_mun"], p["cep"], p["telefone"], p["email"]
-        )
-        self.execute_query(sql, params)
-
-    def _create_tables(self):
-        self.conn.cursor().executescript("""
-        CREATE TABLE IF NOT EXISTS imovel_rural (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, cod_imovel TEXT UNIQUE NOT NULL,
-            pais TEXT NOT NULL DEFAULT 'BR', moeda TEXT NOT NULL DEFAULT 'BRL',
-            cad_itr TEXT, caepf TEXT, insc_estadual TEXT, nome_imovel TEXT NOT NULL,
-            endereco TEXT NOT NULL, num TEXT, compl TEXT, bairro TEXT NOT NULL,
-            uf TEXT NOT NULL, cod_mun TEXT NOT NULL, cep TEXT NOT NULL,
-            tipo_exploracao INTEGER NOT NULL, participacao REAL NOT NULL DEFAULT 100.0,
-            area_total REAL, area_utilizada REAL, data_cadastro DATE DEFAULT CURRENT_DATE
-        );
-        CREATE TABLE IF NOT EXISTS conta_bancaria (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, cod_conta TEXT UNIQUE NOT NULL,
-            pais_cta TEXT NOT NULL DEFAULT 'BR', banco TEXT, nome_banco TEXT NOT NULL,
-            agencia TEXT NOT NULL, num_conta TEXT NOT NULL, saldo_inicial REAL DEFAULT 0,
-            data_abertura DATE DEFAULT CURRENT_DATE
-        );
-        CREATE TABLE IF NOT EXISTS participante (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, cpf_cnpj TEXT UNIQUE NOT NULL,
-            nome TEXT NOT NULL, tipo_contraparte INTEGER NOT NULL,
-            data_cadastro DATE DEFAULT CURRENT_DATE
-        );
-        CREATE TABLE IF NOT EXISTS cultura (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, tipo TEXT NOT NULL,
-            ciclo TEXT, unidade_medida TEXT
-        );
-        CREATE TABLE IF NOT EXISTS area_producao (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, imovel_id INTEGER NOT NULL,
-            cultura_id INTEGER NOT NULL, area REAL NOT NULL, data_plantio DATE,
-            data_colheita_estimada DATE, produtividade_estimada REAL,
-            FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id),
-            FOREIGN KEY(cultura_id) REFERENCES cultura(id)
-        );
-        CREATE TABLE IF NOT EXISTS estoque (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, produto TEXT NOT NULL,
-            quantidade REAL NOT NULL, unidade_medida TEXT NOT NULL,
-            valor_unitario REAL, local_armazenamento TEXT,
-            data_entrada DATE DEFAULT CURRENT_DATE, data_validade DATE,
-            imovel_id INTEGER, FOREIGN KEY(imovel_id) REFERENCES imovel_rural(id)
-        );
-        CREATE TABLE IF NOT EXISTS lancamento (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data DATE NOT NULL,
-            cod_imovel INTEGER NOT NULL,
-            cod_conta INTEGER NOT NULL,
-            num_doc TEXT,
-            tipo_doc INTEGER NOT NULL,
-            historico TEXT NOT NULL,
-            id_participante INTEGER,
-            tipo_lanc INTEGER NOT NULL,
-            valor_entrada REAL DEFAULT 0,
-            valor_saida REAL DEFAULT 0,
-            saldo_final REAL NOT NULL,
-            natureza_saldo TEXT NOT NULL,
-            usuario TEXT NOT NULL,
-            categoria TEXT,
-            data_ord INTEGER,                 -- <<< NOVO CAMPO
-            area_afetada INTEGER,
-            quantidade REAL,
-            unidade_medida TEXT,
-            FOREIGN KEY(cod_imovel) REFERENCES imovel_rural(id),
-            FOREIGN KEY(cod_conta) REFERENCES conta_bancaria(id),
-            FOREIGN KEY(id_participante) REFERENCES participante(id),
-            FOREIGN KEY(area_afetada) REFERENCES area_producao(id)
-        );
-        CREATE TABLE IF NOT EXISTS perfil_param (
-            profile TEXT PRIMARY KEY,
-            version TEXT,
-            ind_ini_per TEXT,
-            sit_especial TEXT,
-            ident TEXT,
-            nome TEXT,
-            logradouro TEXT,
-            numero TEXT,
-            complemento TEXT,
-            bairro TEXT,
-            uf TEXT,
-            cod_mun TEXT,
-            cep TEXT,
-            telefone TEXT,
-            email TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-        self.conn.commit()
-
-    def _create_views(self):
-        self.conn.cursor().executescript("""
-        CREATE VIEW IF NOT EXISTS saldo_contas AS
-        SELECT cb.id, cb.cod_conta, cb.nome_banco,
-               l.saldo_final * (CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo_atual
-        FROM conta_bancaria cb
-        LEFT JOIN (SELECT cod_conta, MAX(id) AS max_id FROM lancamento GROUP BY cod_conta) last_l
-            ON cb.id = last_l.cod_conta
-        LEFT JOIN lancamento l ON last_l.max_id = l.id;
-    
-        CREATE VIEW IF NOT EXISTS resumo_categorias AS
-        SELECT categoria, SUM(valor_entrada) AS total_entradas, SUM(valor_saida) AS total_saidas,
-               strftime('%Y', data) AS ano, strftime('%m', data) AS mes
-        FROM lancamento
-        GROUP BY categoria, ano, mes;
-        """)
-        self.conn.commit()
-    
-    
-    def execute_query(self, sql: str, params: list = None, autocommit: bool = True):
-        cur = self.conn.cursor()
-        cur.execute(sql, params or [])
-        if autocommit:
-            self.conn.commit()
-        return cur
-
-    @contextmanager
+    @contextlib.contextmanager
     def bulk(self):
-        cur = self.conn.cursor()
-        cur.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        # No-op: não existe transação via PostgREST; manter compat até migrarmos escrita.
+        yield
 
-    def _migrate_add_data_ord(self):
-        cur = self.conn.cursor()
-        # Descobre as colunas atuais
-        cols = [r[1] for r in cur.execute("PRAGMA table_info(lancamento)").fetchall()]
-        # 1) Se a coluna não existir, adiciona
-        if "data_ord" not in cols:
-            cur.execute("ALTER TABLE lancamento ADD COLUMN data_ord INTEGER")
-            self.conn.commit()
-            # 2) Preenche para registros antigos (data DD/MM/AAAA ou YYYY-MM-DD)
-            # DD/MM/AAAA -> AAAAMMDD
-            cur.execute("""
-                UPDATE lancamento
-                   SET data_ord = CAST(substr(data, 7, 4) || substr(data, 4, 2) || substr(data, 1, 2) AS INTEGER)
-                 WHERE instr(data, '/') > 0 AND length(data) = 10
-            """)
-            # YYYY-MM-DD -> AAAAMMDD
-            cur.execute("""
-                UPDATE lancamento
-                   SET data_ord = CAST(replace(data, '-', '') AS INTEGER)
-                 WHERE instr(data, '-') > 0 AND length(data) = 10
-            """)
-            self.conn.commit()
-
-    def fetch_one(self, sql: str, params: list = None):
-        return self.execute_query(sql, params).fetchone()
-
-    def fetch_all(self, sql: str, params: list = None):
+    def fetch_all(self, sql: str, params: list | tuple | None = None):
         return self.execute_query(sql, params).fetchall()
 
-    def close(self):
-        self.conn.close()
+    def fetch_one(self, sql: str, params: list | tuple | None = None):
+        return self.execute_query(sql, params).fetchone()
 
-    def _create_indexes(self):
-        self.conn.cursor().executescript("""
-        CREATE INDEX IF NOT EXISTS idx_part_cpf        ON participante(cpf_cnpj);
-        CREATE INDEX IF NOT EXISTS idx_part_nome       ON participante(nome);
-        CREATE INDEX IF NOT EXISTS idx_cta_cod         ON conta_bancaria(cod_conta);
-        CREATE INDEX IF NOT EXISTS idx_cta_nome        ON conta_bancaria(nome_banco);
-        CREATE INDEX IF NOT EXISTS idx_imov_cod        ON imovel_rural(cod_imovel);
-        CREATE INDEX IF NOT EXISTS idx_imov_nome       ON imovel_rural(nome_imovel);
-        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord   ON lancamento(data_ord);   -- **chave**
-        CREATE INDEX IF NOT EXISTS idx_lanc_cta        ON lancamento(cod_conta);
-        CREATE INDEX IF NOT EXISTS idx_lanc_part       ON lancamento(id_participante);
-        CREATE INDEX IF NOT EXISTS idx_lanc_docp       ON lancamento(num_doc, id_participante);
-        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord_valent ON lancamento(data_ord, valor_entrada);
-        CREATE INDEX IF NOT EXISTS idx_lanc_data_ord_valsai ON lancamento(data_ord, valor_saida);
-        """)
-        self.conn.commit()
+    # -- perfil_param -----------------------------------------------------------
+    def get_perfil_param(self, profile_slug: str):
+        row = (self.sb.table("perfil_param")
+                  .select("version,ind_ini_per,sit_especial,ident,nome,logradouro,numero,complemento,bairro,uf,cod_mun,cep,telefone,email")
+                  .eq("profile", profile_slug).limit(1).execute().data)
+        if not row: return None
+        r = row[0]
+        return (r["version"], r["ind_ini_per"], r["sit_especial"], r["ident"], r["nome"],
+                r["logradouro"], r["numero"], r["complemento"], r["bairro"], r["uf"],
+                r["cod_mun"], r["cep"], r["telefone"], r["email"])
+
+    def upsert_participante(self, cpf_cnpj: str, nome: str, tipo: int) -> int | None:
+        """Upsert de participante pela chave de negócio cpf_cnpj."""
+        cpf = (cpf_cnpj or "").strip()
+        nm = (nome or "").strip()
+        tp = int(tipo)
+
+        # procura por cpf_cnpj existente
+        exist = (self.sb.table("participante")
+                    .select("id")
+                    .eq("cpf_cnpj", cpf)
+                    .limit(1).execute().data)
+        if exist:
+            pid = exist[0]["id"]
+            self.sb.table("participante").update({
+                "nome": nm,
+                "tipo_contraparte": tp
+            }).eq("id", pid).execute()
+            return pid
+        else:
+            res = (self.sb.table("participante").insert({
+                "cpf_cnpj": cpf,
+                "nome": nm,
+                "tipo_contraparte": tp
+            }).execute().data)
+            return res[0]["id"] if res else None
+
+    def upsert_perfil_param(self, profile_slug: str, p: dict):
+        payload = {
+            "profile": profile_slug,
+            "version": p.get("version"),
+            "ind_ini_per": p.get("ind_ini_per"),
+            "sit_especial": p.get("sit_especial"),
+            "ident": p.get("ident"),
+            "nome": p.get("nome"),
+            "logradouro": p.get("logradouro"),
+            "numero": p.get("numero"),
+            "complemento": p.get("complemento"),
+            "bairro": p.get("bairro"),
+            "uf": p.get("uf"),
+            "cod_mun": p.get("cod_mun"),
+            "cep": p.get("cep"),
+            "telefone": p.get("telefone"),
+            "email": p.get("email"),
+        }
+        # upsert pela PK "profile"
+        self.sb.table("perfil_param").upsert(payload, on_conflict="profile").execute()
+
+    # --------- SELECT dispatcher ----------
+    def _run_select(self, sql: str, params: list | tuple):
+        s_norm = " ".join((sql or "").strip().split())
+        s_low = s_norm.lower()
+
+        # 0) Helpers
+        def _fmt_date_iso_to_br(iso_txt: str) -> str:
+            if not iso_txt: return ""
+            if "-" in iso_txt and len(iso_txt) >= 10:
+                y, m, d = iso_txt[:10].split("-")
+                return f"{int(d):02d}/{int(m):02d}/{y}"
+            return iso_txt
+
+        # 1) SUM(saldo_atual) FROM saldo_contas  -> computa via conta_bancaria + último lancamento
+        if s_low.startswith("select sum(saldo_atual) from saldo_contas"):
+            contas = self.sb.table("conta_bancaria").select("id,saldo_inicial").execute().data or []
+            total = 0
+            for c in contas:
+                cid = c.get("id"); si = c.get("saldo_inicial") or 0
+                last = (self.sb.table("lancamento")
+                            .select("saldo_final,natureza_saldo")
+                            .eq("cod_conta", cid)
+                            .order("id", desc=True)  # nosso wrapper aceita 1 chave; ok aqui
+                            .limit(1).execute().data)
+                if last:
+                    sfin = last[0].get("saldo_final") or 0
+                    nature = (last[0].get("natureza_saldo") or "P").upper()
+                    sign = 1 if nature == "P" else -1
+                    total += (sfin * sign)
+                else:
+                    total += si
+            return [(total,)]
+
+        # 2) MIN/MAX(data_ord) FROM lancamento
+        if s_low.startswith("select min(data_ord), max(data_ord) from lancamento"):
+            rmin = (self.sb.table("lancamento")
+                        .select("data_ord")
+                        .order("data_ord", desc=False)
+                        .limit(1).execute().data)
+            rmax = (self.sb.table("lancamento")
+                        .select("data_ord")
+                        .order("data_ord", desc=True)
+                        .limit(1).execute().data)
+            vmin = rmin[0]["data_ord"] if rmin and rmin[0]["data_ord"] is not None else None
+            vmax = rmax[0]["data_ord"] if rmax and rmax[0]["data_ord"] is not None else None
+            return [(vmin, vmax)]
+
+        # 3) SUM(valor_entrada|valor_saida) BETWEEN datas (data_ord)
+        m = re.match(r"select sum\((valor_entrada|valor_saida)\) from lancamento where data_ord between \? and \?", s_low)
+        if m:
+            col = m.group(1)
+            d1, d2 = params
+            data = (self.sb.table("lancamento")
+                        .select(col)
+                        .gte("data_ord", d1)
+                        .lte("data_ord", d2)
+                        .execute().data) or []
+            total = sum((r.get(col) or 0) for r in data)
+            return [(total,)]
+
+        # 4) SELECT de lançamentos com JOIN/alias (listagem principal da UI)
+        #    (reconhece o padrão do SQL original)
+        if "from lancamento l" in s_low and "where l.data_ord between ? and ?" in s_low:
+            d1_ord, d2_ord = params
+
+            # 4.1 busca lançamentos no intervalo
+            rows = (self.sb.table("lancamento")
+                        .select("id,data,cod_imovel,num_doc,id_participante,historico,tipo_lanc,valor_entrada,valor_saida,saldo_final,natureza_saldo,usuario,data_ord,cod_conta")
+                        .gte("data_ord", d1_ord)
+                        .lte("data_ord", d2_ord)
+                        .execute().data) or []
+
+            # 4.2 filtra por perfil ativo (via imovel.perfil_id)
+            if self.perfil_id:
+                imoveis = (self.sb.table("imovel_rural")
+                               .select("id")
+                               .eq("perfil_id", self.perfil_id)
+                               .execute().data) or []
+                imovel_ids = {r["id"] for r in imoveis}
+                rows = [r for r in rows if r.get("cod_imovel") in imovel_ids]
+
+            # 4.3 mapas auxiliares (imóvel e participante)
+            ids_imovel = sorted({r.get("cod_imovel") for r in rows if r.get("cod_imovel") is not None})
+            ids_part   = sorted({r.get("id_participante") for r in rows if r.get("id_participante") is not None})
+
+            imap = {}
+            if ids_imovel:
+                im_data = (self.sb.table("imovel_rural")
+                               .select("id,nome_imovel")
+                               .execute().data) or []
+                imap = {r["id"]: (r.get("nome_imovel") or "") for r in im_data}
+
+            pmap = {}
+            if ids_part:
+                p_data = (self.sb.table("participante")
+                               .select("id,nome")
+                               .execute().data) or []
+                pmap = {r["id"]: (r.get("nome") or "") for r in p_data}
+
+            # 4.4 monta saída conforme colunas originais e ordena (data_ord desc, id desc)
+            def _key(r):
+                do = r.get("data_ord")
+                return (-(do if isinstance(do, int) else -1), -(r.get("id") or 0))
+
+            rows_sorted = sorted(rows, key=_key)
+
+            out = []
+            for r in rows_sorted:
+                dtxt = _fmt_date_iso_to_br(str(r.get("data") or ""))
+                tl = int(r.get("tipo_lanc") or 0)
+                tipo = "Receita" if tl == 1 else ("Despesa" if tl == 2 else "Adiantamento")
+                nature = (r.get("natureza_saldo") or "P").upper()
+                sign = 1 if nature == "P" else -1
+                saldo = (r.get("saldo_final") or 0) * sign
+                out.append((
+                    r.get("id"),
+                    dtxt,
+                    imap.get(r.get("cod_imovel"), ""),
+                    r.get("num_doc"),
+                    pmap.get(r.get("id_participante"), ""),
+                    r.get("historico"),
+                    tipo,
+                    r.get("valor_entrada") or 0,
+                    r.get("valor_saida") or 0,
+                    saldo,
+                    r.get("usuario") or ""
+                ))
+            return out
+
+        # 5) PARTICIPANTE: id por cpf_cnpj
+        m = re.match(r"select id from participante where cpf_cnpj\s*=\s*\?", s_low)
+        if m:
+            digits = params[0]
+            data = (self.sb.table("participante")
+                        .select("id")
+                        .eq("cpf_cnpj", digits)
+                        .limit(1).execute().data)
+            return ([(data[0]["id"],)] if data else [None])
+
+        # 6) PARTICIPANTE: dados por id
+        m = re.match(r"select cpf_cnpj, nome, tipo_contraparte from participante where id\s*=\s*\?", s_low)
+        if m:
+            pid = params[0]
+            data = (self.sb.table("participante")
+                        .select("cpf_cnpj,nome,tipo_contraparte")
+                        .eq("id", pid)
+                        .limit(1).execute().data)
+            if not data: return [None]
+            d = data[0]
+            return [(d.get("cpf_cnpj"), d.get("nome"), d.get("tipo_contraparte"))]
+
+        # 7) IMÓVEL: id por cod_imovel
+        m = re.match(r"select id from imovel_rural where cod_imovel\s*=\s*\?", s_low)
+        if m:
+            cod = params[0]
+            q = (self.sb.table("imovel_rural")
+                        .select("id")
+                        .eq("cod_imovel", cod))
+            if self.perfil_id: q = q.eq("perfil_id", self.perfil_id)
+            data = q.limit(1).execute().data
+            return ([(data[0]["id"],)] if data else [None])
+
+        # 8) CONTA: id por cod_conta
+        m = re.match(r"select id from conta_bancaria where cod_conta\s*=\s*\?", s_low)
+        if m:
+            cod = params[0]
+            q = (self.sb.table("conta_bancaria")
+                        .select("id")
+                        .eq("cod_conta", cod))
+            if self.perfil_id: q = q.eq("perfil_id", self.perfil_id)
+            data = q.limit(1).execute().data
+            return ([(data[0]["id"],)] if data else [None])
+
+        # 9) CONTA: select ... where id=?
+        if s_low.startswith("select cod_conta"):
+            cid = params[0]
+            cols = s_norm[s_low.find("select")+6:s_low.find("from")].strip()
+            data = (self.sb.table("conta_bancaria")
+                        .select(cols)
+                        .eq("id", cid)
+                        .limit(1).execute().data)
+            if not data: return [None]
+            cols_list = [c.strip() for c in cols.split(",")]
+            return [_tuplize(data, cols_list)][0]
+
+        # 10) PARTICIPANTE: listas para combos
+        if s_low.startswith("select id, nome, cpf_cnpj from participante order by nome"):
+            rows = (self.sb.table("participante")
+                        .select("id,nome,cpf_cnpj")
+                        .order("nome").execute().data)
+            return _tuplize(rows, ["id","nome","cpf_cnpj"])
+
+        if s_low.startswith("select id, nome from participante order by nome"):
+            rows = (self.sb.table("participante")
+                        .select("id,nome")
+                        .order("nome").execute().data)
+            return _tuplize(rows, ["id","nome"])
+
+        if s_low.startswith("select id,cpf_cnpj,nome,tipo_contraparte,data_cadastro from participante order by data_cadastro desc"):
+            rows = (self.sb.table("participante")
+                        .select("id,cpf_cnpj,nome,tipo_contraparte,data_cadastro")
+                        .order("data_cadastro", desc=True).execute().data)
+            return _tuplize(rows, ["id","cpf_cnpj","nome","tipo_contraparte","data_cadastro"])
+
+        # 11) IMÓVEL / CONTA: listas simples
+        if s_low.startswith("select id, nome_imovel from imovel_rural"):
+            q = self.sb.table("imovel_rural").select("id,nome_imovel")
+            if self.perfil_id: q = q.eq("perfil_id", self.perfil_id)
+            rows = q.order("nome_imovel").execute().data
+            return _tuplize(rows, ["id","nome_imovel"])
+
+        if s_low.startswith("select id, nome_banco from conta_bancaria"):
+            q = self.sb.table("conta_bancaria").select("id,nome_banco")
+            if self.perfil_id: q = q.eq("perfil_id", self.perfil_id)
+            rows = q.order("nome_banco").execute().data
+            return _tuplize(rows, ["id","nome_banco"])
+
+        # 12) Fallback: SELECT simples sem WHERE/ORDER complexos
+        m = re.match(r"select\s+(?P<cols>[\w\*,\s]+)\s+from\s+(?P<table>\w+)$", s_low)
+        if m:
+            cols = m.group("cols").replace(" ", "")
+            table = m.group("table")
+            rows = self.sb.table(table).select(cols).execute().data
+            return _tuplize(rows, [c for c in cols.split(",")])
+
+        # SELECT da grade de "Gerenciamento de Imóveis"
+        if s_low.startswith(
+            "select id, cod_imovel, nome_imovel, uf, area_total, area_utilizada, participacao from imovel_rural order by nome_imovel"
+        ):
+            q = (self.sb.table("imovel_rural")
+                    .select("id,cod_imovel,nome_imovel,uf,area_total,area_utilizada,participacao"))
+            if getattr(self, "perfil_id", None):
+                q = q.eq("perfil_id", self.perfil_id)
+            rows = q.order("nome_imovel").execute().data or []
+            return [
+                (
+                    r.get("id"),
+                    r.get("cod_imovel"),
+                    r.get("nome_imovel"),
+                    r.get("uf"),
+                    r.get("area_total"),
+                    r.get("area_utilizada"),
+                    r.get("participacao"),
+                )
+                for r in rows
+            ]
+
+        if s_low.startswith("select id, nome_imovel from imovel_rural order by nome_imovel"):
+            q = self.sb.table("imovel_rural").select("id,nome_imovel")
+            if getattr(self, "perfil_id", None):
+                q = q.eq("perfil_id", self.perfil_id)
+            rows = q.order("nome_imovel").execute().data or []
+            return [(r.get("id"), r.get("nome_imovel")) for r in rows]
+
+        # SELECT da grade de "Gerenciamento de Contas"
+        if re.match(
+            r"select\s+id\s*,\s*cod_conta\s*,\s*nome_banco\s*,\s*agencia\s*,\s*num_conta\s*,\s*saldo_inicial\s*from\s+conta_bancaria\s+order\s+by\s+nome_banco",
+            s_low
+        ):
+            q = (self.sb.table("conta_bancaria")
+                    .select("id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial"))
+            if getattr(self, "perfil_id", None):
+                q = q.eq("perfil_id", self.perfil_id)
+            rows = q.order("nome_banco").execute().data or []
+            return [
+                (
+                    r.get("id"),
+                    r.get("cod_conta"),
+                    r.get("nome_banco"),
+                    r.get("agencia"),
+                    r.get("num_conta"),
+                    r.get("saldo_inicial"),
+                )
+                for r in rows
+            ]
+
+        # 13) Não mapeado
+        raise NotImplementedError(f"SELECT não mapeado para Supabase:\n{sql}")
+
+# --- Realtime bridge (Supabase -> UI) -----------------------------------------
+class RealtimeBridge:
+    def __init__(self, sb: Client, tables: list[str], schema: str = SUPABASE_SCHEMA, channel: str = os.getenv("SUPABASE_RT_CHANNEL", "agroapp-rt")):
+        # mantém assinatura p/ não mudar chamadas existentes
+        self.tables = tables
+        self.schema = schema
+        self.channel = channel
+        self._thread = None
+        self._stop = False
+
+    def start(self, on_change):
+        import asyncio
+
+        def _runner():
+            async def main():
+                self._stop = False
+                asb: AsyncClient = await create_async_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+                ch = asb.channel(self.channel)
+                for t in self.tables:
+                    ch.on_postgres_changes(event="*", schema=self.schema, table=t, callback=on_change)
+                await ch.subscribe()
+                # loop de vida do canal
+                while not self._stop:
+                    await asyncio.sleep(0.5)
+                try:
+                    await ch.unsubscribe()
+                except Exception:
+                    pass
+            asyncio.run(main())
+
+        self._thread = threading.Thread(target=_runner, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop = True
 
 # --- ESTILO GLOBAL AGRO  ---
 STYLE_SHEET = """
@@ -1329,74 +1373,21 @@ class CadastroImovelDialog(CadastroBaseDialog):
         for w in [self.area_total, self.area_utilizada]: w.setFixedHeight(25)
 
     def _load_data(self):
-        if not self.lanc_id:
-            return
-    
-        row = self.db.fetch_one(
-            "SELECT data, cod_imovel, cod_conta, num_doc, tipo_doc, historico, "
-            "id_participante, tipo_lanc, valor_entrada, valor_saida, natureza_saldo "
-            "FROM lancamento WHERE id = ?",
-            (self.lanc_id,)
-        )
-    
-        if not row:
-            # Fallback: busca direto no Supabase
-            try:
-                from cloud_sync import get_lancamento_blocking
-                r = get_lancamento_blocking(self.lanc_id)
-            except Exception:
-                r = None
-            if not r:
-                return
-            data = r.get("data")
-            data = data if (data and "/" in data) else (
-                f"{data[8:10]}/{data[5:7]}/{data[0:4]}" if data else ""
-            )
-            row = (
-                data,
-                r.get("cod_imovel"),
-                r.get("cod_conta"),
-                r.get("num_doc"),
-                r.get("tipo_doc"),
-                r.get("historico"),
-                r.get("id_participante"),
-                r.get("tipo_lanc"),
-                r.get("valor_entrada"),
-                r.get("valor_saida"),
-                r.get("natureza_saldo"),
-            )
-    
-        (data, imovel_id, conta_id, num_doc, tipo_doc,
-         historico, part_id, tipo_lanc, ent, sai, nat) = row
-    
-        _d = QDate.fromString(data or "", "dd/MM/yyyy")
-        if not _d.isValid():
-            _d = QDate.currentDate()
-        self.data.setDate(_d)
-    
-        idx_im = self.imovel.findData(imovel_id)
-        if idx_im >= 0:
-            self.imovel.setCurrentIndex(idx_im)
-    
-        idx_ct = self.conta.findData(conta_id)
-        if idx_ct >= 0:
-            self.conta.setCurrentIndex(idx_ct)
-    
-        self.num_doc.setText(num_doc or "")
-        if isinstance(tipo_doc, int) and 1 <= tipo_doc <= 6:
-            self.tipo_doc.setCurrentIndex(tipo_doc - 1)
-    
-        self.historico.setText(historico or "")
-        idx_pr = self.participante.findData(part_id)
-        if idx_pr >= 0:
-            self.participante.setCurrentIndex(idx_pr)
-    
-        if isinstance(tipo_lanc, int) and 1 <= tipo_lanc <= 3:
-            self.tipo_lanc.setCurrentIndex(tipo_lanc - 1)
-    
-        self.valor_entrada.setText("" if ent is None else f"{float(ent):.2f}")
-        self.valor_saida.setText("" if sai is None else f"{float(sai):.2f}")
-    
+        if not self.imovel_id: return
+        row = self.db.fetch_one("""SELECT cod_imovel, pais, moeda, cad_itr, caepf, insc_estadual,
+            nome_imovel, endereco, num, compl, bairro, uf, cod_mun, cep,
+            tipo_exploracao, participacao, area_total, area_utilizada
+            FROM imovel_rural WHERE id=?""", (self.imovel_id,))
+        if not row: return
+        (cod, pais, moeda, cad, caepf, ie, nome, end, num, comp, bar, uf, mun, cep, tipo, part, at, au) = row
+        self.cod_imovel.setText(cod); self.pais.setCurrentText(pais); self.moeda.setCurrentText(moeda)
+        self.cad_itr.setText(cad or ""); self.caepf.setText(caepf or ""); self.insc_estadual.setText(ie or "")
+        self.nome_imovel.setText(nome); self.endereco.setText(end); self.num.setText(num or "")
+        self.compl.setText(comp or ""); self.bairro.setText(bar); self.uf.setText(uf)
+        self.cod_mun.setText(mun); self.cep.setText(cep); self.tipo_exploracao.setCurrentIndex(tipo-1)
+        self.participacao.setText(f"{part:.2f}"); self.area_total.setText(f"{at or 0:.2f}")
+        self.area_utilizada.setText(f"{au or 0:.2f}")
+
     def salvar(self):
         campos = [self.cod_imovel.text().strip(), self.pais.currentText(), self.moeda.currentText(),
                   self.nome_imovel.text().strip(), self.endereco.text().strip(), self.bairro.text().strip(),
@@ -1630,12 +1621,11 @@ class ParametrosDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Parâmetros do Contribuinte")
         self.setMinimumSize(400, 500)
-        self.settings = profile_settings()
         self.db = Database()
         row = self.db.get_perfil_param(CURRENT_PROFILE)
         def _val(k, default=""):
             if not row:  # sem registro no SQL ainda → usa QSettings como fallback
-                return self.settings.value(f"param/{k}", default)
+                return default
             # mapeamento na mesma ordem do SELECT em get_perfil_param
             keys = ["version","ind_ini_per","sit_especial","ident","nome",
                     "logradouro","numero","complemento","bairro","uf",
@@ -1666,68 +1656,34 @@ class ParametrosDialog(QDialog):
 
         layout = QFormLayout(self)
 
-        # Versão do leiaute
-        self.version = QLineEdit(self.settings.value("param/version", "0013"))
+        # monta o formulário usando os widgets já criados acima (vindos do Supabase)
         layout.addRow("Versão do Leiaute:", self.version)
-
-        # Indicador de início do período (0000 campo 5)
-        self.ind_ini_per = QComboBox()
-        self.ind_ini_per.addItems(["0 - Regular (início em 01/01)", "1 - Início fora de 01/01"])
-        iip = self.settings.value("param/ind_ini_per", "0")
-        self.ind_ini_per.setCurrentText("0 - Regular (início em 01/01)" if iip=="0" else "1 - Início fora de 01/01")
         layout.addRow("Ind. início do período:", self.ind_ini_per)
-
-        # Situação especial (0000 campo 6)
-        self.sit_especial = QComboBox()
-        self.sit_especial.addItems([
-            "0 - Normal (sem ocorrência)",
-            "1 - Falecimento",
-            "2 - Espólio",
-            "3 - Saída definitiva do país"
-        ])
-        se = self.settings.value("param/sit_especial", "0")
-        idx = int(se) if se in {"0","1","2","3"} else 0
-        self.sit_especial.setCurrentIndex(idx)
         layout.addRow("Situação especial:", self.sit_especial)
-
-        # ——— CNPJ/CPF (agora só CPF) ———
-        self.ident = QLineEdit(self.settings.value("param/ident", ""))
-        self.ident.setInputMask("000.000.000-00;_")
         layout.addRow("CPF:", self.ident)
-
-        # Nome / Razão Social
-        self.nome = QLineEdit(self.settings.value("param/nome", ""))
         layout.addRow("Nome / Razão Social:", self.nome)
-
+        
         # Endereço
-        self.logradouro  = QLineEdit(self.settings.value("param/logradouro", ""))
-        self.numero      = QLineEdit(self.settings.value("param/numero", ""))
-        self.complemento = QLineEdit(self.settings.value("param/complemento", ""))
-        self.bairro      = QLineEdit(self.settings.value("param/bairro", ""))
         layout.addRow("Logradouro:", self.logradouro)
         layout.addRow("Número:", self.numero)
         layout.addRow("Complemento:", self.complemento)
         layout.addRow("Bairro:", self.bairro)
-
+        
         # Localização
-        self.uf     = QLineEdit(self.settings.value("param/uf", ""))
-        self.cod_mun= QLineEdit(self.settings.value("param/cod_mun", ""))
-        self.cep    = QLineEdit(self.settings.value("param/cep", ""))
         layout.addRow("UF:", self.uf)
         layout.addRow("Cód. Município:", self.cod_mun)
         layout.addRow("CEP:", self.cep)
-
+        
         # Contato
-        self.telefone = QLineEdit(self.settings.value("param/telefone", ""))
-        self.email    = QLineEdit(self.settings.value("param/email", ""))
         layout.addRow("Telefone:", self.telefone)
         layout.addRow("Email:", self.email)
-
+        
         # Botões
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.salvar)
         btns.rejected.connect(self.reject)
         layout.addRow(btns)
+        
 
     def _ajustar_mask(self):
         if self.tipo.currentText() == "Pessoa Jurídica":
@@ -1755,12 +1711,6 @@ class ParametrosDialog(QDialog):
 
         # 1) SQL (fonte de verdade por perfil)
         self.db.upsert_perfil_param(CURRENT_PROFILE, p)
-
-        # 2) Espelho no QSettings (compatibilidade com partes da UI já prontas)
-        s = self.settings
-        for k, v in p.items():
-            s.setValue(f"param/{k}", v)
-        s.sync()
 
         QMessageBox.information(self, "Sucesso", "Parâmetros salvos no banco de dados.")
         self.accept()
@@ -1807,7 +1757,6 @@ class DashboardWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
-        self.settings = profile_settings()
 
         self.layout = QVBoxLayout(self)
         self._build_filter_ui()
@@ -2563,42 +2512,6 @@ class LancamentoDialog(QDialog):
                 self.db.execute_query(sql, params)
 
             QMessageBox.information(self, "Sucesso", "Lançamento salvo com sucesso!")
-            # --- INÍCIO: enviar para a nuvem ---
-            try:
-                from cloud_sync import upsert_lancamento
-                # Monte o dicionário EXATAMENTE com os campos da tabela
-                if self.lanc_id:
-                    cur_id = self.lanc_id
-                else:
-                    # pega o último ID inserido (SQLite)
-                    cur_id = self.db.fetch_one("SELECT MAX(id) FROM lancamento")[0]
-
-                payload = {
-                    "id": cur_id,
-                    "data": data_str,
-                    "cod_imovel": self.imovel.currentData(),
-                    "cod_conta": self.conta.currentData(),
-                    "num_doc": raw_num or None,
-                    "tipo_doc": self.tipo_doc.currentIndex() + 1,
-                    "historico": self.historico.text().strip(),
-                    "id_participante": part,
-                    "tipo_lanc": self.tipo_lanc.currentIndex() + 1,
-                    "valor_entrada": ent,
-                    "valor_saida": sai,
-                    "saldo_final": abs(saldo_f),
-                    "natureza_saldo": nat,
-                    "usuario": usuario_ts,
-                    "categoria": None,
-                    "data_ord": data_ord,
-                    "area_afetada": None,
-                    "quantidade": None,
-                    "unidade_medida": None,
-                }
-                upsert_lancamento(payload)
-            except Exception as e:
-                print("Falha ao enviar para Supabase:", e)
-            # --- FIM: enviar para a nuvem ---
-
             self.accept()
 
         except Exception as e:
@@ -2849,37 +2762,25 @@ class GerenciamentoContasWidget(QWidget):
         self._save_column_filter()
 
     def _save_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            cfg = json.load(open(path, "r", encoding="utf-8"))
-        except:
-            cfg = {}
-        # salve um dicionário com duas chaves: "lanc" e "contas"
-        cfg["contas"] = [
-            not self.tabela.isColumnHidden(c)
-            for c in range(self.tabela.columnCount())
-        ]
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        # CONTAS
+        vis = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
+        kv_set(f"ui:columns:contas::{CURRENT_PROFILE}", vis)
 
     def _load_column_filter(self):
-        """Aplica o JSON salvo (mesmo arquivo de lanc) à tabela de contas."""
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            cfg = json.load(open(path, "r", encoding="utf-8"))
-            vis = cfg.get("contas", [])
-        except:
-            return
+        """Aplica preferências (contas) salvas no Supabase à tabela de contas."""
+        vis = kv_get(f"ui:columns:contas::{CURRENT_PROFILE}", []) or []
         for c, shown in enumerate(vis):
-            self.tabela.setColumnHidden(c, not shown)
+            if c < self.tabela.columnCount():
+                self.tabela.setColumnHidden(c, not bool(shown))
         # sincroniza o menu de checkboxes
         for action in self._filter_menu.actions():
-            chk = action.defaultWidget()
-            if isinstance(chk, QCheckBox):
-                lbl = chk.text()
-                idx = self._contas_labels.index(lbl)
-                chk.setChecked(not self.tabela.isColumnHidden(idx))
-
+            w = action.defaultWidget()
+            if isinstance(w, QCheckBox):
+                lbl = w.text()
+                if lbl in self._contas_labels:
+                    idx = self._contas_labels.index(lbl)
+                    w.setChecked(not self.tabela.isColumnHidden(idx))
+    
     def carregar_contas(self):
         rows = self.db.fetch_all(
             "SELECT id,cod_conta,nome_banco,agencia,num_conta,saldo_inicial FROM conta_bancaria ORDER BY nome_banco"
@@ -3033,42 +2934,26 @@ class GerenciamentoImoveisWidget(QWidget):
         self._save_imoveis_column_filter()
 
     def _save_imoveis_column_filter(self):
-        """Atualiza só o tópico 'imoveis' em lanc_filter.json, preservando as outras seções."""
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        # carrega tudo (ou cria vazio)
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
-        # gera lista de visibilidade
-        vis = [not self.tabela.isColumnHidden(c)
-               for c in range(self.tabela.columnCount())]
-        # atualiza só o tópico imoveis
-        cfg["imoveis"] = vis
-        # salva de volta
-        os.makedirs(CACHE_FOLDER, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        """Atualiza somente o tópico 'imoveis' no Supabase."""
+        vis = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
+        kv_set(f"ui:columns:imoveis::{CURRENT_PROFILE}", vis)
+
 
     def _load_imoveis_column_filter(self):
-        """Lê o tópico 'imoveis' de lanc_filter.json e aplica à tabela."""
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            vis = cfg.get("imoveis", [])
-        except Exception:
-            return
-        # aplica visibilidade
+        """Aplica o tópico 'imoveis' salvo no Supabase à tabela."""
+        vis = kv_get(f"ui:columns:imoveis::{CURRENT_PROFILE}", []) or []
         for c, shown in enumerate(vis):
-            self.tabela.setColumnHidden(c, not shown)
+            if c < self.tabela.columnCount():
+                self.tabela.setColumnHidden(c, not bool(shown))
         # sincroniza o menu de checkboxes
         for wa in self._imoveis_filter_menu.actions():
-            chk = wa.defaultWidget()
-            if isinstance(chk, QCheckBox):
-                idx = self._imoveis_labels.index(chk.text())
-                chk.setChecked(not self.tabela.isColumnHidden(idx))
+            w = wa.defaultWidget()
+            if isinstance(w, QCheckBox):
+                lbl = w.text()
+                if lbl in self._imoveis_labels:
+                    idx = self._imoveis_labels.index(lbl)
+                    w.setChecked(not self.tabela.isColumnHidden(idx))
+
 
     def _filter_imoveis(self, text: str):
         ListAccelerator.filter(self.tabela, text, delay_ms=0)
@@ -3293,42 +3178,43 @@ class GerenciamentoParticipantesWidget(QWidget):
         self._save_participantes_column_filter()
 
     def _save_participantes_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        except:
-            cfg = {}
-        cfg["participantes"] = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
-        os.makedirs(CACHE_FOLDER, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        vis = [not self.tabela.isColumnHidden(c) for c in range(self.tabela.columnCount())]
+        kv_set(f"ui:columns:participantes::{CURRENT_PROFILE}", vis)
+
 
     def _load_participantes_column_filter(self):
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            vis = cfg.get("participantes", [])
-        except:
-            return
+        vis = kv_get(f"ui:columns:participantes::{CURRENT_PROFILE}", []) or []
         for c, shown in enumerate(vis):
-            self.tabela.setColumnHidden(c, not shown)
+            if c < self.tabela.columnCount():
+                self.tabela.setColumnHidden(c, not bool(shown))
+        # sincroniza o menu de checkboxes
         for wa in self._part_filter_menu.actions():
-            chk = wa.defaultWidget()
-            if isinstance(chk, QCheckBox):
-                idx = self._participantes_labels.index(chk.text())
-                chk.setChecked(not self.tabela.isColumnHidden(idx))
+            w = wa.defaultWidget()
+            if isinstance(w, QCheckBox):
+                lbl = w.text()
+                if lbl in self._participantes_labels:
+                    idx = self._participantes_labels.index(lbl)
+                    w.setChecked(not self.tabela.isColumnHidden(idx))
+
 
     def _filter_participantes(self, text: str):
         # usa cache por linha e aplica já (delay=0)
         ListAccelerator.filter(self.tabela, text, delay_ms=0)
 
     def importar_participantes(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Importar Participantes", "", "TXT (*.txt);Excel (*.xlsx *.xls)")
-        if not path: return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importar Participantes",
+            "",
+            "Arquivos suportados (*.txt *.xlsx *.xls);;Apenas TXT (*.txt);;Apenas Excel (*.xlsx *.xls);;Todos os arquivos (*)"
+        )
+        if not path:
+            return
         try:
-            self._import_participantes_txt(path) if path.lower().endswith('.txt') else self._import_participantes_excel(path)
+            if path.lower().endswith(".txt"):
+                self._import_participantes_txt(path)
+            else:
+                self._import_participantes_excel(path)
             self.carregar_participantes()
         except Exception:
             QMessageBox.warning(self, "Importação Falhou", "Arquivo não segue o layout esperado e não foi importado.")
@@ -3506,22 +3392,117 @@ class GerenciamentoParticipantesWidget(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", f"Não foi possível importar o TXT informado.\n{e}")
 
-    def _import_participantes_txt(self, path):
-        with open(path, encoding='utf-8') as f:
-            for line in f:
-                parts = line.strip().split("|")
-                if len(parts) != 3: raise ValueError("Layout de TXT inválido")
-                cpf_cnpj, nome, tipo = parts
-                self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (cpf_cnpj.strip(), nome.strip(), int(tipo)))
+    def _import_participantes_txt(self, path: str):
+        """Importa TXT com linhas no formato:
+           CPF/CNPJ|NOME|TIPO
+           Ex: 02311428000180|WORLD SEG PRODUTOS PARA SEGURANCA LTDA|1
+        """
+        inseridos = 0
+        erros = 0
+        with open(path, "r", encoding="utf-8") as f:
+            for ln, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split("|")
+                if len(parts) < 3:
+                    erros += 1
+                    continue
+                cpf = parts[0].strip()
+                nome = parts[1].strip()
+                try:
+                    tipo = int(parts[2].strip())
+                except:
+                    erros += 1
+                    continue
 
-    def _import_participantes_excel(self, path):
-        df = pd.read_excel(path, dtype=str)
-        required = ['cpf_cnpj','nome','tipo_contraparte']
-        if not all(col in df.columns for col in required): raise ValueError("Layout de Excel inválido")
-        df.fillna('', inplace=True)
-        for row in df.itertuples(index=False):
-            self.db.execute_query("INSERT OR REPLACE INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", (row.cpf_cnpj.strip(), row.nome.strip(), int(row.tipo_contraparte)))
+                if not cpf or not nome:
+                    erros += 1
+                    continue
 
+                try:
+                    self.db.upsert_participante(cpf, nome, tipo)
+                    inseridos += 1
+                except Exception as e:
+                    print(f"Falha ln {ln} ({cpf}): {e}")
+                    erros += 1
+
+        msg = f"Importados/atualizados: {inseridos}"
+        if erros:
+            msg += f"\nLinhas com erro: {erros}"
+        QMessageBox.information(self, "Importação (TXT)", msg)
+
+    def _import_participantes_excel(self, path: str):
+        """Importa planilha com cabeçalhos na linha 1 e dados a partir da linha 2.
+           Colunas: CPF/CNPJ | NOME | TIPO (1,2,3...)
+        """
+        try:
+            import pandas as pd  # requer openpyxl para .xlsx
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao carregar pandas/openpyxl: {e}")
+            return
+    
+        try:
+            df = pd.read_excel(path, dtype=str, header=0)  # headers na linha 1
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Não foi possível ler a planilha: {e}")
+            return
+    
+        # Normaliza nomes de colunas: minúsculo, remove espaços, barras e underlines.
+        def norm(s: str) -> str:
+            return (str(s).strip().lower()
+                    .replace(" ", "")
+                    .replace("/", "")
+                    .replace("_", ""))
+    
+        cols_map = {norm(c): c for c in df.columns}
+    
+        # Aceita cabeçalhos "CPF/CNPJ", "NOME", "TIPO" (e variações)
+        need = {
+            "cpfcnpj": None,
+            "nome": None,
+            "tipo": None,
+        }
+        for k in list(need.keys()):
+            for cand_norm, original in cols_map.items():
+                if cand_norm == k:
+                    need[k] = original
+                    break
+                
+        faltando = [k for k, v in need.items() if v is None]
+        if faltando:
+            QMessageBox.critical(
+                self,
+                "Layout inválido",
+                "Cabeçalhos esperados na linha 1: CPF/CNPJ | NOME | TIPO"
+            )
+            return
+    
+        inseridos = 0
+        for _, row in df.iterrows():
+            cpf = str(row[need["cpfcnpj"]]).strip() if pd.notna(row[need["cpfcnpj"]]) else ""
+            nome = str(row[need["nome"]]).strip() if pd.notna(row[need["nome"]]) else ""
+            tipo_raw = row[need["tipo"]]
+            if pd.isna(tipo_raw):
+                continue
+            try:
+                tipo = int(str(tipo_raw).strip())
+            except:
+                continue
+            
+            if not cpf or not nome:
+                continue
+            
+            # Upsert direto no Supabase
+            try:
+                self.db.upsert_participante(cpf, nome, tipo)
+                inseridos += 1
+            except Exception as e:
+                # continua, mas mostra no final
+                print(f"Falha ao inserir/atualizar {cpf}: {e}")
+    
+        QMessageBox.information(self, "Importação", f"Participantes importados/atualizados: {inseridos}")
+    
     def carregar_participantes(self):
         rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
         self.tabela.setRowCount(len(rows)); tipos = {1:"PJ",2:"PF",3:"Órgão Público",4:"Outros"}
@@ -3579,52 +3560,20 @@ class CadastrosWidget(QTabWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__(); self.db = Database()
+        # Realtime: começa a escutar mudanças do banco
+        self._rt = RealtimeBridge(self.db.sb, [
+            "lancamento","conta_bancaria","imovel_rural","cultura","area_producao","estoque","participante","perfil_param"
+        ])
+        self._rt.start(self._on_realtime_change)
+
         self.setWindowTitle("Sistema AgroContábil - LCDPR")
         self.setGeometry(100,100,1200,800)
         self.setStyleSheet(STYLE_SHEET)
-        # Backup local diário (primeira abertura do dia)
-        try:
-            from daily_backup import run_daily_backup
-            run_daily_backup(PROJECT_DIR, CURRENT_PROFILE)
-        except Exception as e:
-            print("Backup diário falhou:", e)
-
         self._lanc_labels = ["ID","Data","Imóvel","Documento","Participante","Histórico","Tipo","Entrada","Saída","Saldo","Usuário"]
         self._setup_ui(); self._lanc_sort_state = {}
         self._create_profile_banner()
 
         install_counters_for_all_tables(self)
-
-        # --- SUPABASE REALTIME (ordem correta) ---
-        import cloud_sync
-
-        # 1) cria o cliente async (thread separada)
-        cloud_sync.init_client()
-
-        # 2) define o callback ANTES de registrar
-        def _on_cloud_change(evento, payload):
-            try:
-                tabela = (payload.get("table") or "").lower()
-                ev = (evento or "").lower()  # "insert" | "update" | "delete"
-
-                # Roteamento simples por tabela
-                if tabela == "lancamento":
-                    self.carregar_lancamentos()  # ou seu método de refresh atual
-                elif tabela == "participante":
-                    self.carregar_participantes()
-                elif tabela == "conta_bancaria":
-                    self.carregar_contas()
-                elif tabela == "imovel_rural":
-                    self.carregar_imoveis()
-
-                # Se quiser depurar:
-                # print("RT:", ev, tabela, "novo:", payload.get("new"), "antigo:", payload.get("old"))
-            except Exception as e:
-                print("Erro no callback realtime:", e)
-
-        # 3) agora sim: registra o callback no realtime
-        cloud_sync.init_realtime(_on_cloud_change)
-        # --- FIM SUPABASE REALTIME ---
 
     def _setup_ui(self):
         self.setWindowIcon(QIcon(APP_ICON))
@@ -3702,12 +3651,15 @@ class MainWindow(QMainWindow):
         # contador no layout (sem sobrepor a barra de filtros)
         attach_counter_in_layout(self.tab_lanc, self.lanc_filter_layout)
 
-        config_file = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', 'lanc_columns.json')
-        if os.path.exists(config_file):
-            with open(config_file, 'r', encoding='utf-8') as f:
-                vis = json.load(f)
-            for i, label in enumerate(self.tab_lanc.horizontalHeaderLabels()):
-                self.tab_lanc.setColumnHidden(i, not vis.get(label, True))
+        # === Preferências de visibilidade das colunas via Supabase (meta_kv) ===
+        try:
+            vis = kv_get(f"ui::lanc_columns::{CURRENT_PROFILE}", {}) or {}
+            if isinstance(vis, dict) and vis:
+                labels = [self.tab_lanc.horizontalHeaderItem(i).text() for i in range(self.tab_lanc.columnCount())]
+                for i, label in enumerate(labels):
+                    self.tab_lanc.setColumnHidden(i, not bool(vis.get(label, True)))
+        except Exception as e:
+            print("prefs colunas (load) erro:", e)
 
         hdr = self.tab_lanc.horizontalHeader()
         hdr.sectionDoubleClicked.connect(self._sort_lanc_by_column)
@@ -3755,6 +3707,25 @@ class MainWindow(QMainWindow):
         self.carregar_lancamentos(); self.profile_selector.setCurrentText("Cleuber Marcos")
         self.carregar_planejamento(); self._load_lanc_filter_settings()
 
+    def _on_realtime_change(self, payload):
+        # payload["table"] tem o nome da tabela; payload["eventType"] = INSERT|UPDATE|DELETE
+        t = payload.get("table")
+        try:
+            if t in ("lancamento","conta_bancaria"):
+                # atualize dashboards/saldos/combos conforme sua UI:
+                if hasattr(self, "dashboard"): 
+                    try: self.dashboard.recarregar()
+                    except Exception: pass
+            if t in ("imovel_rural","conta_bancaria","participante"):
+                # recarrega combos/listas simples
+                if hasattr(self, "cadw"):
+                    try:
+                        w0 = self.cadw.widget(0); w0.carregar_imoveis()
+                        w1 = self.cadw.widget(1); w1.carregar_contas()
+                    except Exception: pass
+        except Exception as e:
+            print("on_realtime_change error:", e)
+
     def _ajustar_colunas_lanc(self):
         """Cada coluna respeita seu conteúdo mínimo, e a sobra é dividida igualmente entre todas as visíveis."""
         try:
@@ -3787,37 +3758,30 @@ class MainWindow(QMainWindow):
         self.tab_lanc.setColumnHidden(col, not visible); self._save_lanc_filter_settings()
 
     def _save_lanc_filter_settings(self):
-        os.makedirs(CACHE_FOLDER, exist_ok=True)
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
-        cfg["lancamentos"] = [not self.tab_lanc.isColumnHidden(c) for c in range(self.tab_lanc.columnCount())]
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        # monta vetor de visibilidade (True = coluna visível)
+        vis = [not self.tab_lanc.isColumnHidden(c) for c in range(self.tab_lanc.columnCount())]
+        kv_set(f"ui:lanc_columns::{CURRENT_PROFILE}", vis)
+
     
     def _load_lanc_filter_settings(self):
-        path = os.path.join(CACHE_FOLDER, 'Cleuber Marcos', 'json', "lanc_filter.json")
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-                vis = cfg.get("lancamentos", [])
-        except Exception:
-            return
-        for c, shown in enumerate(vis):
-            self.tab_lanc.setColumnHidden(c, not shown)
-        for wa in self._lanc_filter_menu.actions():
-            if isinstance(wa, QWidgetAction):
-                chk = wa.defaultWidget()
-                if isinstance(chk, QCheckBox):
-                    label = chk.text()
-                    try:
-                        idx = self._lanc_labels.index(label)
-                    except ValueError:
-                        continue
-                    chk.setChecked(not self.tab_lanc.isColumnHidden(idx))
+        # lê vetor de visibilidade do Supabase
+        vis = kv_get(f"ui:lanc_columns::{CURRENT_PROFILE}", [])
+        if isinstance(vis, list) and vis:
+            for c, visible in enumerate(vis):
+                if c < self.tab_lanc.columnCount():
+                    self.tab_lanc.setColumnHidden(c, not bool(visible))
+    
+        # sincroniza os checkboxes do menu com o estado atual das colunas
+        if hasattr(self, "_lanc_filter_menu") and hasattr(self, "_lanc_labels"):
+            for wa in self._lanc_filter_menu.actions():
+                if isinstance(wa, QWidgetAction):
+                    w = wa.defaultWidget()
+                    if isinstance(w, QCheckBox):
+                        label = w.text()
+                        if label in self._lanc_labels:
+                            col = self._lanc_labels.index(label)
+                            w.setChecked(not self.tab_lanc.isColumnHidden(col))
+    
     
     def toggle_sort_lanc(self, index: int):
         state = self._lanc_sort_state.get(index, 0)
@@ -3906,8 +3870,8 @@ class MainWindow(QMainWindow):
         self._update_profile_banner()
 
         # reabrir conexões
-        self.db.conn.close(); self.db = Database()
-        self.dashboard.db.conn.close(); self.dashboard.db = Database()
+        self.db.set_profile(profile)
+        self.dashboard.db.set_profile(profile)
 
         # menor/maior data do novo perfil
         row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
@@ -3928,8 +3892,8 @@ class MainWindow(QMainWindow):
         self.carregar_planejamento()
 
         # reatualiza cadastros
-        im_w = self.cadw.widget(0); im_w.db.conn.close(); im_w.db = Database(); im_w.carregar_imoveis()
-        ct_w = self.cadw.widget(1); ct_w.db.conn.close(); ct_w.db = Database(); ct_w.carregar_contas()
+        im_w = self.cadw.widget(0); im_w.db.set_profile(profile); im_w.carregar_imoveis()
+        ct_w = self.cadw.widget(1); ct_w.db.set_profile(profile); ct_w.carregar_contas()
 
         QMessageBox.information(self, "Perfil alterado", f"Perfil Trocado para: '{profile}'.")
 
@@ -3951,58 +3915,51 @@ class MainWindow(QMainWindow):
         dlg.exec()
     
     def carregar_lancamentos(self):
-        # 1) Consulta na NUVEM (fonte de verdade)
+        # 1) Consulta (rápida, indexada)
         d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
-
-        try:
-            from cloud_sync import fetch_lancamentos_range_blocking
-            rows = fetch_lancamentos_range_blocking(d1_ord, d2_ord) or []
-        except Exception as e:
-            # fallback: se der erro de rede, mostra o que tiver local
-            print("Falha ao consultar Supabase, usando cache local:", e)
-            q = """
-            SELECT
-                l.id,
-                CASE
-                    WHEN instr(l.data, '/') > 0
-                        THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
-                    ELSE strftime('%d/%m/%Y', l.data)
-                END AS data,
-                i.nome_imovel,
-                l.num_doc,
-                p.nome,
-                l.historico,
-                CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END AS tipo,
-                l.valor_entrada,
-                l.valor_saida,
-                (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo,
-                l.usuario
-            FROM lancamento l
-            JOIN imovel_rural i       ON l.cod_imovel = i.id
-            LEFT JOIN participante p  ON l.id_participante = p.id
-            WHERE l.data_ord BETWEEN ? AND ?
-            ORDER BY l.data_ord DESC, l.id DESC
-            """
-            rows = self.db.fetch_all(q, [d1_ord, d2_ord])
-
+        q = """
+        SELECT
+            l.id,
+            CASE
+                WHEN instr(l.data, '/') > 0
+                    THEN substr(l.data, 1, 2) || '/' || substr(l.data, 4, 2) || '/' || substr(l.data, 7, 4)
+                ELSE strftime('%d/%m/%Y', l.data)
+            END AS data,
+            i.nome_imovel,
+            l.num_doc,
+            p.nome,
+            l.historico,
+            CASE l.tipo_lanc WHEN 1 THEN 'Receita' WHEN 2 THEN 'Despesa' ELSE 'Adiantamento' END AS tipo,
+            l.valor_entrada,
+            l.valor_saida,
+            (l.saldo_final * CASE l.natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) AS saldo,
+            l.usuario
+        FROM lancamento l
+        JOIN imovel_rural i       ON l.cod_imovel = i.id
+        LEFT JOIN participante p  ON l.id_participante = p.id
+        WHERE l.data_ord BETWEEN ? AND ?
+        ORDER BY l.data_ord DESC, l.id DESC
+        """
+        rows = self.db.fetch_all(q, [d1_ord, d2_ord])
+    
         # 2) Prepara a tabela sem travar a UI
         self.tab_lanc.setSortingEnabled(False)
         self.tab_lanc.setUpdatesEnabled(False)
         self.tab_lanc.clearContents()
         self.tab_lanc.setRowCount(len(rows))
         self.tab_lanc.setUpdatesEnabled(True)
-
+    
         # 3) Estado para carga assíncrona
         self._lanc_rows = rows
         self._lanc_fill_pos = 0
-
-        # 4) Primeiro pedaço
+    
+        # 4) Pinta um primeiro pedaço já (feedback instantâneo)
         self._fill_lanc_chunk(size=300)
-
-        # 5) Resto em background
+    
+        # 5) Agenda o resto em background (sem travar)
         QTimer.singleShot(0, self._fill_lanc_async)
-
+    
     def _fill_lanc_async(self):
         # Ajuste o tamanho do chunk conforme a sua máquina
         self._fill_lanc_chunk(size=400)
@@ -4106,25 +4063,94 @@ class MainWindow(QMainWindow):
         for id_ in ids:
             try: self.db.execute_query("DELETE FROM lancamento WHERE id=?", (id_,))
             except Exception as e: QMessageBox.critical(self, "Erro", f"Erro ao excluir lançamento ID {id_}: {e}")
-        if self.db.fetch_one("SELECT COUNT(*) FROM lancamento")[0] == 0:
-            self.db.execute_query("DELETE FROM sqlite_sequence WHERE name='lancamento'")
         self.carregar_lancamentos(); self.dashboard.load_data()
 
     def carregar_planejamento(self):
-        perfil = self.profile_selector.currentText()
-        db_path = os.path.join(PROJECT_DIR, 'banco_de_dados', perfil, 'data', 'lcdpr.db')
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        conn = sqlite3.connect(db_path); cur = conn.cursor()
-        cur.execute("""SELECT c.nome, a.area, a.data_plantio, a.data_colheita_estimada, a.produtividade_estimada
-                       FROM area_producao a JOIN cultura c ON a.cultura_id = c.id""")
-        rows = cur.fetchall(); conn.close()
-        self.tab_plan.setRowCount(len(rows))
-        for r, (cultura, area, pl, ce, prod) in enumerate(rows):
-            self.tab_plan.setItem(r, 0, QTableWidgetItem(cultura))
-            self.tab_plan.setItem(r, 1, QTableWidgetItem(f"{area} ha"))
-            self.tab_plan.setItem(r, 2, QTableWidgetItem(pl or ""))
-            self.tab_plan.setItem(r, 3, QTableWidgetItem(ce or ""))
-            self.tab_plan.setItem(r, 4, QTableWidgetItem(f"{prod}"))
+        """
+        Planejamento (áreas de produção) vindo do Supabase.
+        Colunas: Cultura | Área (ha) | Plantio | Colheita Est. | Produt. Est.
+        Filtra pelos imóveis do perfil selecionado (self.db.perfil_id).
+        """
+        try:
+            sb = self.db.sb
+
+            # 1) Descobrir imóveis do perfil (se houver perfil selecionado)
+            imovel_ids = []
+            if getattr(self.db, "perfil_id", None):
+                im_rows = (sb.table("imovel_rural")
+                             .select("id")
+                             .eq("perfil_id", self.db.perfil_id)
+                             .execute().data) or []
+                imovel_ids = [r["id"] for r in im_rows]
+
+            # 2) Buscar áreas de produção
+            ap_q = (sb.table("area_producao")
+                      .select("id,imovel_id,cultura_id,area,data_plantio,data_colheita_estimada,produtividade_estimada"))
+            ap_rows = (ap_q.execute().data) or []
+
+            # Se houver perfil, filtra client-side pelos imóveis daquele perfil
+            if imovel_ids:
+                ap_rows = [r for r in ap_rows if r.get("imovel_id") in imovel_ids]
+
+            # 3) Mapas auxiliares (imóveis e culturas)
+            # Imóveis (id -> nome)
+            im_map = {}
+            if ap_rows:
+                im_ids = sorted({r.get("imovel_id") for r in ap_rows if r.get("imovel_id") is not None})
+                if im_ids:
+                    im_all = (sb.table("imovel_rural")
+                                .select("id,nome_imovel")
+                                .in_("id", im_ids)
+                                .execute().data) or []
+                    im_map = {r["id"]: r["nome_imovel"] for r in im_all}
+
+            # Culturas (id -> nome)
+            cu_map = {}
+            if ap_rows:
+                cu_ids = sorted({r.get("cultura_id") for r in ap_rows if r.get("cultura_id") is not None})
+                if cu_ids:
+                    cu_all = (sb.table("cultura")
+                                .select("id,nome")
+                                .in_("id", cu_ids)
+                                .execute().data) or []
+                    cu_map = {r["id"]: r["nome"] for r in cu_all}
+
+            # 4) Montar a tabela
+            headers = ["Cultura", "Área (ha)", "Plantio", "Colheita Est.", "Produt. Est."]
+            self.tab_plan.setColumnCount(len(headers))
+            self.tab_plan.setHorizontalHeaderLabels(headers)
+            self.tab_plan.setRowCount(0)
+
+            def _fmt_data(val):
+                # Aceita 'YYYY-MM-DD' (Postgres) e transforma pra 'DD/MM/YYYY'
+                if not val:
+                    return ""
+                s = str(val)
+                if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+                    y, m, d = s[:10].split("-")
+                    return f"{int(d):02d}/{int(m):02d}/{y}"
+                return s
+
+            for r in ap_rows:
+                cultura = cu_map.get(r.get("cultura_id"), "")
+                area = r.get("area") or 0
+                pl = _fmt_data(r.get("data_plantio"))
+                ce = _fmt_data(r.get("data_colheita_estimada"))
+                prod = r.get("produtividade_estimada") or 0
+
+                row = self.tab_plan.rowCount()
+                self.tab_plan.insertRow(row)
+                self.tab_plan.setItem(row, 0, QTableWidgetItem(str(cultura)))
+                self.tab_plan.setItem(row, 1, QTableWidgetItem(f"{area} ha"))
+                self.tab_plan.setItem(row, 2, QTableWidgetItem(str(pl)))
+                self.tab_plan.setItem(row, 3, QTableWidgetItem(str(ce)))
+                self.tab_plan.setItem(row, 4, QTableWidgetItem(str(prod)))
+
+            self.tab_plan.resizeColumnsToContents()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Falha ao carregar planejamento (Supabase): {e}")
+
 
     def novo_lancamento(self):
         dlg = LancamentoDialog(self)
@@ -4139,8 +4165,6 @@ class MainWindow(QMainWindow):
         from decimal import Decimal, ROUND_HALF_UP
         from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QMessageBox
-
-        settings = profile_settings()  # helper abaixo
 
         # ===== helpers =====
         NL = "\r\n"  # CRLF exigido pelo manual
@@ -5090,20 +5114,31 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(widget, TAB_TITLE)
         self.tabs.setCurrentWidget(widget)
 
+    def closeEvent(self, event):
+        try:
+            labels = [self.tab_lanc.horizontalHeaderItem(i).text() for i in range(self.tab_lanc.columnCount())]
+            config = {label: not self.tab_lanc.isColumnHidden(i) for i, label in enumerate(labels)}
+            kv_set(f"ui::lanc_columns::{CURRENT_PROFILE}", config)
+        except Exception as e:
+            print("prefs colunas (save) erro:", e)
+
+        try:
+            if hasattr(self, "_rt") and self._rt: self._rt.stop()
+        except Exception: pass
+        try:
+            if hasattr(self, "db") and self.db: self.db.close()
+        except Exception: pass
+        super().closeEvent(event)
+
+
 # ── (4) Ajuste no bloco principal para chamar o LoginDialog ───────
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-
-    # <<< INICIAR SUPABASE ANTES DE QUALQUER DIÁLOGO >>>
-    import cloud_sync
-    cloud_sync.init_client()
-
-    # abre o login (Supabase)
+    # antes de tudo, mostrar login
     login = LoginDialog()
     if not login.exec():
         sys.exit(0)
-
     # só então a janela principal
     window = MainWindow()
     window.showMaximized()
