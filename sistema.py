@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QMessageBox, QFormLayout, QGroupBox, QFrame,
     QStatusBar, QToolBar, QFileDialog, QCheckBox, QMenu, QToolButton,
     QWidgetAction, QInputDialog, QProgressDialog, QSizePolicy, QCompleter,
-    QStackedWidget, QTextBrowser, QSplitter
+    QStackedWidget, QTextBrowser, QSplitter, QAbstractItemView
 )
 
 from PySide6.QtCore import Qt, QDate, QSize, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint, QSettings
