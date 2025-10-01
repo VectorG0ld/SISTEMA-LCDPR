@@ -3599,7 +3599,7 @@ class GerenciamentoContasWidget(QWidget):
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
         # seleção de linha inteira
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabela.setSelectionMode(QTableWidget.SingleSelection)
+        self.tabela.setSelectionMode(QTableWidget.ExtendedSelection)  # Ctrl/Shift
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
@@ -3848,8 +3848,8 @@ class GerenciamentoImoveisWidget(QWidget):
         self.tabela = QTableWidget(0, len(self._imoveis_labels))
         self.tabela.setHorizontalHeaderLabels(self._imoveis_labels)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabela.setSelectionMode(QTableWidget.SingleSelection)
+        self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)     # <<< seleção por LINHAS
+        self.tabela.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tabela.setAlternatingRowColors(True)
         self.tabela.setShowGrid(False)
         self.tabela.verticalHeader().setVisible(False)
@@ -4103,12 +4103,28 @@ class GerenciamentoParticipantesWidget(QWidget):
         self.tabela = QTableWidget(0, len(self._participantes_labels))
         self.tabela.setHorizontalHeaderLabels(self._participantes_labels)
         self.tabela.setAlternatingRowColors(True); self.tabela.setShowGrid(False); self.tabela.verticalHeader().setVisible(False)
-        self.tabela.setSelectionBehavior(QTableWidget.SelectRows); self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabela.setSelectionMode(QTableWidget.ExtendedSelection)
         self.tabela.cellClicked.connect(self._select_row)
         hdr = self.tabela.horizontalHeader(); hdr.setHighlightSections(False); hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch); hdr.sectionDoubleClicked.connect(self._toggle_sort_participantes)
         self.layout.addWidget(self.tabela)
 
+     def _normalize_row_selection(self):
+        sm = self.tabela.selectionModel()
+        if not sm:
+            return
+        # se houver células/colunas selecionadas, expande para LINHAS
+        rows = sorted({ix.row() for ix in sm.selectedIndexes()})
+        if rows:
+            self.tabela.blockSignals(True)
+            sm.clearSelection()
+            for r in rows:
+                self.tabela.selectRow(r)
+            self.tabela.blockSignals(False)
+    
+    # conecta para disparar sempre que a seleção mudar
+    self.tabela.selectionModel().selectionChanged.connect(lambda _s, _d: self._normalize_row_selection())
+   
     def _toggle_sort_participantes(self, index: int):
         state = self._participantes_sort_state.get(index, 0)
         if state == 0: self.tabela.sortItems(index, Qt.AscendingOrder); new = 1
@@ -4511,16 +4527,20 @@ class GerenciamentoParticipantesWidget(QWidget):
         dlg = CadastroParticipanteDialog(self)
         if dlg.exec():
             if getattr(dlg, "novo_id", None):
-                # atualiza a grid ou a linha com dlg.novo_id
-                self._broadcast_participantes_changed()  # ou atualizar célula específica
+                # refresh imediato da grade local
+                self.carregar_participantes()
+                # mantém o broadcast para outras telas/janelas ouvindo
+                self._broadcast_participantes_changed()
+
 
     def editar_participante(self):
         id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
         dlg = CadastroParticipanteDialog(self, id_)
         if dlg.exec():
             if getattr(dlg, "novo_id", None):
-                # atualiza a grid ou a linha com dlg.novo_id
-                self._broadcast_participantes_changed()  # ou atualizar célula específica
+                self.carregar_participantes()
+                self._broadcast_participantes_changed()
+
 
     def excluir_participante(self):
         indices = self.tabela.selectionModel().selectedRows()
@@ -4714,7 +4734,10 @@ class MainWindow(QMainWindow):
                     try:
                         w0 = self.cadw.widget(0); w0.carregar_imoveis()
                         w1 = self.cadw.widget(1); w1.carregar_contas()
-                    except Exception: pass
+                        w2 = self.cadw.widget(2); w2.carregar_participantes()  # <<< NOVO
+                    except Exception:
+                        pass
+
         except Exception as e:
             print("on_realtime_change error:", e)
 
