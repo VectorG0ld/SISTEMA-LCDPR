@@ -4109,21 +4109,6 @@ class GerenciamentoParticipantesWidget(QWidget):
         hdr.setSectionResizeMode(QHeaderView.Stretch); hdr.sectionDoubleClicked.connect(self._toggle_sort_participantes)
         self.layout.addWidget(self.tabela)
 
-     def _normalize_row_selection(self):
-        sm = self.tabela.selectionModel()
-        if not sm:
-            return
-        # se houver células/colunas selecionadas, expande para LINHAS
-        rows = sorted({ix.row() for ix in sm.selectedIndexes()})
-        if rows:
-            self.tabela.blockSignals(True)
-            sm.clearSelection()
-            for r in rows:
-                self.tabela.selectRow(r)
-            self.tabela.blockSignals(False)
-    
-    # conecta para disparar sempre que a seleção mudar
-    self.tabela.selectionModel().selectionChanged.connect(lambda _s, _d: self._normalize_row_selection())
    
     def _toggle_sort_participantes(self, index: int):
         state = self._participantes_sort_state.get(index, 0)
