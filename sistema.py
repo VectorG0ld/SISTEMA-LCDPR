@@ -475,7 +475,7 @@ class Database:
                 payload["perfil_id"] = self.perfil_id
         
             # >>> NOVO: MAX(id)+1 POR PERFIL (per_profile=True)
-            payload["id"] = self._next_id("lancamento", per_profile=True)
+            payload.pop("id", None)
         
             novo = self.insert_with_return("lancamento", payload)
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
@@ -647,7 +647,7 @@ class Database:
         cpf = (cpf_cnpj or "").strip()
         nm = (nome or "").strip()
         tp = int(tipo)
-
+    
         # 1) Já existe? -> atualiza e retorna o id
         exist = (self.sb.table("participante")
                     .select("id")
@@ -660,7 +660,7 @@ class Database:
                 "tipo_contraparte": tp
             }).eq("id", pid).execute()
             return pid
-
+    
         # 2) Não existe -> cria com MAX(id)+1 (global, como sua tabela está definida)
         payload = {
             "id": self._next_id("participante", per_profile=False),
@@ -669,7 +669,7 @@ class Database:
             "tipo_contraparte": tp
         }
         # IMPORTANTE: NÃO gravar perfil_id aqui (a tabela não tem essa coluna)
-
+    
         novo = self.insert_with_return("participante", payload)
         return novo.get("id")
 
@@ -5790,87 +5790,235 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _import_lancamentos_txt(self, path: str):
-        import re, os
-        from PySide6.QtWidgets import QMessageBox
-        if not path or not os.path.exists(path):
-            QMessageBox.warning(self, "Importar lançamentos (TXT)", "Arquivo inválido.")
-            return
-    
-        def _to_iso(d):
-            if isinstance(d, str) and "/" in d:
-                d = d.strip()
-                dd, mm, yyyy = d.split("/")
-                return f"{yyyy}-{int(mm):02d}-{int(dd):02d}"
-            return d
-    
-        # personalize aqui: delimitador, colunas etc.
-        total = ok = err = 0
-        GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=0, parent=self.window())
+    def _import_lancamentos_txt(self, path):
+        import re
+        from datetime import datetime
+
+        sb = self.db.sb
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        usuario_ts = f"{CURRENT_USER} dia {now}"
+
+        def _parse_cent(v: str) -> float:
+            s = re.sub(r'\D', '', (v or ''))
+            return (int(s) / 100.0) if s else 0.0
+
+        def _norms(code: str):
+            s = (code or '').strip()
+            if not s:
+                return []
+            out = [s]
+            if s.isdigit():
+                out += [s.zfill(3), (s.lstrip('0') or '0')]
+            return list(dict.fromkeys(out))
+
+        # ---- contagem de linhas para progresso ----
+        with open(path, encoding='utf-8') as _f:
+            total = sum(1 for _ in _f)
+
+        # ---- caches ----
+        im_cache = {}      # cod_imovel_normalizado -> id_imovel
+        ct_cache = {}      # cod_conta_normalizado  -> id_conta
+        part_cache = {}    # cpf_cnpj_digits        -> id_participante
+        saldos = {}        # id_conta -> saldo atual (considerando natureza)
+
+        GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=total, parent=self.window())
         try:
-            with open(path, "r", encoding="utf-8", errors="ignore") as f, self.db.bulk():
-                for lineno, line in enumerate(f, start=1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    total += 1
-                    # exemplo: data;cod_imovel;cod_conta;num_doc;tipo_doc;historico;id_participante;tipo_lanc;valor_entrada;valor_saida;categoria;data_ord
-                    parts = [p.strip() for p in re.split(r"[;|,]", line)]
-                    if len(parts) < 12:
-                        err += 1
-                        continue
-                    
-                    (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                     id_participante, tipo_lanc, valor_entrada, valor_saida,
-                     categoria, data_ord) = parts[:12]
-    
-                    # normalizações
-                    data_iso = _to_iso(data)
-                    try:
+            with self.db.bulk():
+                with open(path, encoding='utf-8') as f:
+                    for lineno, line in enumerate(f, 1):
+                        parts = line.strip().split("|")
+
+                        # Layout 1 (11 colunas) -> YYYY-MM-DD ...
+                        if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
+                            (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                             participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
+
+                            y, m, d = data_iso.split("-")
+                            data_iso = f"{y}-{m}-{d}"         # ISO (já está), só mantenha
+                            data_str = f"{d}/{m}/{y}"         # BR
+                            data_ord = int(f"{y}{m}{d}")      # AAAAMMDD
+                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+                            ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
+                            sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
+
+                            # Participante: CPF/CNPJ ou ID
+                            id_participante = None
+                            digits = re.sub(r"\D", "", participante_raw or "")
+                            if digits and len(digits) in (11, 14):
+                                if digits in part_cache:
+                                    id_participante = part_cache[digits]
+                                else:
+                                    # garante auto-cadastro
+                                    pid = self._ensure_participante(digits, historico or "")
+                                    part_cache[digits] = pid
+                                    id_participante = pid
+                            elif (participante_raw or "").isdigit():
+                                id_participante = int(participante_raw)
+
+                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+
+                        elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
+                            (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
+                             cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
+                        
+                            # ✅ define primeiro d,m,y e só então monta as variações
+                            d, m, y = data_br.split("-")                  # DD-MM-AAAA
+                            data_iso = f"{y}-{m}-{d}"                    # AAAA-MM-DD (ISO)
+                            data_str = f"{d}/{m}/{y}"                    # DD/MM/AAAA (legado/visual)
+                            data_ord = int(f"{y}{m}{d}")                 # AAAAMMDD (inteiro para filtros)
+                        
+                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
+                            ent = _parse_cent(cent_ent)
+                            sai = _parse_cent(cent_sai)
+                        
+                            id_participante = None
+                            digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
+                            if digits and len(digits) in (11, 14):
+                                if digits in part_cache:
+                                    id_participante = part_cache[digits]
+                                else:
+                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
+                                    part_cache[digits] = id_participante
+                        
+                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+                        
+
+                        else:
+                            raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+
+                        # Heurísticas de tipo_doc/categoria
+                        categoria = None
+                        desc = (historico or "").upper()
+                        if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
+                            tipo_doc = 5; categoria = "Folha"
+                        elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
+                            tipo_doc = 4; categoria = "Fatura"
+
+                        # FK imóvel (normalização 1/01/001) com cache ***FILTRADO POR PERFIL***
+                        id_imovel = None
+                        perfil_id = getattr(self.db, "perfil_id", None)
+
+                        for c in _norms(cod_imovel):
+                            if c in im_cache:
+                                id_imovel = im_cache[c]
+                                break
+
+                            # consulta com escopo do perfil
+                            if perfil_id:
+                                row = self.db.fetch_one(
+                                    "SELECT id FROM imovel_rural WHERE cod_imovel=? AND perfil_id=?",
+                                    (c, perfil_id),
+                                )
+                            else:
+                                row = self.db.fetch_one(
+                                    "SELECT id FROM imovel_rural WHERE cod_imovel=?",
+                                    (c,),
+                                )
+
+                            if row:
+                                id_imovel = row[0]
+                                for alt in _norms(cod_imovel):
+                                    im_cache[alt] = id_imovel
+                                break
+
+                        if not id_imovel:
+                            raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado no perfil atual")
+
+
+                        # FK conta (normalização 1/01/001) com cache ***FILTRADO POR PERFIL***
+                        id_conta = None
+                        perfil_id = getattr(self.db, "perfil_id", None)
+
+                        for c in _norms(cod_conta):
+                            if c in ct_cache:
+                                id_conta = ct_cache[c]
+                                break
+                            
+                            # consulta com escopo do perfil
+                            if perfil_id:
+                                row = self.db.fetch_one(
+                                    "SELECT id FROM conta_bancaria WHERE cod_conta=? AND perfil_id=?",
+                                    (c, perfil_id),
+                                )
+                            else:
+                                row = self.db.fetch_one(
+                                    "SELECT id FROM conta_bancaria WHERE cod_conta=?",
+                                    (c,),
+                                )
+
+                            if row:
+                                id_conta = row[0]
+                                for alt in _norms(cod_conta):
+                                    ct_cache[alt] = id_conta
+                                break
+                            
+                        if not id_conta:
+                            raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada no perfil atual")
+
+
+                        # Saldo/natureza por conta (pega último saldo do BD uma única vez)
+                        if id_conta not in saldos:
+                            last = (sb.table("lancamento")
+                                      .select("saldo_final,natureza_saldo,id")
+                                      .eq("cod_conta", id_conta)
+                                      .order("id", desc=True)
+                                      .limit(1).execute().data)
+                            if last:
+                                base = float(last[0].get("saldo_final") or 0.0)
+                                nat  = (last[0].get("natureza_saldo") or "P").upper()
+                                saldos[id_conta] = base if nat == "P" else -base
+                            else:
+                                saldos[id_conta] = 0.0
+
+                        saldo_ant = saldos[id_conta]
+                        saldo_f = saldo_ant + (ent or 0.0) - (sai or 0.0)
+                        saldos[id_conta] = saldo_f
+                        nat = 'P' if saldo_f >= 0 else 'N'
+
+                        # De-dup por participante + número do documento (sem espaços)
+                        num_doc_n = (num_doc or "").replace(" ", "")
+                        if id_participante:
+                            dup = (sb.table("lancamento")
+                                     .select("id")
+                                     .eq("id_participante", id_participante)
+                                     .eq("num_doc", num_doc_n)
+                                     .limit(1).execute().data)
+                            if dup:
+                                if lineno % 200 == 0:
+                                    GlobalProgress.set_value(lineno)
+                                continue
+
+                        # Insert
                         payload = {
                             "data": data_iso,
-                            "cod_imovel": int(cod_imovel) if str(cod_imovel).strip() else None,
-                            "cod_conta": int(cod_conta) if str(cod_conta).strip() else None,
-                            "num_doc": (num_doc or "").replace(" ", ""),
-                            "tipo_doc": (tipo_doc or ""),
-                            "historico": historico or "",
-                            "id_participante": int(id_participante) if str(id_participante).strip() else None,
-                            "tipo_lanc": int(tipo_lanc) if str(tipo_lanc).strip() else None,
-                            "valor_entrada": float(valor_entrada or 0.0),
-                            "valor_saida": float(valor_saida or 0.0),
-                            "saldo_final": 0.0,             # será recalculado depois
-                            "natureza_saldo": "P",           # padrão
-                            "usuario": (CURRENT_USER or "") ,
-                            "categoria": categoria or "",
-                            "data_ord": int(data_ord) if str(data_ord).isdigit() else None,
+                            "data_ord": data_ord,
+                            "cod_imovel": id_imovel,
+                            "cod_conta": id_conta,
+                            "num_doc": num_doc_n or None,
+                            "tipo_doc": int(tipo_doc),
+                            "historico": historico,
+                            "id_participante": id_participante,
+                            "tipo_lanc": int(tipo_lanc),
+                            "valor_entrada": float(ent or 0.0),
+                            "valor_saida": float(sai or 0.0),
+                            "saldo_final": float(abs(saldo_f)),
+                            "natureza_saldo": nat,
+                            "usuario": usuario_ts,
+                            "categoria": categoria,
                         }
-    
-                        # >>> GARANTIR perfil_id + ID por PERFIL
-                        if getattr(self.db, "perfil_id", None):
-                            payload["perfil_id"] = self.db.perfil_id
-                        payload["id"] = self.db._next_id("lancamento", per_profile=True)
-    
-                        # insere usando o mesmo caminho do resto (HTTP compat)
-                        self.db.insert_with_return("lancamento", payload)
-                        ok += 1
-                    except Exception:
-                        err += 1
-                        continue
+                        sb.table("lancamento").insert(payload).execute()
+
+                        if lineno % 200 == 0:
+                            GlobalProgress.set_value(lineno)
+
+                GlobalProgress.set_value(total)
         finally:
             GlobalProgress.end()
-    
-        QMessageBox.information(self, "Importar lançamentos (TXT)",
-                                f"Linhas: {total}\nImportados: {ok}\nErros: {err}")
-    
-        # atualiza UI
-        try:
-            if hasattr(self, "_broadcast_participantes_changed"):
-                self._broadcast_participantes_changed()
-            if hasattr(self, "carregar_lancamentos"):
-                self.carregar_lancamentos()
-        except Exception:
-            pass
-        
+
+        # terminou: atualiza listas/combos de participantes nas janelas abertas
+        self._broadcast_participantes_changed()
+
     def _import_lancamentos_excel(self, path):
         import re
         df = pd.read_excel(path, dtype=str)
