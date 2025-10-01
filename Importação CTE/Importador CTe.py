@@ -1010,16 +1010,36 @@ class ImportadorCTe(QWidget):
                                         sem_dup.append(r)
                                         continue
                                     
-                                    row = mw.db.fetch_one("""
-                                        SELECT 1
-                                          FROM lancamento l
-                                          JOIN participante p ON p.id = l.id_participante
-                                         WHERE REPLACE(COALESCE(l.num_doc,''),' ','') = ?
-                                           AND REPLACE(COALESCE(p.cpf_cnpj,''),' ','') = ?
-                                         LIMIT 1
-                                    """, (num_doc, cpf))
-
-                                    if row:
+                                    # checagem de duplicidade via Supabase (sem SQL bruto)
+                                    exists = False
+                                    try:
+                                        # 1) pegar o participante pelo CPF/CNPJ normalizado
+                                        pid_rows = (mw.db.sb.table("participante")
+                                                      .select("id")
+                                                      .eq("cpf_cnpj", cpf)
+                                                      .limit(1)
+                                                      .execute().data) or []
+                                        if pid_rows:
+                                            pid = int(pid_rows[0]["id"])
+                                    
+                                            # 2) buscar lançamentos desse participante e comparar num_doc ignorando espaços
+                                            cand = (mw.db.sb.table("lancamento")
+                                                      .select("id,num_doc,id_participante")
+                                                      .eq("id_participante", pid)
+                                                      .order("id", desc=True)
+                                                      .limit(200)  # limite seguro
+                                                      .execute().data) or []
+                                    
+                                            nd_target = re.sub(r"\s+", "", num_doc or "")
+                                            for c in cand:
+                                                nd = re.sub(r"\s+", "", str(c.get("num_doc") or ""))
+                                                if nd == nd_target:
+                                                    exists = True
+                                                    break
+                                    except Exception:
+                                        exists = False
+                                    
+                                    if exists:
                                         dups_log.append((
                                             perfil,
                                             num_doc,
@@ -1029,6 +1049,7 @@ class ImportadorCTe(QWidget):
                                         ))
                                     else:
                                         sem_dup.append(r)
+                                    
 
                                 if not sem_dup:
                                     self.log_msg(f"⚠️ Nenhum lançamento novo para {perfil} (todos já existem).", "warning")

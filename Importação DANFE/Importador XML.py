@@ -413,13 +413,13 @@ class RuralXmlImporter(QWidget):
         actions = QHBoxLayout()
         actions.setSpacing(10)
 
-        self.btn_assoc = QPushButton("🔗 Associar Pagamentos")
-        self.btn_assoc.clicked.connect(self.associar_pagamentos)
-        actions.addWidget(self.btn_assoc)
-
         self.btn_import = QPushButton("📤 Importar XMLs")
         self.btn_import.clicked.connect(self.import_xmls)
         actions.addWidget(self.btn_import)
+
+        self.btn_assoc = QPushButton("🔗 Associar Pagamentos")
+        self.btn_assoc.clicked.connect(self.associar_pagamentos)
+        actions.addWidget(self.btn_assoc)
 
         # depois de actions.addWidget(self.btn_import)
         self.btn_import_lanc = QPushButton("📥 Importar Lançamentos")

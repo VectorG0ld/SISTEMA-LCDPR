@@ -351,6 +351,47 @@ def _cod_imovel_from_colA(a_txt: str, owner: str | None = None) -> str:
     # 2) Fallback
     return "001"
 
+# --- Reparador do cache do win32com/pywin32 (para erros CLSIDToPackageMap) ---
+def _repair_win32com_genpy_cache():
+    """
+    Remove caches 'gen_py' conhecidos e força o pywin32 a regenerar
+    os wrappers COM. Seguro rodar sempre que precisar.
+    """
+    try:
+        import win32com, importlib, sys
+        from pathlib import Path
+        import shutil, tempfile, glob
+
+        # 1) gen_py em %LOCALAPPDATA%/Temp
+        temp_gen = Path(tempfile.gettempdir()) / "gen_py"
+        if temp_gen.exists():
+            shutil.rmtree(temp_gen, ignore_errors=True)
+
+        # 2) gen_py dentro do pacote site-packages/win32com
+        try:
+            gen_pkg = Path(win32com.__gen_path__)  # presente em algumas builds
+            if gen_pkg.exists():
+                shutil.rmtree(gen_pkg, ignore_errors=True)
+        except Exception:
+            # fallback: varre por diretórios .../win32com/gen_py*
+            try:
+                from win32com import __path__ as w32paths
+                for p in w32paths:
+                    for g in glob.glob(str(Path(p) / "gen_py*")):
+                        shutil.rmtree(g, ignore_errors=True)
+            except Exception:
+                pass
+
+        # 3) recarrega gencache
+        try:
+            import win32com.client.gencache as gencache
+            importlib.reload(gencache)
+        except Exception:
+            pass
+    except Exception:
+        # não impede a execução se algo falhar
+        pass
+
 # ============================
 # Leitura da planilha (xlwings → openpyxl)
 # ============================
@@ -360,106 +401,117 @@ def _read_sheet_with_xlwings(filepath: str, mes: int, ano: int):
     except Exception as e:
         raise RuntimeError("xlwings não disponível. Instale xlwings (pip install xlwings).") from e
 
-    app = None
-    wb = None
-    try:
-        app = xw.App(visible=False, add_book=False)
-        app.display_alerts = False
-        app.screen_updating = False
-
-        # abre o arquivo (caminho absoluto ajuda o Excel/COM)
-        wb = app.books.open(str(Path(filepath).resolve()), update_links=False, read_only=False)
-        sh = wb.sheets[0]
-
-        # 1) Define C1 no formato esperado pela sua planilha (MM/AAAA)
-        sh.range("C1").value = f"{mes:02d}/{ano}"
-
-        # 2) Força recálculo completo
+    def _open_and_read():
+        app = None
+        wb = None
         try:
-            wb.api.CalculateFullRebuild()
-        except Exception:
-            pass
-        try:
-            app.api.CalculateFullRebuild()
-        except Exception:
-            pass
+            app = xw.App(visible=False, add_book=False)
+            app.display_alerts = False
+            app.screen_updating = False
 
-        # 3) Calcula a planilha ativa (reforço)
-        try:
-            sh.api.Calculate()
-        except Exception:
-            pass
+            wb = app.books.open(str(Path(filepath).resolve()), update_links=False, read_only=False)
+            sh = wb.sheets[0]
 
-        # 4) Aguarda os valores aparecerem (até 8 tentativas)
-        def _to_cent_safe(v):
+            # define período
+            sh.range("C1").value = f"{mes:02d}/{ano}"
+
+            # força recálculo
             try:
-                return _to_cent(v or 0)
+                wb.api.CalculateFullRebuild()
             except Exception:
-                return "0"
+                pass
+            try:
+                app.api.CalculateFullRebuild()
+            except Exception:
+                pass
+            try:
+                sh.api.Calculate()
+            except Exception:
+                pass
 
-        inss = irrf = fgts = None
-        for _ in range(8):
-            time.sleep(0.25)  # pequeno intervalo pro Excel concluir
-            vF = sh.range("F3").value
-            vG = sh.range("G3").value
-            vH = sh.range("H3").value
-            if vF is not None or vG is not None or vH is not None:
-                inss = _to_cent_safe(vF)
-                irrf = _to_cent_safe(vG)
-                fgts = _to_cent_safe(vH)
-                break
-        if inss is None:
-            # última leitura mesmo que None (vira "0")
-            inss = _to_cent_safe(sh.range("F3").value)
-            irrf = _to_cent_safe(sh.range("G3").value)
-            fgts = _to_cent_safe(sh.range("H3").value)
+            # leitura segura dos tributos (F3/G3/H3)
+            def _to_cent_safe(v):
+                try:
+                    return _to_cent(v or 0)
+                except Exception:
+                    return "0"
 
-        # 5) Linhas de funcionários (A5..D?)
-        funcionarios, imoveis = [], []
-        r = 5
-        while True:
-            a_txt = str(sh.range(f"A{r}").value or "").strip()
-            cpf   = _digits(sh.range(f"B{r}").value or "")
-            nome  = (sh.range(f"C{r}").value or "").strip()
-            val   = sh.range(f"D{r}").value
-            if not (a_txt or cpf or nome or val):
-                break
+            inss = irrf = fgts = None
+            for _ in range(8):
+                time.sleep(0.25)
+                vF, vG, vH = sh.range("F3").value, sh.range("G3").value, sh.range("H3").value
+                if vF is not None or vG is not None or vH is not None:
+                    inss = _to_cent_safe(vF)
+                    irrf = _to_cent_safe(vG)
+                    fgts = _to_cent_safe(vH)
+                    break
+            if inss is None:
+                inss = _to_cent_safe(sh.range("F3").value)
+                irrf = _to_cent_safe(sh.range("G3").value)
+                fgts = _to_cent_safe(sh.range("H3").value)
 
-            owner = _owner_from_text(a_txt)
-            imovel_nome = _extract_imovel_name(a_txt)
-            cod_imovel = _cod_imovel_from_colA(a_txt, owner)
+            # linhas A5..D?, com detecção de imóvel e titular
+            funcionarios, imoveis = [], []
+            r = 5
+            while True:
+                a_txt = str(sh.range(f"A{r}").value or "").strip()
+                cpf   = _digits(sh.range(f"B{r}").value or "")
+                nome  = (sh.range(f"C{r}").value or "").strip()
+                val   = sh.range(f"D{r}").value
+                if not (a_txt or cpf or nome or val):
+                    break
 
-            if cod_imovel:
-                imoveis.append(cod_imovel)
+                owner = _owner_from_text(a_txt)
+                imovel_nome = _extract_imovel_name(a_txt)
+                cod_imovel = _cod_imovel_from_colA(a_txt, owner)
 
-            funcionarios.append({
-                "cpf": cpf,
-                "nome": nome,
-                "centavos": _to_cent(val),
-                "imovel": cod_imovel,          # código usado no TXT
-                "imovel_nome": imovel_nome,    # opcional p/ log/auditoria
-                "titular": owner               # opcional p/ log/auditoria
-            })
-            r += 1
+                if cod_imovel:
+                    imoveis.append(cod_imovel)
 
-        imovel_tributos = _mode_or_default(imoveis, default="001")
-        return funcionarios, {"INSS": inss, "IRRF": irrf, "FGTS": fgts}, imovel_tributos
+                funcionarios.append({
+                    "cpf": cpf,
+                    "nome": nome,
+                    "centavos": _to_cent(val),
+                    "imovel": cod_imovel,
+                    "imovel_nome": imovel_nome,
+                    "titular": owner
+                })
+                r += 1
 
+            imovel_tributos = _mode_or_default(imoveis, default="001")
+            return funcionarios, {"INSS": inss, "IRRF": irrf, "FGTS": fgts}, imovel_tributos
+        finally:
+            try:
+                if wb:
+                    wb.close()
+            except Exception:
+                pass
+            try:
+                if app:
+                    app.quit()
+            except Exception:
+                pass
+
+    # 1ª tentativa
+    try:
+        return _open_and_read()
     except Exception as e:
-        # Propaga o erro real com contexto (sem mascarar)
-        raise RuntimeError(f"Falha no Excel/xlwings ao ler '{filepath}' para {mes:02d}/{ano}: {e}") from e
-
-    finally:
-        try:
-            if wb:
-                wb.close()
-        except Exception:
-            pass
-        try:
-            if app:
-                app.quit()
-        except Exception:
-            pass
+        msg = str(e)
+        # Erro típico de cache: ... has no attribute 'CLSIDToPackageMap'
+        if "CLSIDToPackageMap" in msg or "gen_py" in msg:
+            # limpa cache e tenta mais uma vez
+            _repair_win32com_genpy_cache()
+            try:
+                return _open_and_read()
+            except Exception as e2:
+                raise RuntimeError(
+                    f"Falha no Excel/xlwings ao ler '{filepath}' para {mes:02d}/{ano} "
+                    f"(após limpar cache pywin32): {e2}"
+                ) from e2
+        # outros erros: propaga
+        raise RuntimeError(
+            f"Falha no Excel/xlwings ao ler '{filepath}' para {mes:02d}/{ano}: {e}"
+        ) from e
 
 def _read_sheet_with_openpyxl(filepath: str, mes: int, ano: int):
     from openpyxl import load_workbook
@@ -1649,7 +1701,19 @@ class AutomacaoFolhaUI(QWidget):
             self.log_msg("Importação cancelada pelo usuário (perfil não selecionado).", "warning")
     
     def _importar_txt_temp_to_profile(self, src_path: str, perfil: str):
-        """Importa usando um arquivo temporário, aplicando o PERFIL selecionado."""
+        """Importa usando um arquivo temporário aplicando o PERFIL selecionado,
+        mas ANTES filtra DUPLICADOS (Folha) consultando o Supabase."""
+        import os, re, shutil, tempfile
+        from pathlib import Path
+        from PySide6.QtWidgets import QMessageBox
+    
+        def _digits(s: str) -> str:
+            return re.sub(r"\D", "", s or "")
+    
+        def _parse_cent(v: str) -> float:
+            s = re.sub(r"\D", "", v or "")
+            return (int(s) / 100.0) if s else 0.0
+    
         try:
             if not src_path or not os.path.exists(src_path):
                 QMessageBox.warning(self, "TXT", "Arquivo gerado não encontrado para importação.")
@@ -1658,77 +1722,200 @@ class AutomacaoFolhaUI(QWidget):
             base = os.path.basename(src_path)
             internal = PROFILE_MAP.get(perfil, perfil)
     
-            # cria temporário
-            fd, tmp_path = tempfile.mkstemp(prefix="folha_", suffix=".txt")
-            os.close(fd)
-            shutil.copy2(src_path, tmp_path)
-    
             mw = self.window()
             if not hasattr(mw, "_import_lancamentos_txt"):
                 raise RuntimeError("A janela principal não expõe _import_lancamentos_txt.")
     
-            self.log_msg(f"Importando (via temporário) no perfil '{perfil}': {base}", "info", update_status=False)
+            # Lê todas as linhas do TXT (12 colunas: data|imóvel|conta|num_doc|tipo_doc|hist|cpf|tipo|ent|sai|saldo|nat)
+            with open(src_path, "r", encoding="utf-8") as f:
+                linhas = [ln.strip() for ln in f if ln.strip()]
     
-            # 1) tenta passar o perfil diretamente para o importador (posicional/kw)
-            imported = False
-            try:
-                mw._import_lancamentos_txt(tmp_path, internal)   # posicional
-                imported = True
-            except TypeError:
-                try:
-                    mw._import_lancamentos_txt(tmp_path, perfil=internal)  # nomeado
-                    imported = True
-                except TypeError:
-                    pass
-                
-            # 2) se não aceitar argumento, tenta selecionar o perfil antes e importar
-            if not imported:
-                switched = False
-                for setter in ("selecionar_perfil", "set_perfil", "set_profile", "setPerfil", "seleciona_perfil", "switch_profile"):
-                    if hasattr(mw, setter):
+            # -------- DUP CHECK (Folha) via Supabase ----------
+            dups_log = []
+            sem_dup = []
+    
+            # Garantir que estamos no perfil certo ANTES de consultar o BD
+            switched = False
+            for setter in ("selecionar_perfil", "set_perfil", "set_profile", "setPerfil", "seleciona_perfil", "switch_profile"):
+                if hasattr(mw, setter):
+                    try:
+                        getattr(mw, setter)(internal)
+                        switched = True
+                        break
+                    except Exception:
+                        pass
+            if not switched:
+                for attr in ("perfil_atual", "perfil", "profile", "current_profile"):
+                    if hasattr(mw, attr):
                         try:
-                            getattr(mw, setter)(internal)
-                            switched = True
+                            setattr(mw, attr, internal)
                             break
                         except Exception:
                             pass
-                if not switched:
-                    for attr in ("perfil_atual", "perfil", "profile", "current_profile"):
-                        if hasattr(mw, attr):
-                            try:
-                                setattr(mw, attr, internal)
-                                switched = True
-                                break
-                            except Exception:
-                                pass
-                            
-                # importa sem argumento de perfil (já trocado)
-                mw._import_lancamentos_txt(tmp_path)
-                imported = True
-
+                        
+            # Checagem de duplicidade: (mesmo CPF + mesma Data) e confere valor (saída/entrada)
+            for ln in linhas:
+                parts = ln.split("|")
+                if len(parts) < 12:
+                    # linha imprevista: deixa passar (não bloqueia)
+                    sem_dup.append(ln)
+                    continue
+                
+                data_br   = (parts[0] or "").strip()  # DD-MM-AAAA
+                data_str  = data_br.replace("-", "/")  # DD/MM/AAAA, que é como gravamos em 'lancamento.data'
+                historico = parts[5] if len(parts) > 5 else ""
+                cpf_cnpj  = _digits(parts[6] if len(parts) > 6 else "")
+                # valor (Folha costuma vir em SAÍDA)
+                v_ent = _parse_cent(parts[8] if len(parts) > 8 else "")
+                v_sai = _parse_cent(parts[9] if len(parts) > 9 else "")
+                valor_alvo = v_sai if v_sai > 0 else v_ent
     
-            # pós-import
-            if hasattr(mw, "carregar_lancamentos"):
-                mw.carregar_lancamentos()
-            if hasattr(mw, "dashboard"):
+                # Sem CPF/Data não tem como checar
+                if not cpf_cnpj or not data_str:
+                    sem_dup.append(ln)
+                    continue
+                
+                exists = False
                 try:
-                    mw.dashboard.load_data()
+                    # 1) encontra participante
+                    pid_rows = (mw.db.sb.table("participante")
+                                .select("id,nome")
+                                .eq("cpf_cnpj", cpf_cnpj)
+                                .limit(1)
+                                .execute().data) or []
+                    if pid_rows:
+                        pid = int(pid_rows[0]["id"])
+                        nome = pid_rows[0].get("nome") or ""
+    
+                        # 2) pega candidatos deste participante nesta data
+                        cand = (mw.db.sb.table("lancamento")
+                                .select("id,data,tipo_doc,historico,valor_entrada,valor_saida")
+                                .eq("id_participante", pid)
+                                .eq("data", data_str)          # data exata
+                                .order("id", desc=True)
+                                .limit(200)
+                                .execute().data) or []
+    
+                        # 3) regra: se for folha (tipo_doc=5) OU histórico começa com "FOLHA"
+                        #    e o valor bate (entrada/saída), consideramos duplicado
+                        alvo = round(float(valor_alvo or 0), 2)
+                        for c in cand:
+                            tdoc = int(c.get("tipo_doc") or 0)
+                            hist = (c.get("historico") or "").upper()
+                            ve   = round(float(c.get("valor_entrada") or 0), 2)
+                            vs   = round(float(c.get("valor_saida") or 0), 2)
+                            vcand = vs if vs > 0 else ve
+                            if (tdoc == 5 or hist.startswith("FOLHA")) and abs(vcand - alvo) < 0.01:
+                                exists = True
+                                # log amigável
+                                dups_log.append({
+                                    "cpf": cpf_cnpj,
+                                    "data": data_str,
+                                    "valor": alvo,
+                                    "nome": nome or _extract_name_from_historico(historico) or "",
+                                    "hist": historico
+                                })
+                                break
+                except Exception:
+                    exists = False
+    
+                if exists:
+                    # não vai para o arquivo que será importado
+                    continue
+                else:
+                    sem_dup.append(ln)
+    
+            # -------- Importação (apenas não duplicados) ----------
+            if not sem_dup:
+                self._log_section("DUPLICADOS (Folha)", "🔁")
+                self.log.append("<div style='font-family:monospace; color:#ffd166; text-align:center; margin:2px 0 6px 0;'>TODOS OS REGISTROS JÁ EXISTEM (CPF+DATA+VALOR)</div>")
+                # Tabela de duplicados
+                if dups_log:
+                    hdr = ("CPF/CNPJ".ljust(14) + " │ " +
+                           "DATA".ljust(10) + " │ " +
+                           "VALOR".rjust(12) + " │ " +
+                           "NOME/HISTÓRICO")
+                    self.log.append("<div style='font-family:monospace;'><b style='color:#ffd166;'>"+hdr+"</b></div>")
+                    self.log.append("<div style='font-family:monospace; color:#554a08;'>"
+                                    "──────────────┼──────────┼────────────┼────────────────────────────────────────</div>")
+                    for d in dups_log:
+                        cpf   = f"{(d['cpf'] or '')[:14]:<14}"
+                        data  = f"{(d['data'] or ''):<10}"
+                        valor = f"{d['valor']:>12.2f}"
+                        nomh  = (d["nome"] or d["hist"] or "")[:44]
+                        line  = f"{cpf} │ {data} │ {valor} │ {nomh}"
+                        self.log.append(f"<span style='font-family:monospace; color:#ffd166;'>{line}</span>")
+                QMessageBox.information(self, "Concluído", "Nenhum lançamento novo — todos eram duplicados (Folha).")
+                return
+    
+            # grava um TEMP TXT só com não-duplicados e importa
+            fd, tmp_path = tempfile.mkstemp(prefix="folha_", suffix=".txt")
+            os.close(fd)
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as tf:
+                    tf.write("\n".join(sem_dup))
+    
+                self.log_msg(f"Importando (via temporário) no perfil '{perfil}': {base}", "info", update_status=False)
+    
+                imported = False
+                try:
+                    mw._import_lancamentos_txt(tmp_path, internal)   # posicional
+                    imported = True
+                except TypeError:
+                    try:
+                        mw._import_lancamentos_txt(tmp_path, perfil=internal)  # nomeado
+                        imported = True
+                    except TypeError:
+                        pass
+                    
+                if not imported:
+                    # fallback: já trocamos perfil lá em cima; importa sem arg
+                    mw._import_lancamentos_txt(tmp_path)
+                    imported = True
+    
+                # pós-import
+                if hasattr(mw, "carregar_lancamentos"):
+                    mw.carregar_lancamentos()
+                if hasattr(mw, "dashboard"):
+                    try:
+                        mw.dashboard.load_data()
+                    except Exception:
+                        pass
+                    
+                self.log_msg(f"Importado no sistema (perfil '{perfil}', via temporário): {base}", "success", update_status=False)
+                self.lbl_last_status.setText("Importado no sistema.")
+                self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+    
+                # ------- BLOCO FINAL: Tabela de DUPLICADOS (se houve) -------
+                if dups_log:
+                    self._log_section("DUPLICADOS (Folha)", "🔁")
+                    self.log.append("<div style='font-family:monospace; color:#ffd166; text-align:center; margin:2px 0 6px 0;'>MESMO CPF + MESMA DATA (+ VALOR)</div>")
+                    hdr = ("CPF/CNPJ".ljust(14) + " │ " +
+                           "DATA".ljust(10) + " │ " +
+                           "VALOR".rjust(12) + " │ " +
+                           "NOME/HISTÓRICO")
+                    self.log.append("<div style='font-family:monospace;'><b style='color:#ffd166;'>"+hdr+"</b></div>")
+                    self.log.append("<div style='font-family:monospace; color:#554a08;'>"
+                                    "──────────────┼──────────┼────────────┼────────────────────────────────────────</div>")
+                    for d in dups_log:
+                        cpf   = f"{(d['cpf'] or '')[:14]:<14}"
+                        data  = f"{(d['data'] or ''):<10}"
+                        valor = f"{d['valor']:>12.2f}"
+                        nomh  = (d["nome"] or d["hist"] or "")[:44]
+                        line  = f"{cpf} │ {data} │ {valor} │ {nomh}"
+                        self.log.append(f"<span style='font-family:monospace; color:#ffd166;'>{line}</span>")
+                    self.log.append("<div style='text-align:center;color:#2e3d56;font-family:monospace;'>======================</div>")
+    
+            finally:
+                try:
+                    if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                        os.remove(tmp_path)
                 except Exception:
                     pass
                 
-            self.log_msg(f"Importado no sistema (perfil '{perfil}', via temporário): {base}", "success", update_status=False)
-            self.lbl_last_status.setText("Importado no sistema.")
-            self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-    
         except Exception as e:
             self.log_msg(f"Erro ao importar (perfil '{perfil}'): {e}", "error")
-        finally:
-            try:
-                if 'tmp_path' in locals() and os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except Exception:
-                pass
-            
+    
     # ---------- Stats ----------
     def _update_stats(self, total: int, ok: int, err: int):
         self.stat_total, self.stat_ok, self.stat_err = total, ok, err

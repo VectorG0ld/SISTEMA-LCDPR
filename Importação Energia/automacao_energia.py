@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QGraphicsDropShadowEffect, QTabWidget,
     QSizePolicy
 )
+from sistema import _RestTable
 
 # ============================
 # Estilo (copiado/adaptado do Importador XML)
@@ -893,22 +894,19 @@ class AutomacaoEnergiaUI(QWidget):
 
         actions = QHBoxLayout(); actions.setSpacing(10)
 
-        self.btn_gerar = QPushButton("🧾 Gerar TXT dos Talões")
-        self.btn_gerar.clicked.connect(self._start_gerar_txt)
-        actions.addWidget(self.btn_gerar)
-        
         self.btn_separar = QPushButton("🧭 Separar por Titular")
         self.btn_separar.setObjectName("success")
         self.btn_separar.clicked.connect(self._start_separador)
         actions.addWidget(self.btn_separar)
 
-
-
+        self.btn_gerar = QPushButton("🧾 Gerar TXT dos Talões")
+        self.btn_gerar.clicked.connect(self._start_gerar_txt)
+        actions.addWidget(self.btn_gerar)
+        
         # INSIRA LOGO APÓS self.btn_gerar ... antes do btn_cancel:
         self.btn_importar_txt = QPushButton("📥 Importar TXT do Talão")
         self.btn_importar_txt.clicked.connect(self._importar_txt_manual)
         actions.addWidget(self.btn_importar_txt)
-
 
         self.btn_cancel = QPushButton("⛔ Cancelar")
         self.btn_cancel.setObjectName("danger")
@@ -1314,20 +1312,32 @@ class AutomacaoEnergiaUI(QWidget):
                         sem_dup.append(ln)
                         continue
 
-                    # Checa no BD se já existe lançamento com mesmo participante (cpf_cnpj) + mesmo num_doc
-                    row = mw.db.fetch_one(
-                        """
-                        SELECT 1
-                          FROM lancamento l
-                          JOIN participante p ON p.id = l.id_participante
-                         WHERE REPLACE(COALESCE(l.num_doc,''),' ','') = ?
-                           AND REPLACE(COALESCE(p.cpf_cnpj,''),' ','') = ?
-                         LIMIT 1
-                        """,
-                        (num_doc, cpf_cnpj)
-                    )
+                    # Checagem de duplicidade via Supabase (sem SQL bruto)
+                    exists = False
+                    try:
+                        # 1) participante por CPF/CNPJ (digits)
+                        pid_rows = (_RestTable("participante")
+                                      .select("id")
+                                      .eq("cpf_cnpj", cpf_cnpj)
+                                      .limit(1)
+                                      .execute().data) or []
+                        if pid_rows:
+                            pid = int(pid_rows[0]["id"])
 
-                    if row:
+                            # 2) candidatos do mesmo participante; compara num_doc ignorando espaços
+                            cand = (_RestTable("lancamento")
+                                      .select("id,num_doc,id_participante")
+                                      .eq("id_participante", pid)
+                                      .order("id", desc=True)
+                                      .limit(200)
+                                      .execute().data) or []
+
+                            nd_target = re.sub(r"\s+", "", num_doc or "")
+                            exists = any(re.sub(r"\s+", "", str(c.get("num_doc") or "")) == nd_target for c in cand)
+                    except Exception:
+                        exists = False
+
+                    if exists:
                         dups_log.append((perfil, num_doc, cpf_cnpj, historico, os.path.basename(txt_path)))
                     else:
                         sem_dup.append(ln)

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTextBrowser, QSplitter
 )
 
-from PySide6.QtCore import Qt, QDate, QSize, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint
+from PySide6.QtCore import Qt, QDate, QSize, QCoreApplication, QTimer, QSignalBlocker, QObject, QEvent, QPoint, QSettings
 from PySide6.QtGui import QFont, QIcon, QColor, QPainter, QAction
 from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from PySide6.QtPrintSupport import QPrinter
@@ -77,16 +77,29 @@ class _RestTable:
         self._select = "*"
         self._method = "GET"
         self._payload = None
+        self._filters = []           # <-- NOVO: armazena (col, "op.valor")
 
     # ----- builders -----
     def select(self, cols: str):
         self._select = cols or "*"; return self
     def eq(self, col, val):
-        self.params[col] = f"eq.{val}"; return self
+        self._filters.append((col, f"eq.{val}")); return self
     def gte(self, col, val):
-        self.params[col] = f"gte.{val}"; return self
+        self._filters.append((col, f"gte.{val}")); return self
     def lte(self, col, val):
-        self.params[col] = f"lte.{val}"; return self
+        self._filters.append((col, f"lte.{val}")); return self
+    def in_(self, col, values):
+        if isinstance(values, (list, tuple, set)):
+            vals = ",".join(str(v) for v in values if v is not None)
+        else:
+            vals = str(values)
+        self._filters.append((col, f"in.({vals})"))
+        return self
+    def lt(self, col, val): self._filters.append((col, f"lt.{val}")); return self
+    def gt(self, col, val): self._filters.append((col, f"gt.{val}")); return self
+    def like(self, col: str, pattern: str):
+        self._filters.append((col, f"like.{pattern}"))
+        return self
     def order(self, col, desc=False):
         self.params["order"] = f"{col}.{'desc' if desc else 'asc'}"; return self
     def limit(self, n: int):
@@ -105,17 +118,22 @@ class _RestTable:
 
     # ----- executor -----
     def execute(self):
-        params = dict(self.params)
+        # começa com os params "únicos" (order, limit, on_conflict, etc.)
+        params_list = list(self.params.items())
+        # em GET, incluir o select
         if self._method == "GET":
-            params["select"] = self._select
+            params_list.append(("select", self._select))
+        # adiciona filtros repetíveis (eq/gte/lte/in)
+        params_list.extend(self._filters)
+    
         if   self._method == "GET":
-            r = _rq.get(self.base, headers=self.headers, params=params, timeout=20)
+            r = _rq.get(self.base, headers=self.headers, params=params_list, timeout=20)
         elif self._method == "POST":
-            r = _rq.post(self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+            r = _rq.post(self.base, headers=self.headers, params=params_list, json=self._payload, timeout=20)
         elif self._method == "PATCH":
-            r = _rq.patch(self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+            r = _rq.patch(self.base, headers=self.headers, params=params_list, json=self._payload, timeout=20)
         else:
-            r = _rq.request(self._method, self.base, headers=self.headers, params=params, json=self._payload, timeout=20)
+            r = _rq.request(self._method, self.base, headers=self.headers, params=params_list, json=self._payload, timeout=20)
         if r.status_code >= 400:
             raise Exception(f"PostgREST error {r.status_code}: {r.text}")
         try:
@@ -128,6 +146,20 @@ def _table_proxy(self, name: str): return _RestTable(name)
 
 Client.table = _table_proxy
 Client.from_ = _table_proxy
+
+
+def valida_cnpj(cnpj: str) -> bool:
+    import re
+    nums = re.sub(r'\D', '', cnpj or '')
+    if len(nums) != 14 or nums == nums[0] * 14:
+        return False
+    def calc_dig(base: str, pesos: list[int]) -> str:
+        soma = sum(int(d) * p for d, p in zip(base, pesos))
+        resto = soma % 11
+        return '0' if resto < 2 else str(11 - resto)
+    d1 = calc_dig(nums[:12], [5,4,3,2,9,8,7,6,5,4,3,2])
+    d2 = calc_dig(nums[:12] + d1, [6,5,4,3,2,9,8,7,6,5,4,3,2])
+    return nums.endswith(d1 + d2)
 
 # —————— Validação de CPF ——————
 def valida_cpf(cpf: str) -> bool:
@@ -366,15 +398,45 @@ class Database:
         if not perfil_slug:
             self.perfil_id = None
             return
+
+        # tenta achar pelo slug
         res = (self.sb.table("perfil")
                    .select("id")
                    .eq("slug", perfil_slug)
                    .limit(1).execute()).data
+
+        # se não existir, cria e já retorna o id
+        if not res:
+            res = (self.sb.table("perfil")
+                       .insert({"slug": perfil_slug, "nome": perfil_slug})
+                       .select("id")
+                       .execute()).data
+
         self.perfil_id = res[0]["id"] if res else None
+
 
     # -------- API compatível ----------
     def close(self):  # compat
         return
+
+    def _next_id(self, table: str, per_profile: bool = False) -> int:
+        """
+        Retorna MAX(id)+1 da tabela. Se não houver linhas, retorna 1.
+        Se per_profile=True e existir self.perfil_id, calcula por perfil.
+        """
+        q = self.sb.table(table).select("id").order("id", desc=True).limit(1)
+        if per_profile and getattr(self, "perfil_id", None):
+            q = q.eq("perfil_id", self.perfil_id)
+        rows = q.execute().data or []
+        max_id = int(rows[0]["id"]) if rows else 0
+        return max_id + 1
+
+    def insert_with_return(self, table: str, payload: dict) -> dict:
+        """
+        Insere no Supabase e retorna o primeiro registro criado (id incluído).
+        """
+        resp = self.sb.table(table).insert(payload).execute()
+        return (resp.data or [{}])[0]
 
     def execute_query(self, sql: str, params: list | tuple | None = None, autocommit: bool = True):
         s = (sql or "").strip()
@@ -391,9 +453,31 @@ class Database:
 
         # --- INSERT/UPDATE mínimos suportados (sem SQLite) ---
         # participante
-        if s_low.startswith("insert into participante"):
-            cpf, nome, tipo = params
-            self.sb.table("participante").insert({"cpf_cnpj": cpf, "nome": nome, "tipo_contraparte": tipo}).execute()
+        if s_low.startswith("insert into lancamento"):
+            cols15 = ["data","cod_imovel","cod_conta","num_doc","tipo_doc","historico",
+                      "id_participante","tipo_lanc","valor_entrada","valor_saida",
+                      "saldo_final","natureza_saldo","usuario","categoria","data_ord"]
+            cols14 = ["data","cod_imovel","cod_conta","num_doc","tipo_doc","historico",
+                      "id_participante","tipo_lanc","valor_entrada","valor_saida",
+                      "saldo_final","natureza_saldo","usuario","data_ord"]
+            cols = cols15 if len(params) == 15 else cols14
+            payload = dict(zip(cols, params))
+        
+            def _to_iso(d):
+                if isinstance(d, str) and "/" in d:
+                    d = d.strip(); dd, mm, yyyy = d.split("/")
+                    return f"{yyyy}-{int(mm):02d}-{int(dd):02d}"
+                return d
+            payload["data"] = _to_iso(payload.get("data"))
+        
+            # >>> NOVO: gravar perfil_id no lançamento
+            if getattr(self, "perfil_id", None):
+                payload["perfil_id"] = self.perfil_id
+        
+            # >>> NOVO: MAX(id)+1 POR PERFIL (per_profile=True)
+            payload["id"] = self._next_id("lancamento", per_profile=True)
+        
+            novo = self.insert_with_return("lancamento", payload)
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         if s_low.startswith("update participante set"):
@@ -402,11 +486,24 @@ class Database:
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         # imovel_rural
-        if s_low.startswith("insert into imovel_rural"):
-            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"]
+        if (s_low.startswith("insert into imovel_rural")
+            or s_low.startswith("insert or replace into imovel_rural")):
+
+            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel",
+                    "endereco","num","compl","bairro","uf","cod_mun","cep",
+                    "tipo_exploracao","participacao","area_total","area_utilizada"]
             payload = dict(zip(cols, params))
             if self.perfil_id: payload["perfil_id"] = self.perfil_id
-            self.sb.table("imovel_rural").insert(payload).execute()
+            
+            # menor ID livre
+            ids = (self.sb.table("imovel_rural").select("id").order("id", desc=False).execute().data) or []
+            taken = {r["id"] for r in ids if r.get("id") is not None and int(r["id"]) > 0}
+            nxt = 1
+            while nxt in taken:
+                nxt += 1
+            payload["id"] = self._next_id("imovel_rural", per_profile=False)
+            
+            novo = self.insert_with_return("imovel_rural", payload)
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         if s_low.startswith("update imovel_rural set"):
@@ -416,17 +513,45 @@ class Database:
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         # conta_bancaria
-        if s_low.startswith("insert into conta_bancaria"):
+        if (s_low.startswith("insert into conta_bancaria")
+            or s_low.startswith("insert or replace into conta_bancaria")):
             cols = ["cod_conta","pais_cta","banco","nome_banco","agencia","num_conta","saldo_inicial"]
             payload = dict(zip(cols, params))
             if self.perfil_id: payload["perfil_id"] = self.perfil_id
-            self.sb.table("conta_bancaria").insert(payload).execute()
+
+            # menor ID livre
+            ids = (self.sb.table("conta_bancaria").select("id").order("id", desc=False).execute().data) or []
+            taken = {r["id"] for r in ids if r.get("id") is not None and int(r["id"]) > 0}
+            nxt = 1
+            while nxt in taken:
+                nxt += 1
+            payload["id"] = self._next_id("conta_bancaria", per_profile=False)
+
+            novo = self.insert_with_return("conta_bancaria", payload)
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
+        
+        def _to_iso(d):
+            if isinstance(d, str) and "/" in d:
+                d = d.strip()
+                dd, mm, yyyy = d.split("/")
+                return f"{yyyy}-{int(mm):02d}-{int(dd):02d}"
+            return d
+
+        # UPDATE completo (edição da tela)
+        m = re.match(r"update\s+lancamento\s+set\s+data\s*=\s*\?,\s*cod_imovel\s*=\s*\?,\s*cod_conta\s*=\s*\?,\s*num_doc\s*=\s*\?,\s*tipo_doc\s*=\s*\?,\s*historico\s*=\s*\?,\s*id_participante\s*=\s*\?,\s*tipo_lanc\s*=\s*\?,\s*valor_entrada\s*=\s*\?,\s*valor_saida\s*=\s*\?,\s*saldo_final\s*=\s*\?,\s*natureza_saldo\s*=\s*\?,\s*usuario\s*=\s*\?,\s*data_ord\s*=\s*\?\s*where\s*id\s*=\s*\?", s_low)
+        if m:
+            cols = ["data","cod_imovel","cod_conta","num_doc","tipo_doc","historico",
+                    "id_participante","tipo_lanc","valor_entrada","valor_saida",
+                    "saldo_final","natureza_saldo","usuario","data_ord"]
+            payload = dict(zip(cols, params[:-1]))
+            payload["data"] = _to_iso(payload.get("data"))
+            self.sb.table("lancamento").update(payload).eq("id", params[-1]).execute()
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
-        if s_low.startswith("update conta_bancaria set"):
-            cols = ["cod_conta","pais_cta","banco","nome_banco","agencia","num_conta","saldo_inicial"]
-            payload = dict(zip(cols, params[:-1])); conta_id = params[-1]
-            self.sb.table("conta_bancaria").update(payload).eq("id", conta_id).execute()
+        # UPDATE só de saldo/natureza (recalcular cadeia)
+        if s_low.startswith("update lancamento set saldo_final=?, natureza_saldo=? where id=?"):
+            sf, nat, rid = params
+            self.sb.table("lancamento").update({"saldo_final": sf, "natureza_saldo": nat}).eq("id", rid).execute()
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         # --- DELETE genérico: DELETE FROM <tabela> WHERE id = ? ---
@@ -444,6 +569,53 @@ class Database:
             cpf, nome, tipo = params
             self.upsert_participante(cpf, nome, int(tipo))
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
+
+
+        # CT-e: checagem de duplicidade por (num_doc normalizado + cpf/cnpj)
+        m = re.match(
+            r"select\s+1\s+from\s+lancamento\s+l\s+join\s+participante\s+p\s+on\s+p\.id\s*=\s*l\.id_participante.*where.*limit\s+1",
+            s_low
+        )
+        if m:
+            numdoc_raw = (params[0] or "")
+            cpfcnpj_raw = (params[1] or "")
+            # normalizações equivalentes ao SQL REPLACE(...)
+            numdoc = numdoc_raw.replace(" ", "")
+            digits = re.sub(r"\D", "", cpfcnpj_raw)
+
+            # resolve participante pelo cpf_cnpj já sem máscara
+            prow = (self.sb.table("participante")
+                        .select("id")
+                        .eq("cpf_cnpj", digits)
+                        .limit(1).execute().data) or []
+            if not prow:
+                return []  # sem participante -> não há duplicado
+
+            pid = prow[0]["id"]
+            # verifica lançamento com mesmo num_doc e mesmo participante
+            lrow = (self.sb.table("lancamento")
+                        .select("id")
+                        .eq("id_participante", pid)
+                        .eq("num_doc", numdoc)
+                        .limit(1).execute().data) or []
+            return [(1,)] if lrow else []
+
+        # Relatório: receitas/despesas agrupadas por ano-mês
+        m = re.match(r"select\s+substr\(cast\(data_ord as text\),1,6\)\s+as\s+ym.*from\s+lancamento.*group\s+by\s+ym\s+order\s+by\s+ym", s_low, re.S)
+        if m:
+            rows = (self.sb.table("lancamento")
+                        .select("data_ord, valor_entrada, valor_saida")
+                        .gte("data_ord", params[0])
+                        .lte("data_ord", params[1])
+                        .execute().data) or []
+            # agrega manualmente
+            agg = {}
+            for r in rows:
+                ym = str(r["data_ord"])[:6]
+                agg.setdefault(ym, {"rec":0,"des":0})
+                agg[ym]["rec"] += r.get("valor_entrada",0) or 0
+                agg[ym]["des"] += r.get("valor_saida",0) or 0
+            return [(ym, v["rec"], v["des"]) for ym,v in sorted(agg.items())]
 
         # outros ainda não migrados
         raise NotImplementedError("Comando não suportado nesta fase (somente leitura + cadastros básicos via Supabase).")
@@ -471,12 +643,12 @@ class Database:
                 r["cod_mun"], r["cep"], r["telefone"], r["email"])
 
     def upsert_participante(self, cpf_cnpj: str, nome: str, tipo: int) -> int | None:
-        """Upsert de participante pela chave de negócio cpf_cnpj."""
+        """Upsert de participante pela chave de negócio cpf_cnpj, com MAX(id)+1."""
         cpf = (cpf_cnpj or "").strip()
         nm = (nome or "").strip()
         tp = int(tipo)
 
-        # procura por cpf_cnpj existente
+        # 1) Já existe? -> atualiza e retorna o id
         exist = (self.sb.table("participante")
                     .select("id")
                     .eq("cpf_cnpj", cpf)
@@ -488,13 +660,18 @@ class Database:
                 "tipo_contraparte": tp
             }).eq("id", pid).execute()
             return pid
-        else:
-            res = (self.sb.table("participante").insert({
-                "cpf_cnpj": cpf,
-                "nome": nm,
-                "tipo_contraparte": tp
-            }).execute().data)
-            return res[0]["id"] if res else None
+
+        # 2) Não existe -> cria com MAX(id)+1 (global, como sua tabela está definida)
+        payload = {
+            "id": self._next_id("participante", per_profile=False),
+            "cpf_cnpj": cpf,
+            "nome": nm,
+            "tipo_contraparte": tp
+        }
+        # IMPORTANTE: NÃO gravar perfil_id aqui (a tabela não tem essa coluna)
+
+        novo = self.insert_with_return("participante", payload)
+        return novo.get("id")
 
     def upsert_perfil_param(self, profile_slug: str, p: dict):
         payload = {
@@ -532,14 +709,18 @@ class Database:
 
         # 1) SUM(saldo_atual) FROM saldo_contas  -> computa via conta_bancaria + último lancamento
         if s_low.startswith("select sum(saldo_atual) from saldo_contas"):
-            contas = self.sb.table("conta_bancaria").select("id,saldo_inicial").execute().data or []
+            qcontas = self.sb.table("conta_bancaria").select("id,saldo_inicial")
+            if getattr(self, "perfil_id", None):
+                qcontas = qcontas.eq("perfil_id", self.perfil_id)
+            contas = qcontas.execute().data or []
+        
             total = 0
             for c in contas:
                 cid = c.get("id"); si = c.get("saldo_inicial") or 0
                 last = (self.sb.table("lancamento")
                             .select("saldo_final,natureza_saldo")
                             .eq("cod_conta", cid)
-                            .order("id", desc=True)  # nosso wrapper aceita 1 chave; ok aqui
+                            .order("id", desc=True)
                             .limit(1).execute().data)
                 if last:
                     sfin = last[0].get("saldo_final") or 0
@@ -549,17 +730,23 @@ class Database:
                 else:
                     total += si
             return [(total,)]
+        
 
         # 2) MIN/MAX(data_ord) FROM lancamento
         if s_low.startswith("select min(data_ord), max(data_ord) from lancamento"):
-            rmin = (self.sb.table("lancamento")
-                        .select("data_ord")
-                        .order("data_ord", desc=False)
-                        .limit(1).execute().data)
-            rmax = (self.sb.table("lancamento")
-                        .select("data_ord")
-                        .order("data_ord", desc=True)
-                        .limit(1).execute().data)
+            qmin = self.sb.table("lancamento").select("data_ord")
+            qmax = self.sb.table("lancamento").select("data_ord")
+
+            if getattr(self, "perfil_id", None):
+                contas = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                conta_ids = [r["id"] for r in contas]
+                if not conta_ids:
+                    return [(None, None)]
+                qmin = qmin.in_("cod_conta", conta_ids)
+                qmax = qmax.in_("cod_conta", conta_ids)
+
+            rmin = qmin.order("data_ord", desc=False).limit(1).execute().data
+            rmax = qmax.order("data_ord", desc=True ).limit(1).execute().data
             vmin = rmin[0]["data_ord"] if rmin and rmin[0]["data_ord"] is not None else None
             vmax = rmax[0]["data_ord"] if rmax and rmax[0]["data_ord"] is not None else None
             return [(vmin, vmax)]
@@ -567,15 +754,94 @@ class Database:
         # 3) SUM(valor_entrada|valor_saida) BETWEEN datas (data_ord)
         m = re.match(r"select sum\((valor_entrada|valor_saida)\) from lancamento where data_ord between \? and \?", s_low)
         if m:
-            col = m.group(1)
+            col = m.group(1)  # valor_entrada -> Receita ; valor_saida -> Despesa
             d1, d2 = params
-            data = (self.sb.table("lancamento")
-                        .select(col)
+
+            # Buscamos colunas suficientes para pós-filtrar por perfil e tipo
+            rows = (self.sb.table("lancamento")
+                        .select(f"{col},cod_conta,cod_imovel,tipo_lanc")
                         .gte("data_ord", d1)
                         .lte("data_ord", d2)
                         .execute().data) or []
-            total = sum((r.get(col) or 0) for r in data)
+
+            # (1) filtro por perfil: aceita por CONTA ou por IMÓVEL (para não perder lançamentos sem conta)
+            if getattr(self, "perfil_id", None):
+                contas = (self.sb.table("conta_bancaria")
+                             .select("id")
+                             .eq("perfil_id", self.perfil_id)
+                             .execute().data) or []
+                imoveis = (self.sb.table("imovel_rural")
+                              .select("id")
+                              .eq("perfil_id", self.perfil_id)
+                              .execute().data) or []
+                conta_ids  = {r["id"] for r in contas}
+                imovel_ids = {r["id"] for r in imoveis}
+
+                def _match_perfil(r):
+                    return (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)
+
+                rows = [r for r in rows if _match_perfil(r)]
+
+            # (2) filtro por TIPO (garante que receita não “some” saídas e vice-versa)
+            tipo_desejado = 1 if col == "valor_entrada" else 2
+            rows = [r for r in rows if (r.get("tipo_lanc") == tipo_desejado)]
+
+            total = sum((r.get(col) or 0) for r in rows)
             return [(total,)]
+
+
+        # 3.1) SALDO ANTERIOR (edição) -> "... cod_conta=? AND id < ? ORDER BY id DESC LIMIT 1"
+        m = re.match(r"select \(saldo_final \* case natureza_saldo when 'p' then 1 else -1 end\) from lancamento where cod_conta=\? and id < \? order by id desc limit 1", s_low)
+        if m:
+            conta_id, lim_id = params
+            rows = (self.sb.table("lancamento")
+                      .select("saldo_final,natureza_saldo,id")
+                      .eq("cod_conta", conta_id).lt("id", lim_id)
+                      .order("id", desc=True).limit(1).execute().data) or []
+            if not rows: return [(None,)]
+            sfin = rows[0].get("saldo_final") or 0
+            nat  = (rows[0].get("natureza_saldo") or "P").upper()
+            return [(sfin * (1 if nat == "P" else -1),)]
+
+        # 3.2) SALDO ANTERIOR (inserção) -> "... cod_conta=? ORDER BY id DESC LIMIT 1"
+        m = re.match(r"select \(saldo_final \* case natureza_saldo when 'p' then 1 else -1 end\) from lancamento where cod_conta=\? order by id desc limit 1", s_low)
+        if m:
+            (conta_id,) = params
+            rows = (self.sb.table("lancamento")
+                      .select("saldo_final,natureza_saldo")
+                      .eq("cod_conta", conta_id)
+                      .order("id", desc=True).limit(1).execute().data) or []
+            if not rows: return [(None,)]
+            sfin = rows[0].get("saldo_final") or 0
+            nat  = (rows[0].get("natureza_saldo") or "P").upper()
+            return [(sfin * (1 if nat == "P" else -1),)]
+
+        # 3.3) DUPLICIDADE por num_doc + participante
+        # "SELECT id FROM lancamento WHERE REPLACE(COALESCE(num_doc,''),' ','') = ? AND id_participante = ? [AND id != ?]"
+        if s_low.startswith("select id from lancamento where replace(coalesce(num_doc,''),' ','') = ? and id_participante = ?"):
+            norm, pid = params[0], params[1]
+            skip = params[2] if len(params) > 2 else None
+            rows = (self.sb.table("lancamento")
+                      .select("id,num_doc,id_participante")
+                      .eq("id_participante", pid).execute().data) or []
+            import re as _re
+            def _norm(x): return _re.sub(r"\D+", "", (x or ""))  # normaliza como na tela
+            for r in rows:
+                if _norm(r.get("num_doc")) == norm and (skip is None or r.get("id") != skip):
+                    return [(r["id"],)]
+            return []
+
+
+        # 3.4) Próximos lançamentos da conta (recalcular cadeia)
+        # "SELECT id, valor_entrada, valor_saida FROM lancamento WHERE cod_conta=? AND id > ? ORDER BY id"
+        m = re.match(r"select id, valor_entrada, valor_saida from lancamento where cod_conta=\? and id > \? order by id", s_low)
+        if m:
+            conta_id, from_id = params
+            rows = (self.sb.table("lancamento")
+                      .select("id,valor_entrada,valor_saida")
+                      .eq("cod_conta", conta_id).gt("id", from_id)
+                      .order("id", desc=False).execute().data) or []
+            return _tuplize(rows, ["id", "valor_entrada", "valor_saida"])
 
         # 4) SELECT de lançamentos com JOIN/alias (listagem principal da UI)
         #    (reconhece o padrão do SQL original)
@@ -690,17 +956,24 @@ class Database:
             data = q.limit(1).execute().data
             return ([(data[0]["id"],)] if data else [None])
 
-        # 9) CONTA: select ... where id=?
-        if s_low.startswith("select cod_conta"):
+        # 9) CONTA: select ... where id = ?
+        m = re.match(
+            r"select\s+(?P<cols>[\w\*,\s,]+)\s+from\s+conta_bancaria\s+where\s+id\s*=\s*\?",
+            s_norm, re.IGNORECASE
+        )
+        if m:
+            cols_txt = m.group("cols").strip().replace(" ", "")
+            if not params:
+                return [None]  # segurança extra
             cid = params[0]
-            cols = s_norm[s_low.find("select")+6:s_low.find("from")].strip()
             data = (self.sb.table("conta_bancaria")
-                        .select(cols)
+                        .select(cols_txt)
                         .eq("id", cid)
                         .limit(1).execute().data)
-            if not data: return [None]
-            cols_list = [c.strip() for c in cols.split(",")]
-            return [_tuplize(data, cols_list)][0]
+            if not data:
+                return [None]
+            cols_list = [c.strip() for c in cols_txt.split(",")]
+            return _tuplize(data, cols_list)
 
         # 10) PARTICIPANTE: listas para combos
         if s_low.startswith("select id, nome, cpf_cnpj from participante order by nome"):
@@ -733,6 +1006,35 @@ class Database:
             if self.perfil_id: q = q.eq("perfil_id", self.perfil_id)
             rows = q.order("nome_banco").execute().data
             return _tuplize(rows, ["id","nome_banco"])
+
+        # IMÓVEL: select ... where id=?
+        m = re.match(r"select\s+(?P<cols>[\w\*,\s]+)\s+from\s+imovel_rural\s+where\s+id\s*=\s*\?", s_low)
+        if m:
+            cols = m.group("cols").replace(" ", "")
+            imovel_id = params[0]
+            data = (self.sb.table("imovel_rural")
+                        .select(cols)
+                        .eq("id", imovel_id)
+                        .limit(1).execute().data)
+            if not data:
+                return [None]
+            return _tuplize(data, [c for c in cols.split(",")])
+
+        # --- LANCAMENTO: select <cols> from lancamento where id = ?
+        m = re.match(r"select\s+(?P<cols>[\w\*,\s]+)\s+from\s+lancamento\s+where\s+id\s*=\s*\?", s_low)
+        if m:
+            # re-captura em s_norm para preservar a lista de colunas
+            m2 = re.match(r"select\s+(?P<cols>[\w\*,\s]+)\s+from\s+lancamento\s+where\s+id\s*=\s*\?", s_norm, re.IGNORECASE)
+            cols_txt = m2.group("cols").strip().replace(" ", "")
+            rid = params[0]
+            rows = (self.sb.table("lancamento")
+                        .select(cols_txt)
+                        .eq("id", rid)
+                        .limit(1).execute().data) or []
+            if not rows:
+                return [None]
+            cols_list = [c.strip() for c in cols_txt.split(",")]
+            return _tuplize(rows, cols_list)
 
         # 12) Fallback: SELECT simples sem WHERE/ORDER complexos
         m = re.match(r"select\s+(?P<cols>[\w\*,\s]+)\s+from\s+(?P<table>\w+)$", s_low)
@@ -793,6 +1095,126 @@ class Database:
                 for r in rows
             ]
 
+        # Imóvel rural por nome
+        m = re.match(r"select\s+cod_imovel\s+from\s+imovel_rural\s+where\s+upper\(nome_imovel\)=\?", s_low)
+        if m:
+            nome = (params[0] or "").upper()
+            rows = (self.sb.table("imovel_rural")
+                        .select("cod_imovel")
+                        .eq("nome_imovel", nome)
+                        .limit(1)
+                        .execute().data) or []
+            return _tuplize(rows, ["cod_imovel"])
+
+        # Imóvel rural por nome (LIKE)
+        m = re.match(r"select\s+cod_imovel\s+from\s+imovel_rural\s+where\s+upper\(nome_imovel\)\s+like\s+\?", s_low)
+        if m:
+            like = (params[0] or "").upper()
+            rows = (self.sb.table("imovel_rural")
+                        .select("cod_imovel")
+                        .like("nome_imovel", like)
+                        .limit(1)
+                        .execute().data) or []
+            return _tuplize(rows, ["cod_imovel"])
+
+        # Agrupamento mensal (ym = AAAAMM) de receitas e despesas no período
+        m = re.match(r"select\s+substr\(cast\(data_ord\s+as\s+text\),1,6\)\s+as\s+ym.*where\s+data_ord\s+between\s+\?\s+and\s+\?\s+group\s+by\s+ym\s+order\s+by\s+ym", s_low, re.S)
+        if m:
+            d1, d2 = params
+            rows = (self.sb.table("lancamento")
+                        .select("data_ord,valor_entrada,valor_saida")
+                        .gte("data_ord", int(d1))
+                        .lte("data_ord", int(d2))
+                        .order("data_ord")
+                        .execute().data) or []
+            agg = {}
+            for r in rows:
+                ym = str(r.get("data_ord") or "")[:6]
+                if not ym:
+                    continue
+                agg.setdefault(ym, {"rec": 0.0, "des": 0.0})
+                agg[ym]["rec"] += r.get("valor_entrada", 0) or 0
+                agg[ym]["des"] += r.get("valor_saida", 0) or 0
+            return [(ym, v["rec"], v["des"]) for ym, v in sorted(agg.items())]
+
+        # [NEW] SELECT cod_imovel FROM imovel_rural WHERE UPPER(nome_imovel) LIKE ?
+        m = re.match(r"select\s+cod_imovel\s+from\s+imovel_rural\s+where\s+upper\(nome_imovel\)\s+like\s+\?", s_low)
+        if m:
+            pat = str(params[0] or "")
+            # remove 'UPPER(...)' e usa ilike no Supabase
+            # ex: '%FAZENDA ESTRELA%' => ilike('%fazenda estrela%')
+            pat_ilike = pat.replace("%", "%")
+            r = self.sb.table("imovel_rural").select("cod_imovel").ilike("nome_imovel", pat_ilike).limit(1).execute()
+            data = [(row.get("cod_imovel"),) for row in (r.data or [])]
+            return _Rows(data)
+
+        elif re.search(
+            r"select\s+1\s+from\s+lancamento\s+l\s+join\s+participante\s+p\s+on\s+p\.id\s*=\s*l\.id_participante\s+where\s+replace\(\s*coalesce\(\s*l\.num_doc\s*,\s*''\s*\)\s*,\s*'\s*'\s*,\s*''\s*\)\s*=\s*\?\s+and\s+replace\(\s*coalesce\(\s*p\.cpf_cnpj\s*,\s*''\s*\)\s*,\s*'\s*'\s*,\s*''\s*\)\s*=\s*\?\s+limit\s+1",
+            s_low
+        ):
+            # params: [norm_numdoc, digits]
+            norm_numdoc, digits = params[0], params[1]
+
+            # 1) pega ids do participante pelo cpf_cnpj
+            presp = self.sb("participante").select("id").eq("cpf_cnpj", digits).limit(50).execute()
+            p_ids = [r["id"] for r in (presp.data or [])] if presp.ok else []
+
+            # 2) busca lançamento por num_doc e participante
+            found = False
+            if p_ids:
+                lresp = (
+                    self.sb("lancamento")
+                    .select("id")
+                    .eq("num_doc", norm_numdoc)
+                    .in_("id_participante", p_ids)
+                    .limit(1)
+                    .execute()
+                )
+                found = bool(lresp.ok and lresp.data)
+
+            return _FakeCursor([(1,)] if found else [])
+
+        # --- imovel_rural por cod_imovel (+ opcional perfil_id) ---
+        if "from imovel_rural" in s_low and "where cod_imovel" in s_low:
+            cod = params[0]
+            pid = params[1] if len(params) > 1 else None
+            q = self.sb.table("imovel_rural").select("id").eq("cod_imovel", cod)
+            if pid:
+                q = q.eq("perfil_id", pid)
+            data = q.limit(1).execute().data or []
+            return _Rows([[r["id"]] for r in data])
+
+        
+        # --- conta_bancaria por cod_conta (+ opcional perfil_id) ---
+        if "from conta_bancaria" in s_low and "where cod_conta" in s_low:
+            cod = params[0]
+            pid = params[1] if len(params) > 1 else None
+            q = self.sb.table("conta_bancaria").select("id").eq("cod_conta", cod)
+            if pid:
+                q = q.eq("perfil_id", pid)
+            data = q.limit(1).execute().data or []
+            return _Rows([[r["id"]] for r in data])
+
+        # Participante: pegar 1 CPF (11 dígitos) — tolera WHERE vazio, ordem LIMIT/ORDER trocada e "ORDER BYid"
+        if re.match(
+            r"select\s+cpf_cnpj\s+from\s+participante(?:\s+where\b.*)?\s+(?:order\s+by\s*id\s+limit\s+1|limit\s+1\s+order\s+by\s*id)\b",
+            s_low
+        ):
+            rows = (
+                self.sb.table("participante")
+                .select("id,cpf_cnpj")
+                .order("id")
+                .limit(100)
+                .execute().data
+            ) or []
+            for r in rows:
+                digits = re.sub(r"\D", "", r.get("cpf_cnpj") or "")
+                if len(digits) == 11:
+                    return [(r.get("cpf_cnpj"),)]
+            # fallback: se não houver CPF puro, devolve o primeiro que houver
+            return ([(rows[0].get("cpf_cnpj"),)] if rows else [])
+
+        
         # 13) Não mapeado
         raise NotImplementedError(f"SELECT não mapeado para Supabase:\n{sql}")
 
@@ -1529,92 +1951,124 @@ class CadastroParticipanteDialog(QDialog):
             self.cpf_cnpj.setPlaceholderText("Documento")
     
     def _on_cpf_cnpj(self):
+        """
+        CPF: valida localmente, sem consulta na Receita.
+        CNPJ: valida localmente, consulta Receita, preenche 'nome' e avança o foco.
+        """
         import re
-        raw = self.cpf_cnpj.text().strip()
-        digits = re.sub(r'\D', '', raw)
-        idx = self.tipo.currentIndex()  # 0=Pessoa Jurídica (CNPJ), 1=Pessoa Física (CPF)
+        from PySide6.QtWidgets import QMessageBox
+        txt = (self.cpf_cnpj.text() or '').strip()
+        digits = re.sub(r'\D+', '', txt)
 
-        # Pessoa Física (CPF)
-        if idx == 1:
-            if not valida_cpf(raw):
-                QMessageBox.warning(self, "CPF inválido", "O CPF digitado não é válido.")
-                self.nome.clear()
+        # --- CPF (11) ---
+        if len(digits) == 11:
+            # valida local
+            if not valida_cpf(digits):
+                QMessageBox.warning(self, "CPF inválido", "Informe um CPF válido.")
+                self.cpf_cnpj.setFocus()
                 return
-            # Tenta Receita para preencher nome (se disponível)
-            try:
-                info = consulta_receita(digits, tipo='cpf')
-                nome_api = (info.get('nome') or "").strip()
-                if nome_api:
-                    self.nome.setText(nome_api)
-            except Exception:
-                pass
+            # formatação (opcional)
+            self.cpf_cnpj.setText(f"{digits[0:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:11]}")
+            # NÃO consulta Receita; foca próximo campo
+            self.focusNextChild()
+            return
 
-        # Pessoa Jurídica (CNPJ)
-        elif idx == 0:
-            if len(digits) != 14:
+        # --- CNPJ (14) ---
+        if len(digits) == 14:
+            # valida CNPJ local (veja função valida_cnpj abaixo)
+            if not valida_cnpj(digits):
+                QMessageBox.warning(self, "CNPJ inválido", "Informe um CNPJ válido.")
+                self.cpf_cnpj.setFocus()
                 return
-            try:
-                info = consulta_receita(digits, tipo='cnpj')
-                nome_api = _nome_cnpj_from_receita(info)
-                if nome_api:
-                    self.nome.setText(nome_api)
-            except Exception:
-                pass
+
+            # formatação (opcional)
+            self.cpf_cnpj.setText(f"{digits[0:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:14]}")
+
+            # consulta Receita — sua consulta_receita RETORNA UM DICT
+            data = consulta_receita(digits, tipo='cnpj')  # <<< NÃO faça 'ok, dados = ...'
+            # tenta extrair um nome útil
+            nome_receita = _nome_cnpj_from_receita(data) if isinstance(data, dict) else ""
+            if nome_receita and hasattr(self, "nome"):
+                if not (self.nome.text() or "").strip():
+                    self.nome.setText(nome_receita)
+
+            # foca o próximo campo da tela
+            self.focusNextChild()
+            return
+
+        # --- Tamanho inesperado: só normaliza/avisa ---
+        if digits:
+            QMessageBox.warning(self, "Documento inválido", "CPF deve ter 11 dígitos ou CNPJ 14 dígitos.")
+        self.cpf_cnpj.setText(digits)
+        self.cpf_cnpj.setFocus()
+
 
     def salvar(self):
-        import re, requests
-        raw = self.cpf_cnpj.text().strip()
-        digits = re.sub(r'\D', '', raw)
-        idx = self.tipo.currentIndex()  # 0=Pessoa Jurídica (CNPJ), 1=Pessoa Física (CPF)
+        """
+        Salva participante sem travar a UI com consulta de Receita para CPF.
+        Para CPF, valida localmente; para CNPJ, apenas grava (consulta pode ficar opcional fora daqui).
+        Atualiza a lista imediatamente.
+        """
+        from PySide6.QtWidgets import QMessageBox, QApplication
+        import re
 
-        # Validações corretas por tipo
-        if idx == 1:
-            if not valida_cpf(raw):
-                QMessageBox.warning(self, "Inválido", "CPF inválido.")
-                return
-        elif idx == 0:
-            if len(digits) != 14:
-                QMessageBox.warning(self, "Inválido", "CNPJ deve ter 14 dígitos.")
-                return
-            try:
-                info = consulta_receita(digits, tipo='cnpj')
-            except requests.HTTPError:
-                QMessageBox.warning(self, "Inválido", "Não foi possível consultar o CNPJ na Receita Federal.")
-                return
-            # Aceita se vier nome/fantasia, mesmo que não tenha 'status'
-            if not _nome_cnpj_from_receita(info):
-                QMessageBox.warning(self, "Não Encontrado", "CNPJ não localizado na Receita Federal.")
-                return
-
-        nome = self.nome.text().strip()
-        if not nome:
-            QMessageBox.warning(self, "Inválido", "Nome não pode ficar vazio.")
+        parent = self.parent()
+        db = getattr(parent, "db", None)
+        if db is None:
+            QMessageBox.warning(self, "Erro", "Conexão com o banco não encontrada.")
             return
 
-        exists = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (digits,))
-        if exists and not self.participante_id:
-            QMessageBox.information(self, "Já existe", f"Participante já cadastrado (ID {exists[0]}).")
+        # Pega campos com fallback defensivo
+        cpf_widget  = getattr(self, "cpf_cnpj", None)
+        nome_widget = getattr(self, "nome", None)
+        tipo_combo  = getattr(self, "tipo_combo", None)
+
+        cpf_raw = (cpf_widget.text() if cpf_widget else "").strip()
+        nome    = (nome_widget.text() if nome_widget else "").strip()
+        digits  = re.sub(r"\D+", "", cpf_raw)
+
+        if not digits or not nome:
+            QMessageBox.warning(self, "Campos obrigatórios", "Informe CPF/CNPJ e Nome.")
             return
 
-        data = (digits, nome, idx + 1)  # 1=Juridica, 2=Fisica
+        # tipo: se houver combo, use currentData() (int), senão deduz
+        if tipo_combo and hasattr(tipo_combo, "currentData") and tipo_combo.currentData() is not None:
+            tipo = int(tipo_combo.currentData())
+        else:
+            tipo = 1 if len(digits) == 11 else 2
+
+        # CPF: valida localmente e NÃO chama Receita aqui
+        if len(digits) == 11:
+            if not valida_cpf(digits):
+                QMessageBox.warning(self, "CPF inválido", "Informe um CPF válido.")
+                if cpf_widget: cpf_widget.setFocus()
+                return
+
+        # CNPJ: aqui só grava (consulta Receita, se desejado, deve acontecer em outra ação específica)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            if self.participante_id:
-                self.db.execute_query(
-                    "UPDATE participante SET cpf_cnpj = ?, nome = ?, tipo_contraparte = ? WHERE id = ?",
-                    data + (self.participante_id,))
-            else:
-                self.db.execute_query(
-                    "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?, ?, ?)", data)
-            QMessageBox.information(self, "Sucesso", "Participante salvo com sucesso!")
-            # Ao salvar manualmente, também atualiza combos abertos:
-            if hasattr(self.parent(), "_broadcast_participantes_changed"):
-                try:
-                    self.parent()._broadcast_participantes_changed()
-                except Exception:
-                    pass
-            self.accept()
+            pid = db.upsert_participante(digits, nome, tipo)
         except Exception as e:
-            QMessageBox.critical(self, "Erro ao Salvar", f"Não foi possível salvar participante:\n{e}")
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(self, "Erro ao salvar", f"{e}")
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        # guarda para o chamador (se quiser saber qual foi criado/atualizado)
+        self.novo_id = pid
+
+        # === ATUALIZA UI NA HORA ===
+        try:
+            if parent and hasattr(parent, "_broadcast_participantes_changed"):
+                parent._broadcast_participantes_changed()
+            if parent and hasattr(parent, "_reload_participantes"):
+                parent._reload_participantes()
+        except Exception:
+            pass
+
+        QMessageBox.information(self, "Sucesso", "Participante salvo com sucesso.")
+        self.accept()
 
 class ParametrosDialog(QDialog):
     def __init__(self, parent=None):
@@ -1757,6 +2211,7 @@ class DashboardWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = Database()
+        self.settings = QSettings("AgroLCDPR", "UI")
 
         self.layout = QVBoxLayout(self)
         self._build_filter_ui()
@@ -1780,6 +2235,11 @@ class DashboardWidget(QWidget):
         self.dt_dash_ini = QDateEdit(_ini); self.dt_dash_ini.setCalendarPopup(True); self.dt_dash_ini.setDisplayFormat("dd/MM/yyyy"); hl.addWidget(self.dt_dash_ini)
         hl.addWidget(QLabel("Até:"))
         self.dt_dash_fim = QDateEdit(_fim); self.dt_dash_fim.setCalendarPopup(True); self.dt_dash_fim.setDisplayFormat("dd/MM/yyyy"); hl.addWidget(self.dt_dash_fim)
+
+        ini = self.settings.value("dashFilterIni", None)
+        fim = self.settings.value("dashFilterFim", None)
+        if isinstance(ini, QDate): self.dt_dash_ini.setDate(ini)
+        if isinstance(fim, QDate): self.dt_dash_fim.setDate(fim)
 
         btn = QPushButton("Aplicar filtro"); btn.clicked.connect(self.on_dash_filter_changed)
         hl.addWidget(btn)
@@ -1978,23 +2438,102 @@ class ReportCenterDialog(QDialog):
         return cats, r, d
 
     def _dados_por_fazenda(self, d1_ord: int, d2_ord: int):
-        sql = """
-        SELECT i.nome_imovel,
-               SUM(l.valor_entrada) AS rec,
-               SUM(l.valor_saida)   AS des
-        FROM lancamento l
-        JOIN imovel_rural i ON i.id = l.cod_imovel
-        WHERE l.data_ord BETWEEN ? AND ?
-        GROUP BY i.nome_imovel
-        ORDER BY (rec - des) DESC
         """
-        rows = self._rows(sql, (d1_ord, d2_ord))
-        cats, r, d = [], [], []
-        for nome, rec, des in rows:
-            cats.append(nome); r.append(rec or 0); d.append(des or 0)
-        return cats, r, d
+        Retorna (categorias, receitas[], despesas[]) por fazenda usando Supabase,
+        evitando colunas extras (ex.: 'usuario') caírem em posições erradas.
+        """
+        sb = self.db.sb
+        pid = self.db.perfil_id
+
+        # 1) contas do perfil
+        contas = (sb.table("conta_bancaria")
+                    .select("id")
+                    .eq("perfil_id", pid)
+                    .execute().data) or []
+        conta_ids = [c["id"] for c in contas]
+        if not conta_ids:
+            return [], [], []
+
+        # 2) lançamentos no período, apenas campos necessários
+        #    (filtra por contas do perfil)
+        lans = (sb.table("lancamento")
+                  .select("cod_imovel,valor_entrada,valor_saida,cod_conta,data_ord")
+                  .gte("data_ord", d1_ord)
+                  .lte("data_ord", d2_ord)
+                  .in_("cod_conta", conta_ids)
+                  .execute().data) or []
+
+        # 3) mapa id_imovel -> nome
+        imvs = (sb.table("imovel_rural")
+                  .select("id,nome_imovel")
+                  .eq("perfil_id", pid)
+                  .execute().data) or []
+        nome_by_id = {r["id"]: (r.get("nome_imovel") or f"IMÓVEL {r['id']}") for r in imvs}
+
+        # 4) agrega
+        from collections import defaultdict
+        soma_r = defaultdict(float)
+        soma_d = defaultdict(float)
+        for r in lans:
+            fid = r.get("cod_imovel")
+            if fid is None:
+                continue
+            key = nome_by_id.get(fid, f"IMÓVEL {fid}")
+            try:
+                soma_r[key] += float(r.get("valor_entrada") or 0)
+                soma_d[key] += float(r.get("valor_saida") or 0)
+            except Exception:
+                # Se vier string por engano, ignora aquela linha
+                continue
+
+        # 5) ordena por nome de fazenda
+        cats = sorted(soma_r.keys())
+        receitas = [soma_r[c] for c in cats]
+        despesas = [soma_d[c] for c in cats]
+        return cats, receitas, despesas
 
     def _dados_anual(self, d1_ord: int, d2_ord: int):
+        """
+        Retorna (categorias, receitas[], despesas[]) agregando por ANO.
+        Se estiver usando Supabase (self.db.sb), agrupa em Python para evitar SELECT não mapeado.
+        """
+        sb = getattr(self.db, "sb", None)
+        if sb:
+            pid = getattr(self.db, "perfil_id", None)
+
+            # Busca os lançamentos necessários
+            rows = (sb.table("lancamento")
+                        .select("data_ord,valor_entrada,valor_saida,cod_conta,cod_imovel,tipo_lanc")
+                        .gte("data_ord", d1_ord)
+                        .lte("data_ord", d2_ord)
+                        .execute().data) or []
+
+            # Filtro por perfil: aceita por CONTA ou por IMÓVEL (coerente com _run_select)
+            if pid:
+                contas = (sb.table("conta_bancaria").select("id").eq("perfil_id", pid).execute().data) or []
+                imoveis = (sb.table("imovel_rural").select("id").eq("perfil_id", pid).execute().data) or []
+                cset = {c["id"] for c in contas}
+                iset = {i["id"] for i in imoveis}
+                rows = [r for r in rows if (r.get("cod_conta") in cset) or (r.get("cod_imovel") in iset)]
+
+            # Agrega por ANO
+            agg = {}  # ano -> [rec, des]
+            for r in rows:
+                ano = str(r.get("data_ord") or "")[:4]
+                if len(ano) != 4:
+                    continue
+                rec = float(r.get("valor_entrada") or 0.0)
+                des = float(r.get("valor_saida") or 0.0)
+                tot = agg.setdefault(ano, [0.0, 0.0])
+                tot[0] += rec
+                tot[1] += des
+
+            cats = sorted(agg.keys())
+            r = [agg[a][0] for a in cats]
+            d = [agg[a][1] for a in cats]
+            return cats, r, d
+
+        # Caminho SQLite/local (SQL original)
         sql = """
         SELECT substr(CAST(data_ord AS TEXT),1,4) AS ano,
                SUM(valor_entrada) AS rec, SUM(valor_saida) AS des
@@ -2008,8 +2547,54 @@ class ReportCenterDialog(QDialog):
             cats.append(str(ano)); r.append(rec or 0); d.append(des or 0)
         return cats, r, d
 
+
     def _dre_mes_a_mes(self, d1_ord: int, d2_ord: int, por_fazenda: bool):
+        sb = getattr(self.db, "sb", None)
+        pid = getattr(self.db, "perfil_id", None)
+
         if por_fazenda:
+            if sb:
+                # Imóveis do perfil (p/ mapear id -> nome)
+                im_rows = (sb.table("imovel_rural")
+                              .select("id,nome_imovel" + (",perfil_id" if pid else ""))
+                              .eq("perfil_id", pid).execute().data) if pid else \
+                          (sb.table("imovel_rural").select("id,nome_imovel").execute().data)
+                im_rows = im_rows or []
+                imap = {i["id"]: (i.get("nome_imovel") or f"IMÓVEL {i['id']}") for i in im_rows}
+
+                # Lançamentos no período
+                rows = (sb.table("lancamento")
+                            .select("data_ord,valor_entrada,valor_saida,cod_imovel,cod_conta")
+                            .gte("data_ord", d1_ord)
+                            .lte("data_ord", d2_ord)
+                            .execute().data) or []
+
+                # Filtro por perfil via CONTA ou IMÓVEL
+                if pid:
+                    contas = (sb.table("conta_bancaria").select("id").eq("perfil_id", pid).execute().data) or []
+                    cset = {c["id"] for c in contas}
+                    rows = [r for r in rows if (r.get("cod_imovel") in imap) or (r.get("cod_conta") in cset)]
+
+                # Agrega por (fazenda, AAAAMM)
+                agg = {}  # (faz, ym) -> [rec, des]
+                for r in rows:
+                    ym = str(r.get("data_ord") or "")[:6]
+                    if len(ym) != 6:
+                        continue
+                    fid = r.get("cod_imovel")
+                    faz = imap.get(fid, f"IMÓVEL {fid}" if fid is not None else "—")
+                    rec = float(r.get("valor_entrada") or 0.0)
+                    des = float(r.get("valor_saida") or 0.0)
+                    key = (faz, ym)
+                    tot = agg.setdefault(key, [0.0, 0.0])
+                    tot[0] += rec
+                    tot[1] += des
+
+                out = [ (faz, ym, vals[0], vals[1]) for (faz, ym), vals in agg.items() ]
+                out.sort(key=lambda x: (str(x[0]), str(x[1])))
+                return out
+
+            # Caminho SQL (local)
             sql = """
             SELECT i.nome_imovel,
                    substr(CAST(l.data_ord AS TEXT),1,6) AS ym,
@@ -2019,7 +2604,39 @@ class ReportCenterDialog(QDialog):
             GROUP BY i.nome_imovel, ym ORDER BY i.nome_imovel, ym
             """
             return self._rows(sql, (d1_ord, d2_ord))
+
         else:
+            if sb:
+                # Lançamentos e filtro perfil
+                rows = (sb.table("lancamento")
+                            .select("data_ord,valor_entrada,valor_saida,cod_conta,cod_imovel")
+                            .gte("data_ord", d1_ord)
+                            .lte("data_ord", d2_ord)
+                            .execute().data) or []
+                if pid:
+                    contas = (sb.table("conta_bancaria").select("id").eq("perfil_id", pid).execute().data) or []
+                    imoveis = (sb.table("imovel_rural").select("id").eq("perfil_id", pid).execute().data) or []
+                    cset = {c["id"] for c in contas}
+                    iset = {i["id"] for i in imoveis}
+                    rows = [r for r in rows if (r.get("cod_conta") in cset) or (r.get("cod_imovel") in iset)]
+
+                # Agrega por AAAAMM
+                agg = {}  # ym -> [rec, des]
+                for r in rows:
+                    ym = str(r.get("data_ord") or "")[:6]
+                    if len(ym) != 6:
+                        continue
+                    rec = float(r.get("valor_entrada") or 0.0)
+                    des = float(r.get("valor_saida") or 0.0)
+                    tot = agg.setdefault(ym, [0.0, 0.0])
+                    tot[0] += rec
+                    tot[1] += des
+
+                out = [ (ym, vals[0], vals[1]) for ym, vals in agg.items() ]
+                out.sort(key=lambda x: str(x[0]))
+                return out
+
+            # Caminho SQL (local)
             sql = """
             SELECT substr(CAST(data_ord AS TEXT),1,6) AS ym,
                    SUM(valor_entrada) AS rec, SUM(valor_saida) AS des
@@ -2030,6 +2647,50 @@ class ReportCenterDialog(QDialog):
             return self._rows(sql, (d1_ord, d2_ord))
 
     def _dre_por_fazenda(self, d1_ord: int, d2_ord: int):
+        """
+        Retorna [(nome_imovel, rec, des)] por fazenda.
+        Implementa caminho Supabase (agregação no cliente) e fallback SQL local.
+        """
+        sb = getattr(self.db, "sb", None)
+        pid = getattr(self.db, "perfil_id", None)
+
+        if sb:
+            # Mapa id -> nome_imovel
+            if pid:
+                im_rows = (sb.table("imovel_rural").select("id,nome_imovel").eq("perfil_id", pid).execute().data) or []
+            else:
+                im_rows = (sb.table("imovel_rural").select("id,nome_imovel").execute().data) or []
+            imap = {i["id"]: (i.get("nome_imovel") or f"IMÓVEL {i['id']}") for i in im_rows}
+
+            # Lançamentos
+            rows = (sb.table("lancamento")
+                        .select("cod_imovel,cod_conta,valor_entrada,valor_saida,data_ord")
+                        .gte("data_ord", d1_ord)
+                        .lte("data_ord", d2_ord)
+                        .execute().data) or []
+
+            # Filtro por perfil: CONTA ou IMÓVEL
+            if pid:
+                contas = (sb.table("conta_bancaria").select("id").eq("perfil_id", pid).execute().data) or []
+                cset = {c["id"] for c in contas}
+                rows = [r for r in rows if (r.get("cod_imovel") in imap) or (r.get("cod_conta") in cset)]
+
+            # Agrega por nome_imovel
+            agg = {}  # nome -> [rec, des]
+            for r in rows:
+                fid = r.get("cod_imovel")
+                nome = imap.get(fid, f"IMÓVEL {fid}" if fid is not None else "—")
+                rec = float(r.get("valor_entrada") or 0.0)
+                des = float(r.get("valor_saida") or 0.0)
+                tot = agg.setdefault(nome, [0.0, 0.0])
+                tot[0] += rec
+                tot[1] += des
+
+            out = [ (nome, vals[0], vals[1]) for nome, vals in agg.items() ]
+            out.sort(key=lambda x: str(x[0]))
+            return out
+
+        # Caminho SQL (local)
         sql = """
         SELECT i.nome_imovel,
                SUM(l.valor_entrada) AS rec,
@@ -2093,43 +2754,72 @@ class ReportCenterDialog(QDialog):
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }}
-    /* Cartões / seções */
-    .card {{
-      border:1px solid #11398a;
-      border-radius:10px;
-      padding:16px;
-      margin:14px 0;
-      background:#0d1b3d;
-      page-break-inside: avoid;
-    }}
-    /* Título */
-    h1 {{
-      margin:0 0 12px 0;
-      font-size:18pt;
-      font-weight:600;
-    }}
-    /* Tabelas */
+    .card {{ border:1px solid #11398a; border-radius:10px; padding:16px; margin:14px 0; background:#0d1b3d; page-break-inside: avoid; }}
+    h1 {{ margin:0 0 12px 0; font-size:18pt; font-weight:600; }}
     table {{ width:100%; border-collapse:collapse; margin-top:8px; }}
     th, td {{ padding:8px 10px; border-bottom:1px solid #11398a; text-align:center; }}
     th {{ background:#11398a; color:#fff; }}
-    /* Resultado por sinal */
-    .ok  {{ color:#27AE60; font-weight:700; }}   /* lucro → verde */
-    .bad {{ color:#E74C3C; font-weight:700; }}   /* prejuízo → vermelho */
+    .ok  {{ color:#27AE60; font-weight:700; }}
+    .bad {{ color:#E74C3C; font-weight:700; }}
     .muted {{ color:#9aa1b1; font-size:11px; margin-top:6px; }}
     </style></head><body>
     <h1>{titulo}</h1>
-    """    
-    
-    def _html_footer(self) -> str:
-        return "</body></html>"
+    """
 
     def _html_dre_mes(self, rows, por_fazenda: bool) -> str:
         title = "DRE Simplificada (mês a mês)" + (" — por Fazenda" if por_fazenda else "")
         html = self._html_header(title)
+
+        def _lab(ym):
+            try:
+                return self._mes_label(str(ym))
+                
+            except Exception:
+                return str(ym)
+
         if por_fazenda:
-            # rows: (fazenda, ym, rec, des)
-            atual = None; total_r=total_d=0
-            for faz, ym, rec, des in rows:
+            # Aceita linhas nos formatos: (faz, ym, rec, des) | (ym, faz, rec, des) | (faz, rec, des) | etc.
+            norm = []
+            for r in (rows or []):
+                if not isinstance(r, (list, tuple)) or not r:
+                    continue
+                
+                faz = ""
+                ym  = ""
+                nums = []
+
+                for x in r:
+                    xs = str(x or "").strip()
+
+                    # ym = sequência de 6 dígitos (ex.: 202501)
+                    if xs.isdigit() and len(xs) == 6:
+                        ym = xs
+                        continue
+                    
+                    # número (aceita vírgula ou ponto)
+                    xs_num = xs.replace('.', '', 1).replace(',', '.', 1)
+                    if isinstance(x, (int, float)) or xs_num.replace('.', '', 1).isdigit():
+                        try:
+                            nums.append(float(xs_num))
+                        except Exception:
+                            pass
+                        continue
+                    
+                    # texto: provável nome da fazenda
+                    if not faz and xs:
+                        faz = xs
+
+                # completa faltantes
+                rec = nums[0] if len(nums) > 0 else 0.0
+                des = nums[1] if len(nums) > 1 else 0.0
+                norm.append((faz, ym, rec, des))
+
+            # ordena e renderiza (mantém sua lógica de totalização/tabela)
+            norm.sort(key=lambda x: (str(x[0]), str(x[1])))
+
+            atual = None
+            total_r = total_d = 0.0
+            for faz, ym, rec, des in norm:
                 if atual != faz:
                     if atual is not None:
                         resultado = total_r - total_d
@@ -2138,14 +2828,27 @@ class ReportCenterDialog(QDialog):
                             f"<th>Total</th>"
                             f"<th>{fmt_money(total_r)}</th>"
                             f"<th>{fmt_money(total_d)}</th>"
-                            f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                            f"<th class='{'ok' if resultado>=0 else 'bad'}'>{fmt_money(resultado)}</th>"
                             f"</tr></table></div>"
                         )
-                    html += f"<div class='card'><h2>{faz}</h2><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
-                    atual = faz; total_r = total_d = 0
-                r = rec or 0; d = des or 0; res = r - d
-                total_r += r; total_d += d
-                html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
+                    atual = faz
+                    total_r = total_d = 0.0
+                    html += f"<div class='card'><h2>{faz or '—'}</h2><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
+
+                r_ = float(rec or 0.0)
+                d_ = float(des or 0.0)
+                res = r_ - d_
+                total_r += r_
+                total_d += d_
+                html += (
+                    f"<tr>"
+                    f"<td>{_lab(ym)}</td>"
+                    f"<td>{fmt_money(r_)}</td>"
+                    f"<td>{fmt_money(d_)}</td>"
+                    f"<td class='{'ok' if res>=0 else 'bad'}'>{fmt_money(res)}</td>"
+                    f"</tr>"
+                )
+
             if atual is not None:
                 resultado = total_r - total_d
                 html += (
@@ -2153,34 +2856,273 @@ class ReportCenterDialog(QDialog):
                     f"<th>Total</th>"
                     f"<th>{fmt_money(total_r)}</th>"
                     f"<th>{fmt_money(total_d)}</th>"
-                    f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                    f"<th class='{'ok' if resultado>=0 else 'bad'}'>{fmt_money(resultado)}</th>"
                     f"</tr></table></div>"
                 )
+
+
+        html += self._html_footer()
+        return html
+
+    def _html_footer(self) -> str:
+        return "</body></html>"
+
+    def _html_dre_mes(self, rows, por_fazenda: bool) -> str:
+        title = "DRE Simplificada (mês a mês)" + (" — por Fazenda" if por_fazenda else "")
+        html = self._html_header(title)
+
+        def _lab(ym):
+            try:
+                return self._mes_label(str(ym))
+            except Exception:
+                return str(ym)
+
+        if por_fazenda:
+            import re
+        
+            def _is_number_like(x):
+                if isinstance(x, (int, float)):
+                    return True
+                s = str(x or "").strip()
+                return bool(re.fullmatch(r"[-+]?[\d.,]+", s))
+        
+            def _parse_num(x):
+                if isinstance(x, (int, float)):
+                    return float(x)
+                s = str(x or "").strip()
+                # remove quaisquer símbolos estranhos
+                s = re.sub(r"[^\d,.\-+]", "", s)
+                # heurística decimal: vírgula prevalece sobre ponto se vier por último
+                if "," in s and "." in s:
+                    if s.rfind(",") > s.rfind("."):
+                        s = s.replace(".", "").replace(",", ".")
+                    else:
+                        s = s.replace(",", "")
+                elif "," in s:
+                    s = s.replace(".", "").replace(",", ".")
+                else:
+                    s = s.replace(",", "")
+                try:
+                    return float(s)
+                except Exception:
+                    return 0.0
+        
+            # cache local id -> nome_imovel (quando só vier o código)
+            _nome_cache = {}
+            def _nome_por_id(v):
+                try:
+                    i = int(str(v))
+                except Exception:
+                    return None
+                # evita confundir com AAAAMM
+                if len(str(v)) == 6:
+                    return None
+                if i in _nome_cache:
+                    return _nome_cache[i]
+                try:
+                    r = self.db.fetch_all("SELECT nome_imovel FROM imovel_rural WHERE id = ?", (i,))
+                    nm = (r[0][0] if r and r[0] else f"IMÓVEL {i}")
+                except Exception:
+                    nm = f"IMÓVEL {i}"
+                _nome_cache[i] = nm
+                return nm
+        
+            norm = []
+            for row in (rows or []):
+                if not isinstance(row, (list, tuple)) or not row:
+                    continue
+                
+                # dois últimos números da linha = rec/des (robusto p/ (faz, ym, rec, des) | (id, ym, rec, des) | (ym, rec, des))
+                num_idxs = [(idx, _parse_num(val)) for idx, val in enumerate(row) if _is_number_like(val)]
+                rec = des = 0.0
+                if len(num_idxs) >= 2:
+                    (i1, v1), (i2, v2) = num_idxs[-2], num_idxs[-1]
+                    if i1 < i2:
+                        rec, des = v1, v2
+                    else:
+                        rec, des = v2, v1
+        
+                # ym (AAAAMM)
+                ym = ""
+                for x in row:
+                    xs = str(x or "").strip()
+                    if xs.isdigit() and len(xs) == 6:
+                        ym = xs
+                        break
+                    
+                # nome da fazenda (qualquer texto com letras). se não houver, tenta id->nome
+                faz = ""
+                for x in row:
+                    xs = str(x or "").strip()
+                    if any(ch.isalpha() for ch in xs):
+                        faz = xs
+                        break
+                if not faz:
+                    for x in row:
+                        nome = _nome_por_id(x)
+                        if nome:
+                            faz = nome
+                            break
+                        
+                norm.append((faz, ym, rec, des))
+        
+            norm.sort(key=lambda x: (str(x[0]), str(x[1])))
+        
+            atual = None
+            total_r = total_d = 0.0
+            for faz, ym, rec, des in norm:
+                if atual != faz:
+                    if atual is not None:
+                        resultado = total_r - total_d
+                        html += (
+                            f"<tr>"
+                            f"<th>Total</th>"
+                            f"<th>{fmt_money(total_r)}</th>"
+                            f"<th>{fmt_money(total_d)}</th>"
+                            f"<th class='{'ok' if resultado>=0 else 'bad'}'>{fmt_money(resultado)}</th>"
+                            f"</tr></table></div>"
+                        )
+                    atual = faz
+                    total_r = total_d = 0.0
+                    html += (
+                        f"<div class='card'><h2>{faz or '—'}</h2>"
+                        f"<table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
+                    )
+        
+                r_ = float(rec or 0.0)
+                d_ = float(des or 0.0)
+                res = r_ - d_
+                total_r += r_
+                total_d += d_
+                html += (
+                    f"<tr>"
+                    f"<td>{_lab(ym)}</td>"
+                    f"<td>{fmt_money(r_)}</td>"
+                    f"<td>{fmt_money(d_)}</td>"
+                    f"<td class='{'ok' if res>=0 else 'bad'}'>{fmt_money(res)}</td>"
+                    f"</tr>"
+                )
+        
+            if atual is not None:
+                resultado = total_r - total_d
+                html += (
+                    f"<tr>"
+                    f"<th>Total</th>"
+                    f"<th>{fmt_money(total_r)}</th>"
+                    f"<th>{fmt_money(total_d)}</th>"
+                    f"<th class='{'ok' if resultado>=0 else 'bad'}'>{fmt_money(resultado)}</th>"
+                    f"</tr></table></div>"
+                )
+        
         else:
-            # rows: (ym, rec, des)
+            # Quando NÃO separa por fazenda, aceite linhas em qualquer ordem:
+            # (ym, rec, des) ou (faz, ym, rec, des) ou (id, ym, rec, des) etc.
+            import re
+        
+            def _is_number_like(x):
+                if isinstance(x, (int, float)):
+                    return True
+                s = str(x or "").strip()
+                return bool(re.fullmatch(r"[-+]?[\d.,]+", s))
+        
+            def _parse_num(x):
+                if isinstance(x, (int, float)):
+                    return float(x)
+                s = str(x or "").strip()
+                s = re.sub(r"[^\d,.\-+]", "", s)
+                if "," in s and "." in s:
+                    if s.rfind(",") > s.rfind("."):
+                        s = s.replace(".", "").replace(",", ".")
+                    else:
+                        s = s.replace(",", "")
+                elif "," in s:
+                    s = s.replace(".", "").replace(",", ".")
+                else:
+                    s = s.replace(",", "")
+                try:
+                    return float(s)
+                except Exception:
+                    return 0.0
+        
+            agg = {}  # ym -> [rec, des]
+            for row in (rows or []):
+                if not isinstance(row, (list, tuple)) or not row:
+                    continue
+                
+                # ym
+                ym = ""
+                for x in row:
+                    xs = str(x or "").strip()
+                    if xs.isdigit() and len(xs) == 6:
+                        ym = xs
+                        break
+                    
+                # dois últimos números = rec/des
+                num_vals = [_parse_num(val) for val in row if _is_number_like(val)]
+                rec = des = 0.0
+                if len(num_vals) >= 2:
+                    rec, des = num_vals[-2], num_vals[-1]
+        
+                if ym:
+                    if ym not in agg:
+                        agg[ym] = [0.0, 0.0]
+                    agg[ym][0] += rec
+                    agg[ym][1] += des
+        
+            # Renderização
             html += "<div class='card'><table><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Resultado</th></tr>"
-            total_r=total_d=0
-            for ym, rec, des in rows:
-                r = rec or 0; d = des or 0; res = r - d
-                total_r += r; total_d += d
-                html += f"<tr><td>{self._mes_label(ym)}</td><td>{fmt_money(r)}</td><td>{fmt_money(d)}</td><td class='{ 'ok' if res>=0 else 'bad' }'>{fmt_money(res)}</td></tr>"
+            total_r = total_d = 0.0
+        
+            for ym in sorted(agg.keys()):
+                r, d = agg[ym]
+                res = r - d
+                total_r += r
+                total_d += d
+                html += (
+                    f"<tr>"
+                    f"<td>{_lab(ym)}</td>"
+                    f"<td>{fmt_money(r)}</td>"
+                    f"<td>{fmt_money(d)}</td>"
+                    f"<td class='{'ok' if res>=0 else 'bad'}'>{fmt_money(res)}</td>"
+                    f"</tr>"
+                )
+        
             resultado = total_r - total_d
             html += (
                 f"<tr>"
                 f"<th>Total</th>"
                 f"<th>{fmt_money(total_r)}</th>"
                 f"<th>{fmt_money(total_d)}</th>"
-                f"<th class='{ 'ok' if resultado>=0 else 'bad' }'>{fmt_money(resultado)}</th>"
+                f"<th class='{'ok' if resultado>=0 else 'bad'}'>{fmt_money(resultado)}</th>"
                 f"</tr></table></div>"
             )
+        
         html += self._html_footer()
         return html
+        
 
     def _html_dre_por_fazenda(self, rows) -> str:
-        # rows: (fazenda, rec, des)
+        # rows aceitos: (fazenda, rec, des, ...ignora extras)
         html = self._html_header("DRE por Fazenda (multi-seção)")
-        for faz, rec, des in rows:
-            rec = rec or 0; des = des or 0; res = rec - des
+        ini = self.dt_ini.date().toString("dd/MM/yyyy")
+        fim = self.dt_fim.date().toString("dd/MM/yyyy")
+
+        for r in (rows or []):
+            if not isinstance(r, (list, tuple)):
+                continue
+            faz = r[0] if len(r) > 0 else ""
+            rec = r[1] if len(r) > 1 else 0
+            des = r[2] if len(r) > 2 else 0
+            try:
+                rec = float(rec or 0)
+            except Exception:
+                rec = 0.0
+            try:
+                des = float(des or 0)
+            except Exception:
+                des = 0.0
+            res = rec - des
+
             html += f"""
             <div class='card'>
               <h2>{faz}</h2>
@@ -2188,11 +3130,12 @@ class ReportCenterDialog(QDialog):
                 <tr><th>Indicador</th><th>Valor</th></tr>
                 <tr><td>Receitas</td><td>{fmt_money(rec)}</td></tr>
                 <tr><td>Despesas</td><td>{fmt_money(des)}</td></tr>
-                <tr><td><b>Resultado</b></td><td class='{ 'ok' if res>=0 else 'bad' }'><b>{fmt_money(res)}</b></td></tr>
+                <tr><td><b>Resultado</b></td><td class='{"ok" if res>=0 else "bad"}'><b>{fmt_money(res)}</b></td></tr>
               </table>
-              <div class='muted'>Período: {self.dt_ini.date().toString("dd/MM/yyyy")} a {self.dt_fim.date().toString("dd/MM/yyyy")}</div>
+              <div class='muted'>Período: {ini} a {fim}</div>
             </div>
             """
+
         html += self._html_footer()
         return html
 
@@ -3298,6 +4241,15 @@ class GerenciamentoParticipantesWidget(QWidget):
             return
 
         QMessageBox.information(self, "Exportação concluída", f"Arquivo gerado:\n{out_path}")
+        # atualiza listas/combos abertos imediatamente
+        try:
+            if hasattr(self, "_broadcast_participantes_changed"):
+                self._broadcast_participantes_changed()
+            if hasattr(self, "_reload_participantes"):
+                self._reload_participantes()
+        except Exception:
+            pass
+        
 
     def cadastrar_novos_participantes(self):
         import importlib.util, json, os
@@ -3393,116 +4345,150 @@ class GerenciamentoParticipantesWidget(QWidget):
             QMessageBox.warning(self, "Importação Falhou", f"Não foi possível importar o TXT informado.\n{e}")
 
     def _import_participantes_txt(self, path: str):
-        """Importa TXT com linhas no formato:
-           CPF/CNPJ|NOME|TIPO
-           Ex: 02311428000180|WORLD SEG PRODUTOS PARA SEGURANCA LTDA|1
         """
-        inseridos = 0
-        erros = 0
-        with open(path, "r", encoding="utf-8") as f:
-            for ln, line in enumerate(f, start=1):
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split("|")
-                if len(parts) < 3:
-                    erros += 1
-                    continue
-                cpf = parts[0].strip()
-                nome = parts[1].strip()
-                try:
-                    tipo = int(parts[2].strip())
-                except:
-                    erros += 1
-                    continue
+        Importa participantes de um TXT (delimitadores aceitos: ; | ,) com pelo menos CPF/CNPJ e Nome.
+        Faz upsert em cada linha, mostra resumo e ATUALIZA a UI na hora.
+        """
+        from PySide6.QtWidgets import QMessageBox, QApplication
+        import re, os
 
-                if not cpf or not nome:
-                    erros += 1
-                    continue
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Importar participantes", "Arquivo inválido.")
+            return
 
-                try:
-                    self.db.upsert_participante(cpf, nome, tipo)
-                    inseridos += 1
-                except Exception as e:
-                    print(f"Falha ln {ln} ({cpf}): {e}")
-                    erros += 1
+        def _digits(s): return re.sub(r"\D+", "", str(s or ""))
 
-        msg = f"Importados/atualizados: {inseridos}"
-        if erros:
-            msg += f"\nLinhas com erro: {erros}"
-        QMessageBox.information(self, "Importação (TXT)", msg)
+        ok, upd, err, total = 0, 0, 0, 0
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    total += 1
+                    line = line.strip()
+                    if not line:
+                        continue
+                    # tenta ; depois | depois ,
+                    parts = None
+                    for sep in (";", "|", ","):
+                        p = [x.strip() for x in line.split(sep)]
+                        if len(p) >= 2:
+                            parts = p
+                            break
+                    if not parts:
+                        err += 1
+                        continue
+
+                    # heurística: pega primeiros 2 campos como cpf_cnpj e nome
+                    cpf_cnpj = _digits(parts[0])
+                    nome     = parts[1]
+                    # tipo (PF=1, PJ=2) — tenta descobrir pelo tamanho
+                    if len(cpf_cnpj) == 11:
+                        tipo = 1
+                    elif len(cpf_cnpj) == 14:
+                        tipo = 2
+                    else:
+                        # se vier separado em outra coluna, tenta achar
+                        tipo = 1 if any("pf" == (c or "").lower() for c in parts[2:3]) else (2 if any("pj" == (c or "").lower() for c in parts[2:3]) else 1)
+
+                    try:
+                        pid_before = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (cpf_cnpj,))
+                        pid = self.db.upsert_participante(cpf_cnpj, nome, tipo)
+                        if pid_before and pid_before[0]:
+                            upd += 1
+                        else:
+                            ok += 1
+                    except Exception:
+                        err += 1
+                        continue
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        QMessageBox.information(
+            self, "Importar participantes",
+            f"Linhas: {total}\nNovos: {ok}\nAtualizados: {upd}\nErros: {err}"
+        )
+
+        # === ATUALIZA UI NA HORA ===
+        try:
+            if hasattr(self, "_broadcast_participantes_changed"):
+                self._broadcast_participantes_changed()
+            if hasattr(self, "_reload_participantes"):
+                self._reload_participantes()
+        except Exception:
+            pass
 
     def _import_participantes_excel(self, path: str):
-        """Importa planilha com cabeçalhos na linha 1 e dados a partir da linha 2.
-           Colunas: CPF/CNPJ | NOME | TIPO (1,2,3...)
         """
+        Importa participantes de Excel. Colunas esperadas (case-insensitive):
+        cpf_cnpj, nome, [tipo]. Se 'tipo' faltar, deduz por tamanho do cpf_cnpj.
+        Atualiza a UI ao final.
+        """
+        from PySide6.QtWidgets import QMessageBox, QApplication
+        import pandas as pd
+        import re, os
+
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Importar participantes (Excel)", "Arquivo inválido.")
+            return
+
+        def _digits(s): return re.sub(r"\D+", "", str(s or ""))
+
+        ok, upd, err, total = 0, 0, 0, 0
+        QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            import pandas as pd  # requer openpyxl para .xlsx
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao carregar pandas/openpyxl: {e}")
-            return
-    
+            df = pd.read_excel(path)
+            # normaliza nomes de colunas
+            cols = {str(c).strip().lower(): c for c in df.columns}
+            if "cpf_cnpj" not in cols or "nome" not in cols:
+                QMessageBox.warning(self, "Importar participantes (Excel)", "Planilha precisa ter colunas 'cpf_cnpj' e 'nome'.")
+                return
+
+            for _, row in df.iterrows():
+                total += 1
+                cpf_cnpj = _digits(row[cols["cpf_cnpj"]])
+                nome     = str(row[cols["nome"]]).strip()
+                if not cpf_cnpj or not nome:
+                    err += 1
+                    continue
+
+                if "tipo" in cols:
+                    raw_tipo = str(row[cols["tipo"]]).strip().lower()
+                    if raw_tipo in ("1", "pf", "pessoa fisica", "pessoa física"):
+                        tipo = 1
+                    elif raw_tipo in ("2", "pj", "pessoa juridica", "pessoa jurídica", "cnpj"):
+                        tipo = 2
+                    else:
+                        tipo = 1 if len(cpf_cnpj) == 11 else 2
+                else:
+                    tipo = 1 if len(cpf_cnpj) == 11 else 2
+
+                try:
+                    pid_before = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (cpf_cnpj,))
+                    pid = self.db.upsert_participante(cpf_cnpj, nome, tipo)
+                    if pid_before and pid_before[0]:
+                        upd += 1
+                    else:
+                        ok += 1
+                except Exception:
+                    err += 1
+                    continue
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        QMessageBox.information(
+            self, "Importar participantes (Excel)",
+            f"Linhas: {total}\nNovos: {ok}\nAtualizados: {upd}\nErros: {err}"
+        )
+
+        # === ATUALIZA UI NA HORA ===
         try:
-            df = pd.read_excel(path, dtype=str, header=0)  # headers na linha 1
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Não foi possível ler a planilha: {e}")
-            return
-    
-        # Normaliza nomes de colunas: minúsculo, remove espaços, barras e underlines.
-        def norm(s: str) -> str:
-            return (str(s).strip().lower()
-                    .replace(" ", "")
-                    .replace("/", "")
-                    .replace("_", ""))
-    
-        cols_map = {norm(c): c for c in df.columns}
-    
-        # Aceita cabeçalhos "CPF/CNPJ", "NOME", "TIPO" (e variações)
-        need = {
-            "cpfcnpj": None,
-            "nome": None,
-            "tipo": None,
-        }
-        for k in list(need.keys()):
-            for cand_norm, original in cols_map.items():
-                if cand_norm == k:
-                    need[k] = original
-                    break
-                
-        faltando = [k for k, v in need.items() if v is None]
-        if faltando:
-            QMessageBox.critical(
-                self,
-                "Layout inválido",
-                "Cabeçalhos esperados na linha 1: CPF/CNPJ | NOME | TIPO"
-            )
-            return
-    
-        inseridos = 0
-        for _, row in df.iterrows():
-            cpf = str(row[need["cpfcnpj"]]).strip() if pd.notna(row[need["cpfcnpj"]]) else ""
-            nome = str(row[need["nome"]]).strip() if pd.notna(row[need["nome"]]) else ""
-            tipo_raw = row[need["tipo"]]
-            if pd.isna(tipo_raw):
-                continue
-            try:
-                tipo = int(str(tipo_raw).strip())
-            except:
-                continue
-            
-            if not cpf or not nome:
-                continue
-            
-            # Upsert direto no Supabase
-            try:
-                self.db.upsert_participante(cpf, nome, tipo)
-                inseridos += 1
-            except Exception as e:
-                # continua, mas mostra no final
-                print(f"Falha ao inserir/atualizar {cpf}: {e}")
-    
-        QMessageBox.information(self, "Importação", f"Participantes importados/atualizados: {inseridos}")
-    
+            if hasattr(self, "_broadcast_participantes_changed"):
+                self._broadcast_participantes_changed()
+            if hasattr(self, "_reload_participantes"):
+                self._reload_participantes()
+        except Exception:
+            pass
+
     def carregar_participantes(self):
         rows = self.db.fetch_all("SELECT id,cpf_cnpj,nome,tipo_contraparte,data_cadastro FROM participante ORDER BY data_cadastro DESC")
         self.tabela.setRowCount(len(rows)); tipos = {1:"PJ",2:"PF",3:"Órgão Público",4:"Outros"}
@@ -3523,12 +4509,18 @@ class GerenciamentoParticipantesWidget(QWidget):
 
     def novo_participante(self):
         dlg = CadastroParticipanteDialog(self)
-        if dlg.exec(): self.carregar_participantes()
+        if dlg.exec():
+            if getattr(dlg, "novo_id", None):
+                # atualiza a grid ou a linha com dlg.novo_id
+                self._broadcast_participantes_changed()  # ou atualizar célula específica
 
     def editar_participante(self):
         id_ = self.tabela.item(self.selected_row,0).data(Qt.UserRole)
         dlg = CadastroParticipanteDialog(self, id_)
-        if dlg.exec(): self.carregar_participantes()
+        if dlg.exec():
+            if getattr(dlg, "novo_id", None):
+                # atualiza a grid ou a linha com dlg.novo_id
+                self._broadcast_participantes_changed()  # ou atualizar célula específica
 
     def excluir_participante(self):
         indices = self.tabela.selectionModel().selectedRows()
@@ -3642,7 +4634,7 @@ class MainWindow(QMainWindow):
         self.tab_lanc.setSizeAdjustPolicy(QTableWidget.AdjustToContents)
 
         self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows); self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tab_lanc.cellClicked.connect(lambda r,_: (self.btn_edit_lanc.setEnabled(True), self.btn_del_lanc.setEnabled(True)))
+        self.tab_lanc.itemSelectionChanged.connect(self._update_lanc_buttons)
         l_l.addWidget(self.tab_lanc)
         
         # aplica filtro inicial ao abrir
@@ -3802,6 +4794,12 @@ class MainWindow(QMainWindow):
     def _filter_lancamentos(self, text: str):
         ListAccelerator.filter(self.tab_lanc, text, delay_ms=0)
 
+    def _update_lanc_buttons(self):
+        sel = self.tab_lanc.selectionModel()
+        has = bool(sel and sel.hasSelection())
+        self.btn_edit_lanc.setEnabled(has)
+        self.btn_del_lanc.setEnabled(has)
+
     def _create_menu(self):
         mb = self.menuBar(); m1 = mb.addMenu("&Arquivo")
         m1.addAction(QAction("Novo Lançamento", self, triggered=self.novo_lancamento))
@@ -3910,11 +4908,15 @@ class MainWindow(QMainWindow):
             layout.addWidget(btn)
     
         btn_export_txt.clicked.connect(lambda: self.show_export_dialog(dlg))
-        btn_export_plan.clicked.connect(lambda: (dlg.accept(), self._exportar_planilha_lcdpr()))
+        btn_export_plan.clicked.connect(lambda: (dlg.accept(), self._exportar_planilha_lcdPR()))
     
         dlg.exec()
     
     def carregar_lancamentos(self):
+        self.tab_lanc.clearSelection()
+        self.btn_edit_lanc.setEnabled(False)
+        self.btn_del_lanc.setEnabled(False)
+
         # 1) Consulta (rápida, indexada)
         d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
@@ -4049,7 +5051,13 @@ class MainWindow(QMainWindow):
         self.tab_lanc.horizontalHeader().setSortIndicator(col, order)
 
     def editar_lancamento(self):
-        row = self.tab_lanc.currentRow(); lanc_id = int(self.tab_lanc.item(row,0).text())
+        row = self.tab_lanc.currentRow()
+        if row < 0:
+            return
+        it = self.tab_lanc.item(row, 0)
+        if not it:
+            return
+        lanc_id = int(it.text())
         dlg = LancamentoDialog(self, lanc_id)
         if dlg.exec(): self.carregar_lancamentos(); self.dashboard.load_data()
 
@@ -4159,18 +5167,33 @@ class MainWindow(QMainWindow):
     def cad_imovel(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(0)
     def cad_conta(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(1)
     def cad_participante(self): self.tabs.setCurrentIndex(2); self.cadw.setCurrentIndex(2)
-
+    
     def gerar_txt(self, path: str):
+        """Wrapper com diagnóstico — chama a implementação real e captura exatamente onde estourou."""
+        import traceback
+        from PySide6.QtWidgets import QMessageBox
+        try:
+            return self._gerar_txt_impl(path)
+        except Exception as e:
+            tb = traceback.format_exc()
+            # Mostra um diagnóstico curto na tela e deixa claro o ponto da falha
+            QMessageBox.critical(self, "Erro ao gerar TXT",
+                f"{e.__class__.__name__}: {e}\n\nTraceback (últimas linhas):\n{tb[-1200:]}")
+            raise  # repropaga para não mascarar
+        
+    def _gerar_txt_impl(self, path: str):
+        """
+        IMPLEMENTAÇÃO ÚNICA E ROBUSTA — sem desempacotes perigosos, sem índices fixos.
+        Substitui 100% a sua função anterior.
+        """
         import os, re, unicodedata
         from decimal import Decimal, ROUND_HALF_UP
-        from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QMessageBox
-
+        from PySide6.QtCore import QSettings
+    
         # ===== helpers =====
-        NL = "\r\n"  # CRLF exigido pelo manual
-
+        NL = "\r\n"
         def _digits(s): return re.sub(r"\D", "", str(s or ""))
-
         def _ddmmyyyy(qdate_or_str):
             s = str(qdate_or_str or "")
             if hasattr(qdate_or_str, "toString"):
@@ -4180,194 +5203,279 @@ class MainWindow(QMainWindow):
             m = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", s)
             if m: return f"{m.group(1)}{m.group(2)}{m.group(3)}"
             return ""
-
-        def _cents(val):
-            # N 19,2 sem separador; para zero, emitir "000" (aceito pelo validador)
-            q = Decimal(str(val or 0)).quantize(Decimal("0.01"))
-            v = int(q * 100)
-            return "000" if v == 0 else str(v)
-
         def _clean(s):
             s = re.sub(r"[|\r\n]+", " ", str(s or "")).strip()
             s = s.replace("—","-").replace("º","o").replace("ª","a")
             return unicodedata.normalize("NFKD", s).encode("ascii","ignore").decode("ascii")
-
+        def _cents(val):
+            try: q = Decimal(str(val if val is not None else 0)).quantize(Decimal("0.01"))
+            except Exception: q = Decimal("0.00")
+            v = int(q*100)
+            return "000" if v == 0 else str(v)
         def _perc5(v):
-            try:
-                d = Decimal(str(v).replace(",", "."))
-            except Exception:
-                d = Decimal("0")
+            try: d = Decimal(str(v).replace(",", "."))
+            except Exception: d = Decimal("0")
             return f"{int((d.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)*100).to_integral_value()):05d}"
-
-        def _num112(v):
-            q = Decimal(str(v or 0)).quantize(Decimal("0.01"))
-            return f"{int(q*100):011d}"
-
+    
         # ===== cabeçalho =====
-        versao = settings.value("param/version", "0013")
-        ident  = _digits(settings.value("param/ident", ""))
-
+        settings = QSettings("AgroLCDPR", "UI")
+        versao = str(settings.value("param/version", "0013") or "0013").strip()
+        ident  = _digits(settings.value("param/ident", "") or "")
+    
+        # fallback: pega primeiro CPF (11 dígitos) existente
         if not ident:
             row = self.db.fetch_one(
-                "SELECT cpf_cnpj FROM participante "
-                "WHERE LENGTH(REPLACE(REPLACE(REPLACE(cpf_cnpj,'.',''),'-',''),'/',''))=11 "
-                "ORDER BY id LIMIT 1"
+                "SELECT cpf_cnpj FROM participante ORDER BY id LIMIT 1"
             )
-            if row: ident = _digits(row[0])
-
+            if row and isinstance(row, (list, tuple)) and len(row) >= 1:
+                ident = _digits(row[0])
+    
         nome         = _clean(settings.value("param/nome", ""))
-        ind_ini_per  = settings.value("param/ind_ini_per", "0")
-        sit_especial = settings.value("param/sit_especial", "0")
-
+        ind_ini_per  = str(settings.value("param/ind_ini_per", "0"))
+        sit_especial = str(settings.value("param/sit_especial", "0"))
+    
         dt_ini_txt = self.dt_ini.date().toString("ddMMyyyy")
         dt_fim_txt = self.dt_fim.date().toString("ddMMyyyy")
-        if ind_ini_per == "0":  # Regular deve iniciar em 01/01/AAAA
+        if ind_ini_per == "0":
             ano = self.dt_ini.date().toString("yyyy")
             dt_ini_txt = f"0101{ano}"
-
+    
         if not ident:
             QMessageBox.warning(self, "LCDPR",
                 "Informe o CPF do declarante em Configurações > Declarante ou cadastre um participante Pessoa Física.")
             return
-
+    
+        # ===== abre arquivo =====
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="") as f:
-            # 0000
-            f.write("0000|" + "|".join([
-                "LCDPR", versao, _digits(ident), _clean(nome),
-                ind_ini_per, sit_especial, "", dt_ini_txt, dt_fim_txt
-            ]) + NL)
-
-            # 0010
-            f.write("0010|1" + NL)
-
-            # 0030 – endereço (IBGE 7, CEP 8)
-            logradouro  = _clean(settings.value("param/logradouro", ""))
-            numero      = _clean(settings.value("param/numero", ""))
-            complemento = _clean(settings.value("param/complemento", ""))
-            bairro      = _clean(settings.value("param/bairro", ""))
-            uf          = (_clean(settings.value("param/uf", "")) or "")[:2].upper()
-            cod_mun     = _digits(settings.value("param/cod_mun", "")).zfill(7)
-            cep         = _digits(settings.value("param/cep", "")).zfill(8)
-            telefone    = _digits(settings.value("param/telefone", ""))
-            email       = _clean(settings.value("param/email", ""))
-
-            if not logradouro:
-                raise ValueError("Endereço (logradouro) obrigatório para o registro 0030.")
-
-            f.write("0030|" + "|".join([
-                logradouro, _digits(numero), complemento, bairro,
-                uf, cod_mun, cep, telefone, email
-            ]) + NL)
-
-            # 0040 – imóveis (EXATOS 17 campos, sem áreas)
-            for (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end, num, comp,
-                 bai, uf_, mun, cep_, tipo_expl, part, _area_tot, _area_uti) in self.db.fetch_all("""
-                SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,
-                       nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,
-                       tipo_exploracao,participacao,area_total,area_utilizada
-                  FROM imovel_rural
-            """):
-                f.write("0040|" + "|".join([
-                    _digits(cod).zfill(3),
-                    _clean(pais),
-                    _clean(moeda),
-                    _digits(cad_itr).zfill(8),     # CAD_ITR N=8
-                    _digits(caepf).zfill(14),      # CAEPF N=14
-                    _digits(ie),                   # IE (opcional)
-                    _clean(nome_imovel),
-                    _clean(end),
-                    _clean(num),
-                    _clean(comp),
-                    _clean(bai),
-                    _clean(uf_).upper()[:2],
-                    _digits(mun).zfill(7),
-                    _digits(cep_).zfill(8),
-                    str(tipo_expl or ""),
-                    _perc5(part or 0)
+                # ===== 0000 (usa perfil_param primeiro) =====
+                row_pp = self.db.get_perfil_param(CURRENT_PROFILE)
+                keys_pp = [
+                    "version","ind_ini_per","sit_especial","ident","nome",
+                    "logradouro","numero","complemento","bairro","uf",
+                    "cod_mun","cep","telefone","email"
+                ]
+                pp = {k: "" for k in keys_pp}
+                if isinstance(row_pp, (list, tuple)):
+                    for i, val in enumerate(row_pp):
+                        if i < len(keys_pp):
+                            pp[keys_pp[i]] = "" if val is None else str(val)
+        
+                def _g(campo_pp: str, key_ini: str):
+                    v = (pp.get(campo_pp, "") or "").strip()
+                    if not v:
+                        v = (settings.value(key_ini, "") or "").strip()
+                    return v
+        
+                versao      = (settings.value("param/version", "0013") or "0013")
+                ind_ini_per = (settings.value("param/ind_ini_per", "0") or "0")
+                sit_especial= (settings.value("param/sit_especial", "0") or "0")
+        
+                ident = _digits(_g("ident", "param/ident"))
+                nome  = _clean(_g("nome",  "param/nome"))
+        
+                # Datas: se Regular (0), inicio deve ser 01/01/AAAA
+                dt_ini_txt = self.dt_ini.date().toString("ddMMyyyy")
+                dt_fim_txt = self.dt_fim.date().toString("ddMMyyyy")
+                if str(ind_ini_per) == "0":
+                    ano = self.dt_ini.date().toString("yyyy")
+                    dt_ini_txt = f"0101{ano}"
+        
+                if not ident:
+                    QMessageBox.warning(self, "LCDPR",
+                        "Informe o CPF do declarante em Configurações > Declarante ou cadastre um participante PF.")
+                    return
+        
+                # 0000
+                f.write("0000|" + "|".join([
+                    "LCDPR", str(versao), _digits(ident), nome,
+                    str(ind_ini_per), str(sit_especial), "",
+                    dt_ini_txt, dt_fim_txt
                 ]) + NL)
-
-            # 0050 – contas (AG=4, CONTA=16)
-            for cod, pais_cta, banco, nome_bco, ag, num_cta in self.db.fetch_all(
-                "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"):
-                ag_d  = _digits(ag)
-                cta_d = _digits(num_cta)
-                if not ag_d or not cta_d:
-                    continue
-                f.write("0050|" + "|".join([
-                    _digits(cod).zfill(3),
-                    _clean(pais_cta),
-                    (_digits(banco).zfill(3) if banco else ""),
-                    _clean(nome_bco),
-                    ag_d.zfill(4),
-                    cta_d.zfill(16)
+        
+                # 0010
+                f.write("0010|1" + NL)
+        
+                # ===== 0030 (endereço) — layout: logradouro|numero|complemento|bairro|UF|cod_mun|cep|telefone|email =====
+                logradouro  = _clean(_g("logradouro",  "param/logradouro"))
+                numero      = _clean(_g("numero",      "param/numero"))
+                complemento = _clean(_g("complemento", "param/complemento"))
+                bairro      = _clean(_g("bairro",      "param/bairro"))
+                uf          = (_clean(_g("uf",         "param/uf")) or "")[:2].upper()
+                cod_mun     = _digits(_g("cod_mun",    "param/cod_mun")).zfill(7)
+                cep         = _digits(_g("cep",        "param/cep")).zfill(8)
+                telefone    = _digits(_g("telefone",   "param/telefone"))
+                email       = _clean(_g("email",       "param/email"))
+        
+                if not logradouro:
+                    raise ValueError("Endereço (logradouro) obrigatório para o registro 0030.")
+        
+                f.write("0030|" + "|".join([
+                    logradouro, _digits(numero), complemento, bairro,
+                    uf, cod_mun, cep, telefone, email
                 ]) + NL)
+        
+                # 0040 — imóveis (sem indexação perigosa)
+                for row in (self.db.fetch_all(
+                    "SELECT cod_imovel,pais,moeda,cad_itr,caepf,insc_estadual,"
+                    "       nome_imovel,endereco,num,compl,bairro,uf,cod_mun,cep,"
+                    "       tipo_exploracao,participacao "
+                    "FROM imovel_rural"
+                ) or []):
+                    buf = (list(row) + [None]*16)[:16]
+                    (cod, pais, moeda, cad_itr, caepf, ie, nome_imovel, end_, num_, comp_,
+                     bai, uf_, mun, cep_, tipo_expl, part) = buf
+                    f.write("0040|" + "|".join([
+                        _digits(cod).zfill(3),
+                        _clean(pais),
+                        _clean(moeda),
+                        _digits(cad_itr).zfill(8),
+                        _digits(caepf).zfill(14),
+                        _digits(ie),
+                        _clean(nome_imovel),
+                        _clean(end_),
+                        _clean(num_),
+                        _clean(comp_),
+                        _clean(bai),
+                        _clean(uf_).upper()[:2],
+                        _digits(mun).zfill(7),
+                        _digits(cep_).zfill(8),
+                        str(tipo_expl or ""),
+                        _perc5(part or 0),
+                    ]) + NL)
 
-            # Q100 – lançamentos
-            for (data, cod_im, cod_ct, doc, td, hist, cpf_cnpj, tl, ent, sai, sf, nat) in self.db.fetch_all("""
-                SELECT l.data,
-                       im.cod_imovel,
-                       ct.cod_conta,
-                       l.num_doc, l.tipo_doc, l.historico, p.cpf_cnpj, l.tipo_lanc,
-                       l.valor_entrada, l.valor_saida, l.saldo_final, l.natureza_saldo
-                  FROM lancamento l
-                  JOIN imovel_rural  im ON im.id = l.cod_imovel
-                  JOIN conta_bancaria ct ON ct.id = l.cod_conta
-             LEFT JOIN participante      p ON p.id = l.id_participante
-              ORDER BY l.data_ord, l.id
-            """):
-                f.write("Q100|" + "|".join([
-                    _ddmmyyyy(data),
-                    _digits(cod_im).zfill(3),
-                    _digits(cod_ct).zfill(3),
-                    _clean(doc),
-                    str(td or ""),
-                    _clean(hist),
-                    _digits(cpf_cnpj or ident),
-                    str(tl or ""),
-                    _cents(ent or 0),
-                    _cents(sai or 0),
-                    _cents(sf or 0),      # aqui pode ser informado >=0; natureza no campo seguinte
-                    str(nat or "")
-                ]) + NL)
+                # 0050 – contas (AG=4, CONTA=16; se vier maior, mantém os 4/16 dígitos da DIREITA)
+                for row in self.db.fetch_all(
+                    "SELECT cod_conta,pais_cta,banco,nome_banco,agencia,num_conta FROM conta_bancaria"
+                ) or []:
+                    (cod, pais_cta, banco, nome_bco, ag, num_cta) = (list(row)+[None]*6)[:6]
+                    ag_d  = _digits(ag)
+                    cta_d = _digits(num_cta)
+                    if not ag_d or not cta_d:
+                        continue
+                    ag_d  = ag_d[-4:].zfill(4)         # força 4 dígitos
+                    cta_d = cta_d[-16:].zfill(16)      # força 16 dígitos
 
-            # Q200 – resumo mensal (mmaaaa) com saldo ACUMULADO **ABSOLUTO** + NAT_SLD_FIN
-            d1 = int(self.dt_ini.date().toString("yyyyMMdd"))
-            d2 = int(self.dt_fim.date().toString("yyyyMMdd"))
-            resumo = self.db.fetch_all("""
-                SELECT substr(CAST(data_ord AS TEXT),1,6) AS ym,
-                       SUM(valor_entrada), SUM(valor_saida)
-                  FROM lancamento
-                 WHERE data_ord BETWEEN ? AND ?
-              GROUP BY ym ORDER BY ym
-            """, (d1, d2))
+                    f.write("0050|" + "|".join([
+                        _digits(cod).zfill(3),
+                        _clean(pais_cta),
+                        (_digits(banco).zfill(3) if banco else ""),
+                        _clean(nome_bco),
+                        ag_d,
+                        cta_d,
+                    ]) + NL)
 
-            saldo_acum = Decimal("0")
-            for ym, tot_ent, tot_sai in resumo:
-                mesano  = ym[4:6] + ym[0:4]                 # mmaaaa
-                tot_ent = Decimal(str(tot_ent or 0))
-                tot_sai = Decimal(str(tot_sai or 0))
-                saldo_acum += (tot_ent - tot_sai)
-                nat = 'P' if saldo_acum >= 0 else 'N'
-                f.write(
-                    f"Q200|{mesano}|{_cents(tot_ent)}|{_cents(tot_sai)}|{_cents(abs(saldo_acum))}|{nat}{NL}"
-                )
+                # Q100 — vamos pelo cliente REST do Supabase (sem JOIN SQL) para evitar shape inesperado
+                d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+                d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+                sb_cli = self.db.sb
 
-        # 9999 – **7 campos**: REG, IDENT_NOM, IDENT_CPF_CNPJ, IND_CRC, EMAIL, FONE, QTD_LIN
-        total = sum(1 for _ in open(path, "r", encoding="utf-8")) + 1
-        with open(path, "a", encoding="utf-8", newline="") as f:
-            f.write(f"9999||||||{total}{NL}")
+                lans = (sb_cli.table("lancamento")
+                            .select("id,data,data_ord,cod_imovel,cod_conta,id_participante,num_doc,tipo_doc,historico,tipo_lanc,valor_entrada,valor_saida,saldo_final,natureza_saldo")
+                            .gte("data_ord", d1_ord)
+                            .lte("data_ord", d2_ord)
+                            .order("data_ord").order("id")
+                            .execute().data) or []
 
+                im_ids = sorted({r.get("cod_imovel") for r in lans if r.get("cod_imovel") is not None})
+                ct_ids = sorted({r.get("cod_conta") for r in lans if r.get("cod_conta") is not None})
+                pa_ids = sorted({r.get("id_participante") for r in lans if r.get("id_participante") is not None})
+
+                im_map = {}
+                if im_ids:
+                    for r in (sb_cli.table("imovel_rural").select("id,cod_imovel").in_("id", im_ids).execute().data or []):
+                        im_map[r["id"]] = r.get("cod_imovel")
+                ct_map = {}
+                if ct_ids:
+                    for r in (sb_cli.table("conta_bancaria").select("id,cod_conta").in_("id", ct_ids).execute().data or []):
+                        ct_map[r["id"]] = r.get("cod_conta")
+                pa_map = {}
+                if pa_ids:
+                    for r in (sb_cli.table("participante").select("id,cpf_cnpj").in_("id", pa_ids).execute().data or []):
+                        pa_map[r["id"]] = r.get("cpf_cnpj")
+
+                for r in lans:
+                    f.write("Q100|" + "|".join([
+                        _ddmmyyyy(r.get("data")),
+                        (_digits(im_map.get(r.get("cod_imovel"))).zfill(3) if r.get("cod_imovel") in im_map else ""),
+                        (_digits(ct_map.get(r.get("cod_conta"))).zfill(3) if r.get("cod_conta") in ct_map else ""),
+                        _clean(r.get("num_doc")),
+                        str(r.get("tipo_doc") or ""),
+                        _clean(r.get("historico")),
+                        _digits(pa_map.get(r.get("id_participante")) or ident),
+                        str(r.get("tipo_lanc") or ""),
+                        _cents(r.get("valor_entrada")),
+                        _cents(r.get("valor_saida")),
+                        _cents(r.get("saldo_final")),
+                        str((r.get("natureza_saldo") or "")).upper(),
+                    ]) + NL)
+
+                # === Q200 — resumo mensal (mmaaaa) no mesmo layout do arquivo modelo ===
+                # Fonte: os mesmos lançamentos já carregados (lans), filtrados por data_ord no período
+                from decimal import Decimal
+                from collections import defaultdict
+
+                # Se você NÃO tiver a lista 'lans' disponível aqui, descomente o bloco abaixo para recarregar via REST:
+                # d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+                # d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+                # lans = (self.db.sb.table("lancamento")
+                #             .select("id,data_ord,valor_entrada,valor_saida")
+                #             .gte("data_ord", d1_ord)
+                #             .lte("data_ord", d2_ord)
+                #             .order("data_ord").order("id")
+                #             .execute().data) or []
+
+                agg = defaultdict(lambda: {"ent": Decimal("0"), "sai": Decimal("0")})
+
+                for r in (lans or []):
+                    # data_ord vem como int AAAAMMDD ou AAAAMM; vamos normalizar para AAAAMM
+                    ordv = str(r.get("data_ord") or "")
+                    ym = ordv[:6] if len(ordv) >= 6 else ""
+                    if not ym:
+                        continue
+                    ent = Decimal(str(r.get("valor_entrada") or 0))
+                    sai = Decimal(str(r.get("valor_saida") or 0))
+                    agg[ym]["ent"] += ent
+                    agg[ym]["sai"] += sai
+
+                saldo_acum = Decimal("0")
+                for ym in sorted(agg.keys()):  # ex.: "202501", "202502", ...
+                    y, m = ym[:4], ym[4:6]
+                    mmaaaa  = f"{m}{y}"  # ex.: "012025" (mês na frente)
+                    tot_ent = agg[ym]["ent"]
+                    tot_sai = agg[ym]["sai"]
+                    saldo_acum += (tot_ent - tot_sai)
+                    nat = "P" if saldo_acum >= 0 else "N"
+                    f.write("Q200|" + "|".join([
+                        mmaaaa,
+                        _cents(tot_ent),                      # zero sai como "000"
+                        _cents(tot_sai),
+                        _cents(abs(saldo_acum)),              # acumulado ABS como no modelo
+                        nat
+                    ]) + NL)
+
+        # 9999 — total de linhas
+        total = 0
+        with open(path, "r", encoding="utf-8") as fr:
+            for _ in fr:
+                total += 1
+        total += 1
+        with open(path, "a", encoding="utf-8", newline="") as fa:
+            fa.write(f"9999||||||{total}{NL}")
+    
+        # Lembra o último caminho (se existir utilitário no seu projeto)
         try:
             save_last_txt_path(path)
         except Exception:
             pass
-
-        QMessageBox.information(self, "Sucesso", f"Arquivo {os.path.basename(path)} gerado!")
-
-    def _exportar_planilha_lcdpr(self):
+        
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(self, "LCDPR", f"Arquivo gerado com sucesso em:\n{path}")
+    
+    def _exportar_planilha_lcdPR(self):
         """
         Exporta TODOS os lançamentos do período selecionado em uma planilha Excel,
-        com as colunas solicitadas e mapeamentos legíveis de tipo de doc e tipo de lançamento.
+        com as colunas solicitadas e mapeamentos legíveis.
         Layout:
         DATA | IMOVEL RURAL | CONTA BANCARIA | CODIGO DA CONTA | PARTICIPANTE | CPF/CNPJ |
         NUMERO DO DOCUMENTO | TIPO | HISTORICO | TIPO DE LANÇAMENTO | VALOR ENTRADA | VALOR SAIDA
@@ -4387,7 +5495,7 @@ class MainWindow(QMainWindow):
         if not path.lower().endswith(('.xlsx', '.xls')):
             path += '.xlsx'
 
-        # 2) Intervalo de datas → **usar data_ord** (indexado e consistente)
+        # 2) Intervalo (usa data_ord)
         d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
 
@@ -4406,62 +5514,106 @@ class MainWindow(QMainWindow):
             3: "Adiantamento",
         }
 
-        # 4) Busca no banco – agora filtra por data_ord
-        rows = self.db.fetch_all("""
-            SELECT
-                CASE
-                    WHEN instr(l.data,'/') > 0
-                        THEN substr(l.data,1,2) || '/' || substr(l.data,4,2) || '/' || substr(l.data,7,4)
-                    ELSE strftime('%d/%m/%Y', l.data)
-                END                                   AS data_fmt,
-                ir.cod_imovel                         AS cod_imovel,
-                COALESCE(cb.nome_banco, '')           AS conta_bancaria,
-                COALESCE(cb.cod_conta, '')            AS cod_conta,
-                COALESCE(p.nome, '')                  AS participante,
-                COALESCE(p.cpf_cnpj, '')              AS cpf_cnpj,
-                COALESCE(l.num_doc, '')               AS num_doc,
-                l.tipo_doc                            AS tipo_doc,
-                COALESCE(l.historico, '')             AS historico,
-                l.tipo_lanc                           AS tipo_lanc,
-                COALESCE(l.valor_entrada, 0)          AS valor_entrada,
-                COALESCE(l.valor_saida, 0)            AS valor_saida
-            FROM lancamento l
-            LEFT JOIN imovel_rural    ir ON ir.id = l.cod_imovel
-            LEFT JOIN conta_bancaria  cb ON cb.id = l.cod_conta
-            LEFT JOIN participante    p  ON p.id  = l.id_participante
-            WHERE l.data_ord BETWEEN ? AND ?
-            ORDER BY l.data_ord, l.id
-        """, [d1_ord, d2_ord])
+        # 4) Busca via Supabase (sem SQL)
+        sb = self.db.sb
 
-        if not rows:
+        # Lançamentos do período (campos necessários)
+        lans = (sb.table("lancamento")
+                  .select("id,data,data_ord,cod_imovel,cod_conta,id_participante,num_doc,tipo_doc,historico,tipo_lanc,valor_entrada,valor_saida")
+                  .gte("data_ord", d1_ord)
+                  .lte("data_ord", d2_ord)
+                  .order("data_ord")
+                  .order("id")
+                  .execute().data) or []
+
+        if not lans:
             QMessageBox.information(self, "Exportar Planilha LCDPR",
                                     "Nenhum lançamento encontrado no período selecionado.")
             return
 
-        # 5) Converte para DataFrame com os cabeçalhos pedidos
-        data = []
-        for (data_fmt, cod_imovel, conta_bancaria, cod_conta, participante, cpf_cnpj,
-             num_doc, tipo_doc, historico, tipo_lanc, valor_entrada, valor_saida) in rows:
+        # IDs p/ mapear
+        im_ids  = {r["cod_imovel"] for r in lans if r.get("cod_imovel") is not None}
+        ct_ids  = {r["cod_conta"] for r in lans if r.get("cod_conta") is not None}
+        p_ids   = {r["id_participante"] for r in lans if r.get("id_participante") is not None}
 
-            tipo_doc_desc  = map_tipo_doc.get(int(tipo_doc) if tipo_doc is not None else 0, "")
-            tipo_lanc_desc = map_tipo_lanc.get(int(tipo_lanc) if tipo_lanc is not None else 0, "")
+        # Dicionários de apoio
+        im_map = {}
+        if im_ids:
+            ims = (sb.table("imovel_rural")
+                     .select("id,cod_imovel,nome_imovel")
+                     .in_("id", list(im_ids))
+                     .execute().data) or []
+            im_map = {r["id"]: (r.get("cod_imovel") or "", r.get("nome_imovel") or "") for r in ims}
 
-            data.append({
+        ct_map = {}
+        if ct_ids:
+            cts = (sb.table("conta_bancaria")
+                     .select("id,cod_conta,nome_banco")
+                     .in_("id", list(ct_ids))
+                     .execute().data) or []
+            ct_map = {r["id"]: (r.get("cod_conta") or "", r.get("nome_banco") or "") for r in cts}
+
+        p_map = {}
+        if p_ids:
+            ps = (sb.table("participante")
+                    .select("id,nome,cpf_cnpj")
+                    .in_("id", list(p_ids))
+                    .execute().data) or []
+            p_map = {r["id"]: (r.get("nome") or "", r.get("cpf_cnpj") or "") for r in ps}
+
+        def _fmt_data_br(s: str) -> str:
+            # normaliza para DD/MM/YYYY
+            from datetime import datetime
+            if not s:
+                return ""
+            s = str(s).strip()
+            try:
+                if "/" in s:
+                    # já está em dd/mm/yyyy?
+                    d, m, y = s.split("/")[:3]
+                    if len(d) == 2 and len(m) == 2 and len(y) == 4:
+                        return f"{d}/{m}/{y}"
+                if "-" in s:
+                    parts = s.split("-")
+                    if len(parts[0]) == 4:  # yyyy-mm-dd
+                        y, m, d = parts[:3]
+                        return f"{d}/{m}/{y}"
+                    else:  # dd-mm-yyyy
+                        d, m, y = parts[:3]
+                        return f"{d}/{m}/{y}"
+                # tenta ISO puro
+                dt = datetime.fromisoformat(s)
+                return dt.strftime("%d/%m/%Y")
+            except Exception:
+                return s
+
+        # 5) Monta linhas finais
+        data_rows = []
+        for r in lans:
+            data_fmt = _fmt_data_br(r.get("data") or "")
+            cod_imovel, _nome_imovel = im_map.get(r.get("cod_imovel"), ("", ""))
+            cod_conta, conta_bancaria = ct_map.get(r.get("cod_conta"), ("", ""))
+            participante, cpf_cnpj = p_map.get(r.get("id_participante"), ("", ""))
+
+            tipo_doc_desc  = map_tipo_doc.get(int(r["tipo_doc"]) if r.get("tipo_doc") is not None else 0, "")
+            tipo_lanc_desc = map_tipo_lanc.get(int(r["tipo_lanc"]) if r.get("tipo_lanc") is not None else 0, "")
+
+            data_rows.append({
                 "DATA":                data_fmt or "",
                 "IMOVEL RURAL":        cod_imovel or "",
-                "CONTA BANCARIA":      conta_bancaria,
-                "CODIGO DA CONTA":     cod_conta,
-                "PARTICIPANTE":        participante,
-                "CPF/CNPJ":            cpf_cnpj,
-                "NUMERO DO DOCUMENTO": num_doc,
+                "CONTA BANCARIA":      conta_bancaria or "",
+                "CODIGO DA CONTA":     cod_conta or "",
+                "PARTICIPANTE":        participante or "",
+                "CPF/CNPJ":            cpf_cnpj or "",
+                "NUMERO DO DOCUMENTO": (r.get("num_doc") or "").strip(),
                 "TIPO":                tipo_doc_desc,
-                "HISTORICO":           historico,
+                "HISTORICO":           r.get("historico") or "",
                 "TIPO DE LANÇAMENTO":  tipo_lanc_desc,
-                "VALOR ENTRADA":       float(valor_entrada or 0),
-                "VALOR SAIDA":         float(valor_saida or 0),
+                "VALOR ENTRADA":       float(r.get("valor_entrada") or 0),
+                "VALOR SAIDA":         float(r.get("valor_saida") or 0),
             })
 
-        df = pd.DataFrame(data, columns=[
+        df = pd.DataFrame(data_rows, columns=[
             "DATA",
             "IMOVEL RURAL",
             "CONTA BANCARIA",
@@ -4476,7 +5628,7 @@ class MainWindow(QMainWindow):
             "VALOR SAIDA",
         ])
 
-        # 6) Salva no Excel com largura razoável
+        # 6) Salva no Excel
         try:
             with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="LCDPR")
@@ -4548,63 +5700,86 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", f"Arquivo não segue o layout esperado:\n{e}")
 
-    def _extract_name_from_historico(historico: str) -> str:
-        """Retorna o texto dentro do último parêntese no histórico, ou ''."""
-        import re
-        if not historico:
+    @staticmethod
+    def _extract_name_from_historico(h: str) -> str:
+        if not h:
             return ""
-        m = re.findall(r"\(([^)]+)\)", historico)
-        return (m[-1].strip() if m else "")
+        # pega o ÚLTIMO grupo entre parênteses
+        m = re.search(r"\(([^)]+)\)\s*$", h.strip())
+        if m:
+            return m.group(1).strip()
+        # fallback: depois de dois espaços até o '|', se existir
+        m = re.search(r"\s{2,}([A-ZÀ-Ú0-9 .'-]+?)(?:\s*\|.*)?$", h.upper())
+        return (m.group(1).title().strip() if m else "")
 
     def _ensure_participante(self, digits: str, historico: str = "") -> int:
-        """
-        Garante que o participante (CPF/CNPJ) exista.
-        - CNPJ: consulta Receita e usa razão/fantasia como nome.
-        - CPF: usa o nome entre parênteses do histórico; se vazio, tenta Receita.
-        Retorna id do participante.
-        """
+        import re
+        digits = re.sub(r"\D", "", str(digits or ""))
+        if not digits:
+            return 0
+
         # já existe?
         row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-        if row:
-            return row[0]
+        if row and row[0]:
+            return int(row[0])
 
         is_pf = (len(digits) == 11)
-        tipo_contraparte = 2 if is_pf else 1  # 1=Pessoa Jurídica, 2=Pessoa Física
+        tipo_contraparte = 2 if is_pf else 1
         nome = ""
 
         if is_pf:
-            # 1) tenta pegar do histórico (RENATA ... dentro de parênteses)
-            nome = _extract_name_from_historico(historico)
-            # 2) se não tiver no histórico, tenta Receita (se disponível)
+            # 1) histórico
+            try:
+                nome = self._extract_name_from_historico(historico)
+            except Exception:
+                nome = ""
+            # 2) Receita (opcional)
             if not nome:
                 try:
                     info = consulta_receita(digits, tipo='cpf')
-                    nome = (info.get('nome') or "").strip()
+                    nome = (info.get('nome') or info.get('nomeCompleto') or "").strip()
                 except Exception:
                     pass
             if not nome:
                 nome = f"CPF {digits}"
         else:
-            # CNPJ -> sempre tenta Receita para vir com razão/fantasia
             try:
                 info = consulta_receita(digits, tipo='cnpj')
                 nome = _nome_cnpj_from_receita(info)
             except Exception:
-                pass
+                nome = ""
             if not nome:
-                # Fallback (só se a API falhar)
                 nome = f"CNPJ {digits}"
 
-        cur = self.db.execute_query(
-            "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-            [digits, nome, tipo_contraparte]
-        )
-        return cur.lastrowid
+        pid = self.db.upsert_participante(digits, nome, tipo_contraparte)
+        if pid:
+            # 🔔 força recarregar combos/listas de participantes em TODAS as telas
+            try:
+                self._broadcast_participantes_changed()
+                if hasattr(self, "_reload_participantes"):
+                    self._reload_participantes()
+                # Alguns painéis mantêm um cache próprio
+                if hasattr(self, "carregar_lancamentos"):
+                    self.carregar_lancamentos()
+            except Exception:
+                pass
+            return int(pid)
+
+        # fallback
+        row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+        return int(row[0]) if row and row[0] else 0
 
     def _broadcast_participantes_changed(self):
-        """Pede para todas as janelas/diálogos recarregarem a lista de participantes."""
+        """Pede para todas as janelas/diálogos e o MainWindow recarregarem a lista de participantes."""
         try:
             from PySide6.QtWidgets import QApplication, QDialog
+            # MainWindow
+            if hasattr(self, "_reload_participantes"):
+                try:
+                    self._reload_participantes()
+                except Exception:
+                    pass
+            # Diálogos abertos
             for top in QApplication.topLevelWidgets():
                 for dlg in top.findChildren(QDialog):
                     if hasattr(dlg, "_reload_participantes"):
@@ -4615,167 +5790,87 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _import_lancamentos_txt(self, path):
-        import re
-        now = datetime.now().strftime("%d/%m/%Y %H:%M")
-        usuario_ts = f"{CURRENT_USER} dia {now}"
-
-        def _parse_cent(v: str) -> float:
-            s = re.sub(r'\D', '', (v or ''))
-            return (int(s) / 100.0) if s else 0.0
-
-        def _norms(code: str):
-            s = (code or '').strip()
-            if not s:
-                return []
-            out = [s]
-            if s.isdigit():
-                out += [s.zfill(3), (s.lstrip('0') or '0')]
-            return list(dict.fromkeys(out))
-
-        # ---- contagem de linhas para configurar o progresso ----
-        with open(path, encoding='utf-8') as _f:
-            total = sum(1 for _ in _f)
-
-        # ---- caches para acelerar lookups de FK/participante/saldo por conta ----
-        im_cache = {}      # cod_imovel_normalizado -> id_imovel
-        ct_cache = {}      # cod_conta_normalizado  -> id_conta
-        part_cache = {}    # cpf_cnpj_digits        -> id_participante
-        saldos = {}        # id_conta -> saldo atual (considerando natureza)
-
-        GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=total, parent=self.window())
+    def _import_lancamentos_txt(self, path: str):
+        import re, os
+        from PySide6.QtWidgets import QMessageBox
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Importar lançamentos (TXT)", "Arquivo inválido.")
+            return
+    
+        def _to_iso(d):
+            if isinstance(d, str) and "/" in d:
+                d = d.strip()
+                dd, mm, yyyy = d.split("/")
+                return f"{yyyy}-{int(mm):02d}-{int(dd):02d}"
+            return d
+    
+        # personalize aqui: delimitador, colunas etc.
+        total = ok = err = 0
+        GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=0, parent=self.window())
         try:
-            with self.db.bulk():
-                with open(path, encoding='utf-8') as f:
-                    for lineno, line in enumerate(f, 1):
-                        parts = line.strip().split("|")
-
-                        # Layout 1 (11 colunas) -> YYYY-MM-DD | ... | participante | ...
-                        if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
-                            (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                             participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
-
-                            y, m, d = data_iso.split("-")
-                            data_str = f"{d}/{m}/{y}"
-                            data_ord = int(f"{y}{m}{d}")  # AAAAMMDD
-                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
-                            ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
-                            sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
-
-                            # Participante: CPF/CNPJ ou ID
-                            id_participante = None
-                            digits = re.sub(r"\D", "", participante_raw or "")
-                            if digits and len(digits) in (11, 14):
-                                if digits in part_cache:
-                                    id_participante = part_cache[digits]
-                                else:
-                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
-                                    part_cache[digits] = id_participante
-                            elif (participante_raw or "").isdigit():
-                                id_participante = int(participante_raw)
-
-                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
-
-                        # Layout 2 (12 colunas) -> DD-MM-AAAA | ... | cpf/cnpj | ...
-                        elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
-                            (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                             cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
-
-                            d, m, y = data_br.split("-")
-                            data_str = f"{d}/{m}/{y}"
-                            data_ord = int(f"{y}{m}{d}")  # AAAAMMDD
-                            tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
-                            ent = _parse_cent(cent_ent)
-                            sai = _parse_cent(cent_sai)
-
-                            id_participante = None
-                            digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                            if digits and len(digits) in (11, 14):
-                                if digits in part_cache:
-                                    id_participante = part_cache[digits]
-                                else:
-                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
-                                    part_cache[digits] = id_participante
-
-                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
-
-                        else:
-                            raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
-
-                        # Heurísticas de tipo_doc/categoria
-                        categoria = None
-                        desc = (historico or "").upper()
-                        if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
-                            tipo_doc = 5; categoria = "Folha"
-                        elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
-                            tipo_doc = 4; categoria = "Fatura"
-
-                        # FK imóvel (normalização 1/01/001) com cache
-                        id_imovel = None
-                        for c in _norms(cod_imovel):
-                            if c in im_cache:
-                                id_imovel = im_cache[c]
-                                break
-                            row = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (c,))
-                            if row:
-                                id_imovel = row[0]
-                                # guarda no cache para todas as variantes normalizadas
-                                for alt in _norms(cod_imovel):
-                                    im_cache[alt] = id_imovel
-                                break
-                        if not id_imovel:
-                            raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado")
-
-                        # FK conta (normalização 1/01/001) com cache
-                        id_conta = None
-                        for c in _norms(cod_conta):
-                            if c in ct_cache:
-                                id_conta = ct_cache[c]
-                                break
-                            row = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (c,))
-                            if row:
-                                id_conta = row[0]
-                                for alt in _norms(cod_conta):
-                                    ct_cache[alt] = id_conta
-                                break
-                        if not id_conta:
-                            raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
-
-                        # Saldo/natureza por conta (consulta 1x e mantém acumulado)
-                        if id_conta not in saldos:
-                            last = self.db.fetch_one(
-                                "SELECT (saldo_final * CASE natureza_saldo WHEN 'P' THEN 1 ELSE -1 END) "
-                                "FROM lancamento WHERE cod_conta=? ORDER BY id DESC LIMIT 1",
-                                (id_conta,)
-                            )
-                            saldos[id_conta] = last[0] if last and last[0] is not None else 0.0
-
-                        saldo_ant = saldos[id_conta]
-                        saldo_f = saldo_ant + ent - sai
-                        saldos[id_conta] = saldo_f  # atualiza para próxima linha dessa conta
-                        nat = 'P' if saldo_f >= 0 else 'N'
-
-                        self.db.execute_query(
-                            """INSERT INTO lancamento (
-                                   data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                                   id_participante, tipo_lanc, valor_entrada, valor_saida,
-                                   saldo_final, natureza_saldo, usuario, categoria, data_ord
-                               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            [data_str, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
-                             id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
-                        )
-                        if lineno % 200 == 0:
-                            GlobalProgress.set_value(lineno)
-
-                GlobalProgress.set_value(total)
+            with open(path, "r", encoding="utf-8", errors="ignore") as f, self.db.bulk():
+                for lineno, line in enumerate(f, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    total += 1
+                    # exemplo: data;cod_imovel;cod_conta;num_doc;tipo_doc;historico;id_participante;tipo_lanc;valor_entrada;valor_saida;categoria;data_ord
+                    parts = [p.strip() for p in re.split(r"[;|,]", line)]
+                    if len(parts) < 12:
+                        err += 1
+                        continue
+                    
+                    (data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                     id_participante, tipo_lanc, valor_entrada, valor_saida,
+                     categoria, data_ord) = parts[:12]
+    
+                    # normalizações
+                    data_iso = _to_iso(data)
+                    try:
+                        payload = {
+                            "data": data_iso,
+                            "cod_imovel": int(cod_imovel) if str(cod_imovel).strip() else None,
+                            "cod_conta": int(cod_conta) if str(cod_conta).strip() else None,
+                            "num_doc": (num_doc or "").replace(" ", ""),
+                            "tipo_doc": (tipo_doc or ""),
+                            "historico": historico or "",
+                            "id_participante": int(id_participante) if str(id_participante).strip() else None,
+                            "tipo_lanc": int(tipo_lanc) if str(tipo_lanc).strip() else None,
+                            "valor_entrada": float(valor_entrada or 0.0),
+                            "valor_saida": float(valor_saida or 0.0),
+                            "saldo_final": 0.0,             # será recalculado depois
+                            "natureza_saldo": "P",           # padrão
+                            "usuario": (CURRENT_USER or "") ,
+                            "categoria": categoria or "",
+                            "data_ord": int(data_ord) if str(data_ord).isdigit() else None,
+                        }
+    
+                        # >>> GARANTIR perfil_id + ID por PERFIL
+                        if getattr(self.db, "perfil_id", None):
+                            payload["perfil_id"] = self.db.perfil_id
+                        payload["id"] = self.db._next_id("lancamento", per_profile=True)
+    
+                        # insere usando o mesmo caminho do resto (HTTP compat)
+                        self.db.insert_with_return("lancamento", payload)
+                        ok += 1
+                    except Exception:
+                        err += 1
+                        continue
         finally:
             GlobalProgress.end()
-
-        # terminou: atualiza listas/combos de participantes nas janelas abertas
-        self._broadcast_participantes_changed()
-
+    
+        QMessageBox.information(self, "Importar lançamentos (TXT)",
+                                f"Linhas: {total}\nImportados: {ok}\nErros: {err}")
+    
+        # atualiza UI
+        try:
+            if hasattr(self, "_broadcast_participantes_changed"):
+                self._broadcast_participantes_changed()
+            if hasattr(self, "carregar_lancamentos"):
+                self.carregar_lancamentos()
+        except Exception:
+            pass
+        
     def _import_lancamentos_excel(self, path):
         import re
         df = pd.read_excel(path, dtype=str)
@@ -4887,9 +5982,10 @@ class MainWindow(QMainWindow):
                                id_participante, tipo_lanc, valor_entrada, valor_saida,
                                saldo_final, natureza_saldo, usuario, categoria, data_ord
                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        [data_str, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
+                        [data_iso, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
                          id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
                     )
+
                     if (lineno - 1) % 200 == 0:
                         GlobalProgress.set_value(lineno - 1)
 
