@@ -476,7 +476,27 @@ class Database:
         
             # >>> NOVO: MAX(id)+1 POR PERFIL (per_profile=True)
             payload.pop("id", None)
-        
+
+            if not payload.get("perfil_id"):
+                inferred = None
+                cid = payload.get("cod_conta")
+                if cid:
+                    crow = (self.sb.table("conta_bancaria")
+                                .select("perfil_id")
+                                .eq("id", cid).limit(1).execute().data)
+                    if crow and crow[0].get("perfil_id"):
+                        inferred = crow[0]["perfil_id"]
+                if not inferred:
+                    iid = payload.get("cod_imovel")
+                    if iid:
+                        irow = (self.sb.table("imovel_rural")
+                                    .select("perfil_id")
+                                    .eq("id", iid).limit(1).execute().data)
+                        if irow and irow[0].get("perfil_id"):
+                            inferred = irow[0]["perfil_id"]
+                if inferred:
+                    payload["perfil_id"] = inferred
+                        
             novo = self.insert_with_return("lancamento", payload)
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
@@ -1558,6 +1578,69 @@ class ListCounter:
         """Slot chamado quando a QTableWidget é destruída."""
         ListCounter.detach(table)
 
+# === Setup unificado para todas as QTableWidget =================================
+def setup_interactive_table(
+    table: QTableWidget,
+    *, 
+    header_movable: bool = True,
+    select_rows: bool = True,
+    extended_selection: bool = True,
+    resize_mode: QHeaderView.ResizeMode | None = None,
+    stretch_last_section: bool | None = None,
+    build_cache: bool = True,
+    enable_sort_on_header_double_click: bool = True,
+):
+    """Aplica a 'mesma experiência' de interação em qualquer QTableWidget."""
+    hdr = table.horizontalHeader()
+    if header_movable:
+        hdr.setSectionsMovable(True)               # mover colunas com o mouse
+    table.setWordWrap(False)
+    table.setTextElideMode(Qt.ElideNone)
+    table.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
+    table.setSizeAdjustPolicy(QTableWidget.AdjustToContents)
+    table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+    if select_rows:
+        table.setSelectionBehavior(QTableWidget.SelectRows)     # seleção por LINHA
+    if extended_selection:
+        table.setSelectionMode(QTableWidget.ExtendedSelection)  # Ctrl/Shift
+
+    table.setAlternatingRowColors(True)
+    table.setShowGrid(False)
+    table.verticalHeader().setVisible(False)
+
+    hdr.setHighlightSections(False)
+    hdr.setDefaultAlignment(Qt.AlignCenter)
+
+    # Largura/ajuste das colunas
+    if resize_mode is not None:
+        hdr.setSectionResizeMode(resize_mode)
+    else:
+        # padrão: comportar-se como Lançamentos (auto + sem sobra)
+        hdr.setSectionResizeMode(QHeaderView.ResizeToContents)
+
+    if stretch_last_section is not None:
+        hdr.setStretchLastSection(stretch_last_section)
+
+    # Ordenação por duplo clique no header
+    if enable_sort_on_header_double_click:
+        try:
+            _install_header_double_click_sort(table)  # já existe no seu código
+        except Exception:
+            pass
+
+    # Acelera filtro + badge
+    if build_cache:
+        try:
+            ListAccelerator.build_cache(table)
+        except Exception:
+            pass
+    try:
+        ListCounter.refresh(table)
+    except Exception:
+        pass
+# ================================================================================
+
 def install_counters_for_all_tables(root: QWidget):
     """Chame 1x após montar a UI: instala badge em todas as QTableWidget da tela."""
     for tbl in root.findChildren(QTableWidget):
@@ -2005,9 +2088,7 @@ class CadastroParticipanteDialog(QDialog):
 
     def salvar(self):
         """
-        Salva participante sem travar a UI com consulta de Receita para CPF.
-        Para CPF, valida localmente; para CNPJ, apenas grava (consulta pode ficar opcional fora daqui).
-        Atualiza a lista imediatamente.
+        Salva participante…
         """
         from PySide6.QtWidgets import QMessageBox, QApplication
         import re
@@ -2018,10 +2099,8 @@ class CadastroParticipanteDialog(QDialog):
             QMessageBox.warning(self, "Erro", "Conexão com o banco não encontrada.")
             return
 
-        # Pega campos com fallback defensivo
         cpf_widget  = getattr(self, "cpf_cnpj", None)
         nome_widget = getattr(self, "nome", None)
-        tipo_combo  = getattr(self, "tipo_combo", None)
 
         cpf_raw = (cpf_widget.text() if cpf_widget else "").strip()
         nome    = (nome_widget.text() if nome_widget else "").strip()
@@ -2031,20 +2110,66 @@ class CadastroParticipanteDialog(QDialog):
             QMessageBox.warning(self, "Campos obrigatórios", "Informe CPF/CNPJ e Nome.")
             return
 
-        # tipo: se houver combo, use currentData() (int), senão deduz
-        if tipo_combo and hasattr(tipo_combo, "currentData") and tipo_combo.currentData() is not None:
-            tipo = int(tipo_combo.currentData())
-        else:
-            tipo = 1 if len(digits) == 11 else 2
+        idx = self.tipo.currentIndex() if hasattr(self, "tipo") else -1
+        tipo = [1,2,3,4][idx] if idx in (0,1,2,3) else (2 if len(digits) == 11 else 1)
 
-        # CPF: valida localmente e NÃO chama Receita aqui
+        # ✅ NOVO: impedir duplicado quando for inclusão (ou edição trocando p/ um já existente)
+        exist = (
+            db.sb.table("participante")
+                .select("id,nome")
+                .eq("cpf_cnpj", digits)
+                .limit(1)
+                .execute()
+                .data
+        )
+        if exist:
+            exist_id   = exist[0]["id"]
+            exist_nome = exist[0]["nome"]
+            # se for inclusão OU se estiver tentando trocar o doc para um que já pertence a outro id
+            if not getattr(self, "participante_id", None) or int(exist_id) != int(self.participante_id):
+                QMessageBox.warning(
+                    self,
+                    "CPF/CNPJ já cadastrado",
+                    f"Este documento já está cadastrado para: {exist_nome} (ID {exist_id})."
+                )
+                if cpf_widget: cpf_widget.setFocus()
+                return
+        
+        # Checagem de duplicidade direto no Supabase
+        try:
+            exist = (
+                db.sb.table("participante")
+                    .select("id,nome")
+                    .eq("cpf_cnpj", digits)
+                    .limit(1)
+                    .execute()
+                    .data
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Erro ao consultar duplicidade", str(e))
+            return
+        
+        if exist:
+            exist_id   = exist[0].get("id")
+            exist_nome = exist[0].get("nome") or ""
+            # bloqueia inclusão ou troca para documento que já pertence a outro ID
+            if not getattr(self, "participante_id", None) or int(exist_id) != int(self.participante_id):
+                QMessageBox.warning(
+                    self,
+                    "CPF/CNPJ já cadastrado",
+                    f"Este documento já está cadastrado para: {exist_nome} (ID {exist_id})."
+                )
+                if cpf_widget:
+                    cpf_widget.setFocus()
+                return
+
+        # Validação de CPF (não chama Receita)
         if len(digits) == 11:
             if not valida_cpf(digits):
                 QMessageBox.warning(self, "CPF inválido", "Informe um CPF válido.")
                 if cpf_widget: cpf_widget.setFocus()
                 return
 
-        # CNPJ: aqui só grava (consulta Receita, se desejado, deve acontecer em outra ação específica)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             pid = db.upsert_participante(digits, nome, tipo)
@@ -2055,10 +2180,9 @@ class CadastroParticipanteDialog(QDialog):
         finally:
             QApplication.restoreOverrideCursor()
 
-        # guarda para o chamador (se quiser saber qual foi criado/atualizado)
         self.novo_id = pid
 
-        # === ATUALIZA UI NA HORA ===
+        # Atualiza todas as listas/combos abertas
         try:
             if parent and hasattr(parent, "_broadcast_participantes_changed"):
                 parent._broadcast_participantes_changed()
@@ -3292,11 +3416,16 @@ class LancamentoDialog(QDialog):
         ) = row
     
         # data
-        _d = QDate.fromString(data or "", "dd/MM/yyyy")
+        txt = (data or "").strip()
+        _d = QDate.fromString(txt, "dd/MM/yyyy")
+        if not _d.isValid():
+            _d = QDate.fromString(txt[:10], "yyyy-MM-dd")  # ISO (Postgres/Supabase)
+        if not _d.isValid():
+            _d = QDate.fromString(txt, "yyyyMMdd")         # fallback (AAAAmmdd)
         if not _d.isValid():
             _d = QDate.currentDate()
         self.data.setDate(_d)
-    
+            
         # imóvel
         idx_im = self.imovel.findData(imovel_id)
         if idx_im >= 0:
@@ -3595,16 +3724,20 @@ class GerenciamentoContasWidget(QWidget):
         self.tabela = QTableWidget(0, len(self._contas_labels))
         self.tabela.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tabela.setHorizontalHeaderLabels(self._contas_labels)
-        # evita edição direta
-        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
-        # seleção de linha inteira
-        self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
-        self.tabela.setSelectionMode(QTableWidget.ExtendedSelection)  # Ctrl/Shift
-        self.tabela.setAlternatingRowColors(True)
-        self.tabela.setShowGrid(False)
-        self.tabela.verticalHeader().setVisible(False)
-
+        
+        setup_interactive_table(
+            self.tabela,
+            header_movable=True,           # <<< passa a mover colunas
+            select_rows=True,
+            extended_selection=True,
+            resize_mode=QHeaderView.Stretch,
+            stretch_last_section=True,
+        )
+        
+        # sinais específicos:
+        self.tabela.cellClicked.connect(self._select_row)
         hdr = self.tabela.horizontalHeader()
+        hdr.sectionDoubleClicked.connect(self._toggle_sort)  # sua ordenação cíclica custom
         hdr.setHighlightSections(False)
         hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch)  # ocupa toda a largura (sem “sobras”)
@@ -3847,18 +3980,20 @@ class GerenciamentoImoveisWidget(QWidget):
         # Tabela
         self.tabela = QTableWidget(0, len(self._imoveis_labels))
         self.tabela.setHorizontalHeaderLabels(self._imoveis_labels)
-        self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)     # <<< seleção por LINHAS
-        self.tabela.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.tabela.setAlternatingRowColors(True)
-        self.tabela.setShowGrid(False)
-        self.tabela.verticalHeader().setVisible(False)
-        hdr = self.tabela.horizontalHeader()
-        hdr.setHighlightSections(False)
-        hdr.setDefaultAlignment(Qt.AlignCenter)
-        hdr.setSectionResizeMode(QHeaderView.Stretch)
-        hdr.sectionDoubleClicked.connect(self._toggle_sort_imoveis)
+        
+        setup_interactive_table(
+            self.tabela,
+            header_movable=True,           # <<< libera mover colunas
+            select_rows=True,
+            extended_selection=True,
+            resize_mode=QHeaderView.Stretch,
+            stretch_last_section=True,
+        )
+        
+        # seus sinais/botões seguem:
         self.tabela.cellClicked.connect(self._select_row)
+        # se já havia ordenação no header, mantenha o connect existente
+        
         self.layout.addWidget(self.tabela)
 
     def _toggle_sort_imoveis(self, index: int):
@@ -4102,9 +4237,20 @@ class GerenciamentoParticipantesWidget(QWidget):
 
         self.tabela = QTableWidget(0, len(self._participantes_labels))
         self.tabela.setHorizontalHeaderLabels(self._participantes_labels)
-        self.tabela.setAlternatingRowColors(True); self.tabela.setShowGrid(False); self.tabela.verticalHeader().setVisible(False)
-        self.tabela.setSelectionMode(QTableWidget.ExtendedSelection)
+
+        setup_interactive_table(
+            self.tabela,
+            header_movable=True,
+            select_rows=True,           # <<< garante LINHA inteira
+            extended_selection=True,    # CTRL/SHIFT
+            resize_mode=QHeaderView.Stretch,  # você já usava Stretch aqui
+            stretch_last_section=True,
+        )
+
+        # sinais específicos desta aba permanecem:
         self.tabela.cellClicked.connect(self._select_row)
+        # ordenação cíclica custom que você já tem segue ativa (sectionDoubleClicked -> _toggle_sort_participantes)
+
         hdr = self.tabela.horizontalHeader(); hdr.setHighlightSections(False); hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(QHeaderView.Stretch); hdr.sectionDoubleClicked.connect(self._toggle_sort_participantes)
         self.layout.addWidget(self.tabela)
@@ -4251,7 +4397,6 @@ class GerenciamentoParticipantesWidget(QWidget):
         except Exception:
             pass
         
-
     def cadastrar_novos_participantes(self):
         import importlib.util, json, os
         dlg = QDialog(self)
@@ -4455,13 +4600,12 @@ class GerenciamentoParticipantesWidget(QWidget):
                 if "tipo" in cols:
                     raw_tipo = str(row[cols["tipo"]]).strip().lower()
                     if raw_tipo in ("1", "pf", "pessoa fisica", "pessoa física"):
-                        tipo = 1
+                        tipo = 2  # PF
                     elif raw_tipo in ("2", "pj", "pessoa juridica", "pessoa jurídica", "cnpj"):
-                        tipo = 2
+                        tipo = 1  # PJ
                     else:
-                        tipo = 1 if len(cpf_cnpj) == 11 else 2
-                else:
-                    tipo = 1 if len(cpf_cnpj) == 11 else 2
+                        tipo = 2 if len(cpf_cnpj) == 11 else 1
+                    
 
                 try:
                     pid_before = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj = ?", (cpf_cnpj,))
@@ -4538,6 +4682,19 @@ class GerenciamentoParticipantesWidget(QWidget):
             try: self.db.execute_query("DELETE FROM participante WHERE id=?", (pid,))
             except Exception as e: QMessageBox.critical(self, "Erro", f"Erro ao excluir participante ID {pid}: {e}")
         self.carregar_participantes()
+
+    def _reload_participantes(self):
+        # usado pelo broadcast para atualizar imediatamente a grade
+        self.carregar_participantes()
+
+    def _broadcast_participantes_changed(self):
+        # delega para a janela principal, se existir
+        win = self.window()
+        if hasattr(win, "_broadcast_participantes_changed"):
+            try:
+                win._broadcast_participantes_changed()
+            except Exception:
+                pass
 
 # --- WIDGET CADASTROS COM ABAS ---
 class CadastrosWidget(QTabWidget):
@@ -4624,22 +4781,22 @@ class MainWindow(QMainWindow):
         self.btn_filter.setMenu(self._lanc_filter_menu)
 
         l_l.addLayout(self.lanc_filter_layout)
-        self.tab_lanc = QTableWidget(0, len(self._lanc_labels)); self.tab_lanc.setHorizontalHeaderLabels(self._lanc_labels)
-
-        hdr = self.tab_lanc.horizontalHeader()
-        hdr.setSectionsMovable(True)
-        hdr.setStretchLastSection(False)
-
-        # Não quebra linha nem corta texto
-        self.tab_lanc.setWordWrap(False)
-        self.tab_lanc.setTextElideMode(Qt.ElideNone)
-
-        # Scroll horizontal se passar do limite
-        self.tab_lanc.setHorizontalScrollMode(QTableWidget.ScrollPerPixel)
-        self.tab_lanc.setSizeAdjustPolicy(QTableWidget.AdjustToContents)
-
-        self.tab_lanc.setSelectionBehavior(QTableWidget.SelectRows); self.tab_lanc.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tab_lanc = QTableWidget(0, len(self._lanc_labels))
+        self.tab_lanc.setHorizontalHeaderLabels(self._lanc_labels)
+        
+        # Substitui bloco repetitivo por setup único:
+        setup_interactive_table(
+            self.tab_lanc,
+            header_movable=True,
+            select_rows=True,
+            extended_selection=True,
+            resize_mode=QHeaderView.ResizeToContents,
+            stretch_last_section=False,  # você usa False aqui e ativa stretch depois quando quiser
+        )
+        
+        # sinais/botões específicos desta tela continuam:
         self.tab_lanc.itemSelectionChanged.connect(self._update_lanc_buttons)
+        
         l_l.addWidget(self.tab_lanc)
         
         # aplica filtro inicial ao abrir

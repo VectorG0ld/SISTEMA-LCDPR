@@ -1,0 +1,17 @@
+PySide6>=6.7.0
+shiboken6>=6.7.0
+python-dotenv>=1.0.1
+supabase>=2.4.0
+requests>=2.32.0
+pandas>=2.3.0
+numpy>=2.0.0
+openpyxl>=3.1.5
+XlsxWriter>=3.2.0
+xlwings>=0.30.0
+pywin32>=306
+Pillow>=10.3.0
+pdfplumber>=0.11.0
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+PyPDF2>=3.0.1
+openai>=1.0.0

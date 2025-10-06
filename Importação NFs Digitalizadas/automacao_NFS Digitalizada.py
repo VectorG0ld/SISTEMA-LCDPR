@@ -1874,7 +1874,11 @@ def main():
                     if _cancelled():
                         raise KeyboardInterrupt("cancelado pelo usuário")
                     try:
-                        full = pytesseract.image_to_string(Image.open(png), lang=OCR_LANG, config="--psm 6")
+                        if _cancelled():
+                            raise KeyboardInterrupt("cancelado pelo usuário")
+                        full = pytesseract.image_to_string(
+                            Image.open(png), lang=OCR_LANG, config="--psm 6", timeout=3
+                        )
                     except Exception:
                         full = ""
                     header = _page_header_text(png)
@@ -2212,7 +2216,7 @@ from pathlib import Path
 from datetime import datetime
 from contextlib import contextmanager
 
-from PySide6.QtCore import (Qt, QThread, Signal, QCoreApplication)
+from PySide6.QtCore import (Qt, QThread, Signal, QCoreApplication, QTimer)
 from PySide6.QtGui import (QIcon, QFont, QColor, QTextCursor, QPixmap, QTextOption, QCloseEvent)
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QToolButton, QPushButton, QTextEdit,
@@ -2503,6 +2507,11 @@ class BaseWorker(QThread):
 
     def cancel(self):
         self._cancel = True
+        try:
+            self.requestInterruption()  # sinaliza interrupção no QThread
+        except Exception:
+            pass
+
 
     def _emit(self, msg: str, kind: str="info"):
         self.log_sig.emit(msg, kind)
@@ -2563,7 +2572,7 @@ class WorkerSeparar(BaseWorker):
                 )
             self._emit("Separação concluída.", "success")
             self.finished_sig.emit("Concluído")
-        except Exception:
+        except Exception as e:
             self._emit(f"Falha geral:\n{traceback.format_exc()}", "error")
             self.finished_sig.emit("Erro")
 
@@ -2798,10 +2807,13 @@ class AutomacaoNFSDigitalizadasUI(QWidget):
 
     def _cancel_worker(self):
         if self.worker and self.worker.isRunning():
-            self.log_msg("Solicitando cancelamento...", "warning")
-            self.worker.cancel()
+            self.log_msg("Solicitando cancelamento…", "warning")
+            self.worker.cancel()  # seta a flag + requestInterruption()
+            # Fallback “duro” se ainda estiver rodando após 1,5s
+            QTimer.singleShot(1500, lambda: (self.worker.isRunning() and self.worker.terminate()))
         else:
             self.log_msg("Nenhum processo em execução para cancelar.", "info")
+
 
     def _on_finished(self, status: str, ask_import: bool):
         self.btn_cancel.setEnabled(False)
