@@ -3,12 +3,12 @@
 #define MyAppPublisher "Frutacc Comercio e Distriuição LTDA"
 #define MyAppExeName "LCDPR Frutacc.exe"
 
-#define MySourceRoot "C:\Users\conta\Downloads\LCDPR Frutacc"
-#define MySourceMainExe "C:\Users\conta\Downloads\LCDPR Frutacc\LCDPR Frutacc.exe"
-#define MySourceInternal "C:\Users\conta\Downloads\LCDPR Frutacc\_internal"
+#define MySourceRoot "C:\Users\conta\OneDrive\Documentos\LCDPR Frutacc"
+#define MySourceMainExe "C:\Users\conta\OneDrive\Documentos\LCDPR Frutacc\LCDPR Frutacc.exe"
+#define MySourceInternal "C:\Users\conta\OneDrive\Documentos\LCDPR Frutacc\_internal"
 
-#define MyOutputDir "C:\Users\conta\Downloads\LCDPR Frutacc\installer"
-#define MySetupIcon "C:\Users\conta\Downloads\LCDPR Frutacc\_internal\agro_icon.ico"
+#define MyOutputDir "C:\Users\conta\OneDrive\Documentos\LCDPR Frutacc\installer"
+#define MySetupIcon "C:\Users\conta\OneDrive\Documentos\LCDPR Frutacc\_internal\banco_de_dados\icons\agro_icon.ico"
 
 [Setup]
 AppId={{D3C2C1F7-9B0E-4B5D-AB2D-6C6A6B4A9C31}

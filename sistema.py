@@ -247,15 +247,7 @@ def _nome_cnpj_from_receita(data: dict) -> str:
 APP_ICON    = 'agro_icon.png'
 
 # 1) Pasta base do seu projeto (onde está esse script)
-# Base do aplicativo (pasta do .exe quando congelado; pasta do .py quando em dev)
-APP_DIR = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.abspath(__file__))
-
-# Se existir a pasta "_internal" ao lado do .exe, use-a como base de módulos externos (.py)
-MODULES_DIR = os.path.join(APP_DIR, "_internal") if os.path.isdir(os.path.join(APP_DIR, "_internal")) else APP_DIR
-
-# Compatibilidade com o restante do código que usa PROJECT_DIR
-PROJECT_DIR = APP_DIR
-
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 ICONS_DIR = os.path.join(PROJECT_DIR, 'banco_de_dados', 'icons')
 LOCK_ICON = os.path.join(ICONS_DIR, 'lock.png')
 
@@ -6412,63 +6404,78 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(folha_widget)
     
     def _load_importador_danfe_module(self):
-        import importlib.util, os, sys
-        mod_path = os.path.join(MODULES_DIR, "Importação DANFE", "Importador XML.py")
-        if not os.path.exists(mod_path):
-            raise FileNotFoundError("Não encontrei 'Importação DANFE/Importador XML.py'.")
-        spec = importlib.util.spec_from_file_location("importador_danfe", mod_path)
+        import importlib.util, os
+        # Caminho padrão solicitado: ./Importação DANFE/Importador XML.py
+        base = PROJECT_DIR
+        preferred = os.path.join(base, "Importação DANFE", "Importador XML.py")
+        fallback = os.path.join(base, "Importador XML.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'Importador XML.py' (ou 'Importador XML.py').")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("importador_xml", filepath)
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
         return mod
 
+    # ISSO (inexistente) — vamos ADICIONAR:
     def _load_importador_cte_module(self):
-        import importlib.util, os, sys
-        mod_path = os.path.join(MODULES_DIR, "Importação CTe", "Importador CTe.py")
-        if not os.path.exists(mod_path):
-            raise FileNotFoundError("Não encontrei 'Importação CTe/Importador CTe.py'.")
-        spec = importlib.util.spec_from_file_location("importador_cte", mod_path)
+        import importlib.util, os
+        base = PROJECT_DIR
+        preferred = os.path.join(base, "Importação CTe", "Importador CTe.py")
+        fallback  = os.path.join(base, "Importador CTe.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'Importador CTe.py'.")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("importador_cte", filepath)
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
         return mod
-
 
     def _load_automacao_folha_module(self):
-        import importlib.util, os, sys
-        mod_path = os.path.join(MODULES_DIR, "Importação Folha", "automacao_folha.py")
-        if not os.path.exists(mod_path):
-            raise FileNotFoundError("Não encontrei 'Importação Folha/automacao_folha.py'.")
-        spec = importlib.util.spec_from_file_location("automacao_folha", mod_path)
+        import importlib.util, os
+        base = PROJECT_DIR
+        # você pode ajustar as pastas conforme sua organização:
+        preferred = os.path.join(base, "Importação Folha", "automacao_folha.py")
+        fallback  = os.path.join(base, "automacao_folha.py")
+
+        if not os.path.exists(preferred) and not os.path.exists(fallback):
+            raise FileNotFoundError("Não encontrei o arquivo 'automacao_folha.py'.")
+
+        filepath = preferred if os.path.exists(preferred) else fallback
+        spec = importlib.util.spec_from_file_location("automacao_folha", filepath)
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
         return mod
-    
 
+    # INSIRA DEPOIS DE open_importador_danfe_tab():
     def _load_automacao_energia_module(self):
-        import importlib.util, os, sys
-        mod_path = os.path.join(MODULES_DIR, "Importação Energia", "automacao_energia.py")
-        if not os.path.exists(mod_path):
-            raise FileNotFoundError("Não encontrei 'Importação Energia/automacao_energia.py'.")
+        """
+        Carrega o módulo da Automação de Energia (como fazemos com o Importador DANFE).
+        Ajuste o caminho abaixo conforme onde você salvar o arquivo automacao_energia.py.
+        """
+        import importlib.util, os
+        # Sugestão de caminho no seu projeto:
+        mod_path = os.path.join(os.path.dirname(__file__), "Importação Energia", "automacao_energia.py")
         spec = importlib.util.spec_from_file_location("automacao_energia", mod_path)
         mod = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
         return mod
-
 
     def _load_automacao_nfs_digitalizadas_module(self):
         import importlib.util, os, sys
-        mod_path = os.path.join(MODULES_DIR, "Importação NFs Digitalizadas", "automacao_NFS Digitalizada.py")
+        mod_path = os.path.join(os.path.dirname(__file__), "Importação NFs Digitalizadas", "automacao_NFS Digitalizada.py")
         if not os.path.exists(mod_path):
             raise FileNotFoundError("Não encontrei 'Importação NFs Digitalizadas/automacao_NFS Digitalizada.py'.")
         spec = importlib.util.spec_from_file_location("automacao_nfs_digitalizadas", mod_path)
         mod = importlib.util.module_from_spec(spec)
+        # 👇 REGISTRA antes de exec_module — evita o erro do dataclasses
         sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
         return mod
-    
 
     def open_automacao_energia_tab(self):
         # Evita duplicar a aba
