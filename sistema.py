@@ -243,11 +243,10 @@ def _nome_cnpj_from_receita(data: dict) -> str:
             return v.strip()
     return ""
 
-ICONS_DIR = os.path.join(PROJECT_DIR, 'banco_de_dados', 'icons')
-
-
 # 1) Pasta base do seu projeto (onde está esse script)
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+ICONS_DIR = os.path.join(PROJECT_DIR, 'banco_de_dados', 'icons')
 APP_ICON    = os.path.join(ICONS_DIR, 'agro_icon.png')
 LOCK_ICON   = os.path.join(ICONS_DIR, 'lock.png')
 
