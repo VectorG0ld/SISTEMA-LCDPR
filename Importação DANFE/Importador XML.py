@@ -653,7 +653,22 @@ class RuralXmlImporter(QWidget):
     def on_proc_finished(self, exit_code: int, exit_status):
         if exit_code == 0:
             self.log_msg("Varredura finalizada com sucesso.", "success")
-            self.lbl_last_status.setText("3423 NOTAS ASSOCIADAS AO PAGAMENTO✅")
+            try:
+                pag_file = Path(__file__).parent / "PAGAMENTOS.txt"
+                if pag_file.exists():
+                    with open(pag_file, "r", encoding="utf-8") as f:
+                        lines = [ln for ln in (l.strip() for l in f) if ln]
+                    count = len(lines)
+                    if count > 0:
+                        plural = "s" if count != 1 else ""
+                        self.lbl_last_status.setText(f"{count} nota{plural} associada{plural} ao pagamento ✅")
+                    else:
+                        self.lbl_last_status.setText("Nenhuma nota associada ao pagamento")
+                else:
+                    self.lbl_last_status.setText("Nenhum arquivo PAGAMENTOS.txt encontrado")
+            except Exception as e:
+                self.lbl_last_status.setText("Erro ao contar notas associadas")
+                self.log_msg(f"Erro ao ler PAGAMENTOS.txt para contar notas: {e}", "error")
 
             # Integração com Sistema.py: perguntar e importar PAGAMENTOS.txt
             try:

@@ -735,7 +735,7 @@ class ImportadorCTe(QWidget):
                 FARM_MAPPING = {
                     "115149210": "Arm. Primavera",
                     "111739837": "Aliança",
-                    "114436720": "B. Grande",
+                    "114436720": "Barragem",
                     "115449965": "Estrela",
                     "294186832": "Frutacc",
                     "294907068": "Frutacc III",

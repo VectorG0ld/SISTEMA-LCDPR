@@ -115,17 +115,42 @@ class _RestTable:
         return self
     def delete(self):
         self._method = "DELETE"; self._payload = None; return self
+    def ilike(self, col: str, pattern: str):
+        self._filters.append((col, f"ilike.{pattern}"))
+        return self
 
     # ----- executor -----
     def execute(self):
-        # começa com os params "únicos" (order, limit, on_conflict, etc.)
+        # monta params
         params_list = list(self.params.items())
-        # em GET, incluir o select
         if self._method == "GET":
             params_list.append(("select", self._select))
-        # adiciona filtros repetíveis (eq/gte/lte/in)
         params_list.extend(self._filters)
-    
+
+        # Em requisições GET sem .limit(): pagina por Range (0-999, 1000-1999, ...)
+        if self._method == "GET" and "limit" not in self.params:
+            items = []
+            page_size = 1000
+            start = 0
+            while True:
+                headers = dict(self.headers)
+                headers["Range-Unit"] = "items"
+                headers["Range"] = f"{start}-{start + page_size - 1}"
+                r = _rq.get(self.base, headers=headers, params=params_list, timeout=20)
+                if r.status_code >= 400:
+                    raise Exception(f"PostgREST error {r.status_code}: {r.text}")
+                try:
+                    data = r.json()
+                except Exception:
+                    data = None
+                batch = data if isinstance(data, list) else ([] if data is None else [data])
+                items.extend(batch)
+                if len(batch) < page_size:
+                    break
+                start += page_size
+            return _RestResp(items)
+
+        # Demais métodos (GET com limit, POST, PATCH, DELETE) – igual ao original
         if   self._method == "GET":
             r = _rq.get(self.base, headers=self.headers, params=params_list, timeout=20)
         elif self._method == "POST":
@@ -468,7 +493,12 @@ class Database:
                     return f"{yyyy}-{int(mm):02d}-{int(dd):02d}"
                 return d
             payload["data"] = _to_iso(payload.get("data"))
-        
+            if not payload.get("data_ord") and payload.get("data"):
+                try:
+                    y, m, d = str(payload["data"])[:10].split("-")
+                    payload["data_ord"] = int(f"{y}{m}{d}")
+                except Exception:
+                    pass
             # >>> NOVO: gravar perfil_id no lançamento
             if getattr(self, "perfil_id", None):
                 payload["perfil_id"] = self.perfil_id
@@ -564,6 +594,12 @@ class Database:
                     "saldo_final","natureza_saldo","usuario","data_ord"]
             payload = dict(zip(cols, params[:-1]))
             payload["data"] = _to_iso(payload.get("data"))
+            if not payload.get("data_ord") and payload.get("data"):
+                try:
+                    y, m, d = str(payload["data"])[:10].split("-")
+                    payload["data_ord"] = int(f"{y}{m}{d}")
+                except Exception:
+                    pass
             self.sb.table("lancamento").update(payload).eq("id", params[-1]).execute()
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
@@ -751,62 +787,93 @@ class Database:
             return [(total,)]
         
 
-        # 2) MIN/MAX(data_ord) FROM lancamento
+        # 2) MIN/MAX(data_ord) FROM lancamento  (perfil: considera por CONTA OU por IMÓVEL)
         if s_low.startswith("select min(data_ord), max(data_ord) from lancamento"):
-            qmin = self.sb.table("lancamento").select("data_ord")
-            qmax = self.sb.table("lancamento").select("data_ord")
-
+            def _pick(rows, which):
+                if not rows: 
+                    return None
+                v = rows[0].get("data_ord")
+                return v if v is not None else None
+        
             if getattr(self, "perfil_id", None):
-                contas = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
-                conta_ids = [r["id"] for r in contas]
-                if not conta_ids:
-                    return [(None, None)]
-                qmin = qmin.in_("cod_conta", conta_ids)
-                qmax = qmax.in_("cod_conta", conta_ids)
-
-            rmin = qmin.order("data_ord", desc=False).limit(1).execute().data
-            rmax = qmax.order("data_ord", desc=True ).limit(1).execute().data
+                # ids do perfil (conta e imóvel)
+                contas  = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                imoveis = (self.sb.table("imovel_rural").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                conta_ids  = [r["id"] for r in contas]
+                imovel_ids = [r["id"] for r in imoveis]
+        
+                vmins = []
+                vmaxs = []
+        
+                if conta_ids:
+                    rmin_c = (self.sb.table("lancamento").select("data_ord").in_("cod_conta", conta_ids).order("data_ord", desc=False).limit(1).execute().data)
+                    rmax_c = (self.sb.table("lancamento").select("data_ord").in_("cod_conta", conta_ids).order("data_ord", desc=True ).limit(1).execute().data)
+                    vm_c_min = _pick(rmin_c, "min"); vm_c_max = _pick(rmax_c, "max")
+                    if vm_c_min is not None: vmins.append(vm_c_min)
+                    if vm_c_max is not None: vmaxs.append(vm_c_max)
+        
+                if imovel_ids:
+                    rmin_i = (self.sb.table("lancamento").select("data_ord").in_("cod_imovel", imovel_ids).order("data_ord", desc=False).limit(1).execute().data)
+                    rmax_i = (self.sb.table("lancamento").select("data_ord").in_("cod_imovel", imovel_ids).order("data_ord", desc=True ).limit(1).execute().data)
+                    vm_i_min = _pick(rmin_i, "min"); vm_i_max = _pick(rmax_i, "max")
+                    if vm_i_min is not None: vmins.append(vm_i_min)
+                    if vm_i_max is not None: vmaxs.append(vm_i_max)
+        
+                vmin = min(vmins) if vmins else None
+                vmax = max(vmaxs) if vmaxs else None
+                return [(vmin, vmax)]
+        
+            # sem perfil -> global
+            rmin = (self.sb.table("lancamento").select("data_ord").order("data_ord", desc=False).limit(1).execute().data)
+            rmax = (self.sb.table("lancamento").select("data_ord").order("data_ord", desc=True ).limit(1).execute().data)
             vmin = rmin[0]["data_ord"] if rmin and rmin[0]["data_ord"] is not None else None
             vmax = rmax[0]["data_ord"] if rmax and rmax[0]["data_ord"] is not None else None
             return [(vmin, vmax)]
+        
 
-        # 3) SUM(valor_entrada|valor_saida) BETWEEN datas (data_ord)
+        # 3) SUM(valor_entrada|valor_saida) BETWEEN datas (data_ord) — robusto a tipo_lanc vazio
         m = re.match(r"select sum\((valor_entrada|valor_saida)\) from lancamento where data_ord between \? and \?", s_low)
         if m:
-            col = m.group(1)  # valor_entrada -> Receita ; valor_saida -> Despesa
-            d1, d2 = params
+            col = m.group(1)  # "valor_entrada" (Receita) ou "valor_saida" (Despesa)
+            # garante inteiros, caso venham como str
+            d1, d2 = int(str(params[0])), int(str(params[1]))
 
-            # Buscamos colunas suficientes para pós-filtrar por perfil e tipo
             rows = (self.sb.table("lancamento")
                         .select(f"{col},cod_conta,cod_imovel,tipo_lanc")
                         .gte("data_ord", d1)
                         .lte("data_ord", d2)
                         .execute().data) or []
 
-            # (1) filtro por perfil: aceita por CONTA ou por IMÓVEL (para não perder lançamentos sem conta)
+            # (1) filtro por perfil: CONTA OU IMÓVEL
             if getattr(self, "perfil_id", None):
-                contas = (self.sb.table("conta_bancaria")
-                             .select("id")
-                             .eq("perfil_id", self.perfil_id)
-                             .execute().data) or []
-                imoveis = (self.sb.table("imovel_rural")
-                              .select("id")
-                              .eq("perfil_id", self.perfil_id)
-                              .execute().data) or []
+                contas  = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                imoveis = (self.sb.table("imovel_rural").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
                 conta_ids  = {r["id"] for r in contas}
                 imovel_ids = {r["id"] for r in imoveis}
+                rows = [r for r in rows if (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)]
 
-                def _match_perfil(r):
-                    return (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)
+            # (2) regra de inclusão:
+            #     - se tipo_lanc estiver correto (1=Receita, 2=Despesa), usa-o;
+            #     - se tipo_lanc vier vazio/0/None, entra pelo valor da coluna (>0).
+            tipo_alvo = 1 if col == "valor_entrada" else 2
+            total = 0.0
+            for r in rows:
+                v = (r.get(col) or 0) or 0
+                tl = r.get("tipo_lanc")
+                if tl in (1, 2):
+                    if tl != tipo_alvo:
+                        continue
+                else:
+                    # fallback: aceita se a própria coluna tem valor (>0)
+                    if not v or float(v) <= 0:
+                        continue
+                try:
+                    total += float(v)
+                except Exception:
+                    pass
 
-                rows = [r for r in rows if _match_perfil(r)]
-
-            # (2) filtro por TIPO (garante que receita não “some” saídas e vice-versa)
-            tipo_desejado = 1 if col == "valor_entrada" else 2
-            rows = [r for r in rows if (r.get("tipo_lanc") == tipo_desejado)]
-
-            total = sum((r.get(col) or 0) for r in rows)
             return [(total,)]
+
 
 
         # 3.1) SALDO ANTERIOR (edição) -> "... cod_conta=? AND id < ? ORDER BY id DESC LIMIT 1"
@@ -874,14 +941,20 @@ class Database:
                         .lte("data_ord", d2_ord)
                         .execute().data) or []
 
-            # 4.2 filtra por perfil ativo (via imovel.perfil_id)
+            # 4.2 filtra por perfil ativo (ACEITA por CONTA OU por IMÓVEL)
             if self.perfil_id:
+                contas = (self.sb.table("conta_bancaria")
+                             .select("id")
+                             .eq("perfil_id", self.perfil_id)
+                             .execute().data) or []
                 imoveis = (self.sb.table("imovel_rural")
-                               .select("id")
-                               .eq("perfil_id", self.perfil_id)
-                               .execute().data) or []
+                              .select("id")
+                              .eq("perfil_id", self.perfil_id)
+                              .execute().data) or []
+                conta_ids  = {r["id"] for r in contas}
                 imovel_ids = {r["id"] for r in imoveis}
-                rows = [r for r in rows if r.get("cod_imovel") in imovel_ids]
+                rows = [r for r in rows if (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)]
+            
 
             # 4.3 mapas auxiliares (imóvel e participante)
             ids_imovel = sorted({r.get("cod_imovel") for r in rows if r.get("cod_imovel") is not None})
@@ -5985,6 +6058,9 @@ class MainWindow(QMainWindow):
         part_cache = {}    # cpf_cnpj_digits        -> id_participante
         saldos = {}        # id_conta -> saldo atual (considerando natureza)
 
+        errors: list[str] = []
+        ok_count = 0
+
         GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=total, parent=self.window())
         try:
             with self.db.bulk():
@@ -6049,7 +6125,9 @@ class MainWindow(QMainWindow):
                         
 
                         else:
-                            raise ValueError(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+                            errors.append(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+                            continue
+                        
 
                         # Heurísticas de tipo_doc/categoria
                         categoria = None
@@ -6087,7 +6165,10 @@ class MainWindow(QMainWindow):
                                 break
 
                         if not id_imovel:
-                            raise ValueError(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado no perfil atual")
+                            # 'num_doc' e 'digits' (CPF/CNPJ) já foram extraídos acima nos layouts
+                            errors.append(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado no perfil atual | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')}")
+                            continue
+
 
 
                         # FK conta (normalização 1/01/001) com cache ***FILTRADO POR PERFIL***
@@ -6219,6 +6300,9 @@ class MainWindow(QMainWindow):
         part_cache = {}
         saldos = {}
 
+        errors: list[str] = []
+        ok_count = 0
+
         GlobalProgress.begin("Importando lançamentos (Excel)…", maximo=total, parent=self.window())
         try:
             with self.db.bulk():
@@ -6249,7 +6333,8 @@ class MainWindow(QMainWindow):
                                 ct_cache[alt] = id_conta
                             break
                     if not id_conta:
-                        raise ValueError(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada")
+                        errors.append(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')}")
+                        continue
 
                     # Participante
                     pid = None
@@ -6288,15 +6373,21 @@ class MainWindow(QMainWindow):
                     dd, mm, yyyy = str(row.data).split("/")
                     data_ord = int(f"{yyyy}{mm}{dd}")  # AAAAMMDD
 
-                    self.db.execute_query(
-                        """INSERT INTO lancamento (
-                               data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
-                               id_participante, tipo_lanc, valor_entrada, valor_saida,
-                               saldo_final, natureza_saldo, usuario, categoria, data_ord
-                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        [data_iso, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
-                         id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
-                    )
+                    try:
+                        self.db.execute_query(
+                            """INSERT INTO lancamento (
+                                   data, cod_imovel, cod_conta, num_doc, tipo_doc, historico,
+                                   id_participante, tipo_lanc, valor_entrada, valor_saida,
+                                   saldo_final, natureza_saldo, usuario, categoria, data_ord
+                               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            [data_iso, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
+                             id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
+                        )
+                        ok_count += 1
+                    except Exception as e:
+                        errors.append(f"Linha {lineno}: falha ao inserir lançamento | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')} | {e}")
+                        continue
+                    
 
                     if (lineno - 1) % 200 == 0:
                         GlobalProgress.set_value(lineno - 1)
@@ -6305,6 +6396,16 @@ class MainWindow(QMainWindow):
         finally:
             GlobalProgress.end()
 
+        resumo = f"Importação concluída.\nSucesso: {ok_count}\nErros: {len(errors)}"
+        if errors:
+            # mostra as primeiras 50 linhas para não estourar a caixa
+            detalhes = "\n- " + "\n- ".join(errors[:50])
+            if len(errors) > 50:
+                detalhes += f"\n... (+{len(errors)-50} restantes)"
+            QMessageBox.warning(self, "Importação de Lançamentos (TXT)", resumo + "\n\nOcorrências:" + detalhes)
+        else:
+            QMessageBox.information(self, "Importação de Lançamentos (TXT)", resumo)
+        
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
 
