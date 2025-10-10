@@ -219,31 +219,47 @@ def _prompt_base_for(owner: str) -> str:
 # ============================
 # Helpers de OpenAI (SDK nova/antiga)
 # ============================
+# ============================
+# Helpers de OpenAI (SDK nova/antiga) — VERSÃO DINÂMICA (lê a chave a cada chamada)
+# ============================
 def _get_run_chat():
     """
-    Retorna função run_chat(model, messages, temperature=0) compatível com
-    SDK nova (OpenAI) ou SDK antiga (openai.ChatCompletion).
+    Retorna função run_chat(model, messages, temperature=0) que
+    instancia o cliente em CADA chamada, lendo a OPENAI_API_KEY atual.
+    Evita 401 quando a chave é definida depois que o módulo já foi importado.
     """
     try:
         # SDK nova
         from openai import OpenAI
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY") or "")
+
         def run_chat(model, messages, temperature=0):
+            key = os.environ.get("OPENAI_API_KEY") or ""
+            if not key:
+                raise RuntimeError("OPENAI_API_KEY não definida")
+            # cria o cliente AGORA, já com a chave correta
+            client = OpenAI(api_key=key)
             resp = client.chat.completions.create(
                 model=model, messages=messages, temperature=temperature
             )
             return resp.choices[0].message.content
+
         return run_chat
+
     except Exception:
         # SDK antiga
         import openai as old_openai
+
         def run_chat(model, messages, temperature=0):
-            old_openai.api_key = os.environ.get("OPENAI_API_KEY") or ""
+            key = os.environ.get("OPENAI_API_KEY") or ""
+            if not key:
+                raise RuntimeError("OPENAI_API_KEY não definida")
+            old_openai.api_key = key
             resp = old_openai.ChatCompletion.create(
                 model=model, messages=messages, temperature=temperature
             )
             msg = resp.choices[0].message
             return msg["content"] if isinstance(msg, dict) else msg.content
+
         return run_chat
 
 RUN_CHAT = _get_run_chat()
@@ -1205,6 +1221,9 @@ class AutomacaoEnergiaUI(QWidget):
         self.lbl_last_status.setText("Geração de TXT em execução…")
         self.lbl_last_status_time.setText(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         GlobalProgress.begin("Gerando TXT…", self)
+
+        # já existe o check com QMessageBox. Se quiser reforçar:
+        os.environ["OPENAI_API_KEY"] = self.cfg.get("api_key", "") or os.environ.get("OPENAI_API_KEY", "")
 
         self.worker = GerarTXTWorker(base_dir=base, use_ocr=self.chk_ocr.isChecked())
         self._connect_worker_signals()

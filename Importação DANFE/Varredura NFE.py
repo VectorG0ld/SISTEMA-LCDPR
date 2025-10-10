@@ -62,6 +62,7 @@ if not os.path.exists(testes_path):
     print(f"❌ Planilha de testes/relatório não encontrada: {testes_path}")
     sys.exit(1)
 
+print("")
 print(f"🗂️  base_dados_path = {base_dados_path}")
 print(f"🗂️  testes_path     = {testes_path}")
 

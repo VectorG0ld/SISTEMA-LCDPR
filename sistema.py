@@ -599,6 +599,21 @@ class Database:
 
             novo = self.insert_with_return("conta_bancaria", payload)
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
+
+        # UPDATE conta_bancaria (edição pela tela de contas)
+        if s_low.startswith("update conta_bancaria set"):
+            # a UI envia na ordem abaixo:
+            cols = ["cod_conta","pais_cta","banco","nome_banco","agencia","num_conta","saldo_inicial"]
+            payload = dict(zip(cols, params[:-1]))  # últimos params é o id
+            conta_id = params[-1]
+        
+            # Se quiser reforçar tipos:
+            # if payload.get("saldo_inicial") is not None:
+            #     try: payload["saldo_inicial"] = float(payload["saldo_inicial"])
+            #     except: pass
+        
+            self.sb.table("conta_bancaria").update(payload).eq("id", conta_id).execute()
+            return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
         
         def _to_iso(d):
             if isinstance(d, str) and "/" in d:
@@ -894,6 +909,90 @@ class Database:
 
             return [(total,)]
 
+        # --- [NOVO] SELECT ... FROM lancamento WHERE data_ord < ? (saldo inicial por grupo)
+        m = re.match(
+            r"select\s+(?P<cols>[\w\*,\s,]+)\s+from\s+lancamento\s+where\s+data_ord\s*<\s*\?",
+            s_norm, re.IGNORECASE
+        )
+        if m:
+            cols_txt = m.group("cols").strip().replace(" ", "")
+            d1 = int(str(params[0]))
+
+            # Precisamos de colunas extras para filtrar por perfil e, opcionalmente, ordenar
+            wanted = [c.strip() for c in cols_txt.split(",")] if cols_txt != "*" else []
+            extra  = []
+            for c in ("cod_conta", "cod_imovel"):
+                if cols_txt != "*" and c not in wanted:
+                    extra.append(c)
+
+            sel = cols_txt if cols_txt == "*" else (cols_txt + (("," + ",".join(extra)) if extra else ""))
+            rows = (self.sb.table("lancamento")
+                        .select(sel)
+                        .lt("data_ord", d1)
+                        .execute().data) or []
+
+            # Filtro por perfil (aceita por CONTA OU por IMÓVEL)
+            if getattr(self, "perfil_id", None):
+                contas  = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                imoveis = (self.sb.table("imovel_rural").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                conta_ids  = {r["id"] for r in contas}
+                imovel_ids = {r["id"] for r in imoveis}
+                def _match(r): return (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)
+                rows = [r for r in rows if _match(r)]  # :contentReference[oaicite:2]{index=2}
+
+            # Devolve nas colunas pedidas (na mesma ordem do SELECT original)
+            if cols_txt == "*":
+                # Uso atual do Balancete/Razão não pede "*"; se aparecer no futuro, devolvemos todos os campos em dict
+                return rows
+            cols_list = [c.strip() for c in cols_txt.split(",")]
+            return _tuplize(rows, cols_list)
+
+
+        # --- [NOVO] SELECT ... FROM lancamento WHERE data_ord BETWEEN ? AND ? [ORDER BY data_ord, id]
+        m = re.match(
+            r"select\s+(?P<cols>[\w\*,\s,]+)\s+from\s+lancamento\s+where\s+data_ord\s+between\s+\?\s+and\s+\?(?P<ord>\s+order\s+by\s+data_ord\s*,\s*id)?",
+            s_norm, re.IGNORECASE
+        )
+        if m:
+            cols_txt = m.group("cols").strip().replace(" ", "")
+            want_order = bool(m.group("ord"))
+            d1 = int(str(params[0])); d2 = int(str(params[1]))
+
+            wanted = [c.strip() for c in cols_txt.split(",")] if cols_txt != "*" else []
+            extra  = []
+            # Precisamos de cod_conta/cod_imovel para filtrar por perfil
+            for c in ("cod_conta", "cod_imovel"):
+                if cols_txt != "*" and c not in wanted:
+                    extra.append(c)
+            # Se pediram ORDER BY data_ord, id e 'id' não está nas colunas, inclua para poder ordenar em Python
+            if want_order and (cols_txt == "*" or "id" not in wanted):
+                extra.append("id")
+
+            sel = cols_txt if cols_txt == "*" else (cols_txt + (("," + ",".join(extra)) if extra else ""))
+            rows = (self.sb.table("lancamento")
+                        .select(sel)
+                        .gte("data_ord", d1)
+                        .lte("data_ord", d2)
+                        .execute().data) or []
+
+            # Filtro por perfil (aceita por CONTA OU por IMÓVEL)
+            if getattr(self, "perfil_id", None):
+                contas  = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                imoveis = (self.sb.table("imovel_rural").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                conta_ids  = {r["id"] for r in contas}
+                imovel_ids = {r["id"] for r in imoveis}
+                def _match(r): return (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)
+                rows = [r for r in rows if _match(r)]  # :contentReference[oaicite:3]{index=3}
+
+            # ORDER BY data_ord, id (se solicitado)
+            if want_order:
+                rows.sort(key=lambda r: ((r.get("data_ord") or 0), (r.get("id") or 0)))
+
+            # Devolve nas colunas pedidas (na mesma ordem do SELECT original)
+            if cols_txt == "*":
+                return rows
+            cols_list = [c.strip() for c in cols_txt.split(",")]
+            return _tuplize(rows, cols_list)
 
 
         # 3.1) SALDO ANTERIOR (edição) -> "... cod_conta=? AND id < ? ORDER BY id DESC LIMIT 1"
@@ -2571,7 +2670,9 @@ class ReportCenterDialog(QDialog):
             "Comparativo entre Fazendas",
             "DRE Simplificada (mês a mês)",
             "Comparativo Anual",
-            "DRE por Fazenda (multi-seção)"
+            "DRE por Fazenda (multi-seção)",
+            "Balancete",
+            "Razão",
         ])
 
         lf.addWidget(QLabel("Tipo de relatório:"))
@@ -2603,6 +2704,28 @@ class ReportCenterDialog(QDialog):
         self.btn_fechar  = QPushButton("Fechar")
         btns.addWidget(self.btn_preview); btns.addStretch(); btns.addWidget(self.btn_export); btns.addWidget(self.btn_fechar)
         lf.addStretch(); lf.addLayout(btns)
+
+        # --- Agrupar por (mostra só para Balancete/Razão) ---
+        agr = QHBoxLayout()
+        self.lbl_agrupar = QLabel("Agrupar por:")
+        self.cmb_agrup = QComboBox()
+        self.cmb_agrup.addItems(["Categoria", "Conta bancária"])
+        agr.addWidget(self.lbl_agrupar)
+        agr.addWidget(self.cmb_agrup)
+        lf.addLayout(agr)
+
+        # por padrão, escondido para os outros relatórios
+        self.lbl_agrupar.setVisible(False)
+        self.cmb_agrup.setVisible(False)
+
+        def _on_tipo_changed():
+            t = self.cmb_tipo.currentText()
+            need = t.startswith("Balancete") or t.startswith("Razão")
+            self.lbl_agrupar.setVisible(need)
+            self.cmb_agrup.setVisible(need)
+
+        self.cmb_tipo.currentTextChanged.connect(_on_tipo_changed)
+        _on_tipo_changed()
 
         # ====== LADO DIREITO: Preview ======
         self.stack = QStackedWidget()
@@ -2649,6 +2772,325 @@ class ReportCenterDialog(QDialog):
         axisY = QValueAxis(); axisY.setTitleText("R$"); chart.addAxis(axisY, Qt.AlignLeft); series.attachAxis(axisY)
         chart.setAnimationOptions(QChart.SeriesAnimations)
         return chart
+
+    # -------------------- Helpers de mapeamento --------------------
+
+    def _map_contas(self) -> dict:
+        """
+        id_conta -> rótulo amigável.
+        Prioridade: apelido (se existir) > nome_banco > (cod_conta | num_conta).
+        """
+        rot = {}
+        try:
+            rows = self.db.fetch_all(
+                "SELECT id, cod_conta, nome_banco, agencia, num_conta FROM conta_bancaria"
+            ) or []
+            for r in rows:
+                if isinstance(r, (list, tuple)):
+                    _id = r[0]; cod = r[1] if len(r) > 1 else ""
+                    nome_banco = r[2] if len(r) > 2 else ""
+                    agencia    = r[3] if len(r) > 3 else ""
+                    num        = r[4] if len(r) > 4 else ""
+                else:
+                    _id        = r.get("id")
+                    cod        = r.get("cod_conta") or ""
+                    nome_banco = r.get("nome_banco") or ""
+                    agencia    = r.get("agencia") or ""
+                    num        = r.get("num_conta") or ""
+
+                # rótulo principal: nome da conta
+                base = nome_banco or (str(cod) if cod else str(num))
+                # detalhe útil: agência/conta se houver
+                detalhe = []
+                if agencia: detalhe.append(f"Ag {agencia}")
+                if num:     detalhe.append(f"CC {num}")
+                label = base if base else f"Conta {_id}"
+                if detalhe:
+                    label = f"{label} ({' • '.join(detalhe)})"
+
+                if _id is not None:
+                    rot[int(_id)] = label
+        except Exception:
+            pass
+        return rot
+
+    def _doc_group_label(self, tipo_doc) -> str:
+        """
+        Converte o campo 'tipo_doc' em um dos grupos:
+        Nota Fiscal, Recibo, Boleto, Fatura, Folha, Outros.
+        Aceita int/string e variações comuns.
+        """
+        s = (str(tipo_doc or "")).strip().lower()
+        # tente interpretar número
+        try:
+            n = int(float(s))  # cobre "1", "1.0"
+        except Exception:
+            n = None
+
+        # mapeamento por número (ajuste se seus códigos forem diferentes)
+        if n == 1: return "Nota Fiscal"
+        if n == 2: return "Recibo"
+        if n == 3: return "Boleto"
+        if n == 4: return "Fatura"
+        if n == 5: return "Folha"
+
+        # mapeamento por texto
+        if "nota" in s or "nfe" in s or "nf-e" in s: return "Nota Fiscal"
+        if "recibo" in s:   return "Recibo"
+        if "boleto" in s:   return "Boleto"
+        if "fatura" in s:   return "Fatura"
+        if "folha" in s:    return "Folha"
+
+        return "Outros"
+
+    def _map_participantes(self) -> dict:
+        """id_participante -> nome."""
+        mp = {}
+        try:
+            rows = self.db.fetch_all("SELECT id, nome FROM participante")
+            for r in rows or []:
+                if isinstance(r, (list, tuple)):
+                    _id, nome = (r[0], r[1] if len(r) > 1 else "")
+                else:
+                    _id, nome = r.get("id"), r.get("nome")
+                if _id:
+                    mp[int(_id)] = nome or ""
+        except Exception:
+            pass
+        return mp
+
+    # -------------------- Balancete (dados) --------------------
+
+    def _balancete(self, d1_ord: int, d2_ord: int, agrup: str) -> list:
+        """
+        Gera linhas do balancete:
+          chave, saldo_inicial, debitos, creditos, saldo_final, natureza
+        Agrup: 'Categoria' (=> agrupa por TIPO DE DOCUMENTO) ou 'Conta bancária'
+        """
+        # Saldo anterior ao período
+        antes = self.db.fetch_all(
+            "SELECT data_ord, valor_entrada, valor_saida, tipo_doc, cod_conta "
+            "FROM lancamento WHERE data_ord < ?", (d1_ord,)
+        ) or []
+
+        # Movimentação do período
+        periodo = self.db.fetch_all(
+            "SELECT data_ord, valor_entrada, valor_saida, tipo_doc, cod_conta "
+            "FROM lancamento WHERE data_ord BETWEEN ? AND ?", (d1_ord, d2_ord)
+        ) or []
+
+        contas_map = self._map_contas()
+
+        def _key(row):
+            if isinstance(row, (list, tuple)):
+                _tipo_doc = row[3]; _cod_conta = row[4]
+            else:
+                _tipo_doc  = row.get("tipo_doc")
+                _cod_conta = row.get("cod_conta")
+
+            if agrup == "Categoria":
+                return self._doc_group_label(_tipo_doc)
+            else:
+                return contas_map.get(int(_cod_conta), f"Conta { _cod_conta }") if _cod_conta else "Conta —"
+
+        agg = {}  # chave -> acumuladores
+        for src, qual in ((antes, "ini"), (periodo, "per")):
+            for r in src:
+                ve = (r[1] if isinstance(r, (list, tuple)) else r.get("valor_entrada")) or 0.0
+                vs = (r[2] if isinstance(r, (list, tuple)) else r.get("valor_saida"))   or 0.0
+                k  = _key(r)
+                if k not in agg:
+                    agg[k] = {"ini":0.0, "deb":0.0, "cred":0.0}
+                if qual == "ini":
+                    agg[k]["ini"] += float(ve) - float(vs)
+                else:
+                    agg[k]["deb"] += float(ve)
+                    agg[k]["cred"]+= float(vs)
+
+        linhas = []
+        for k in sorted(agg.keys(), key=lambda s: str(s).lower()):
+            a = agg[k]
+            saldo_final = a["ini"] + a["deb"] - a["cred"]
+            natureza = "Devedor" if saldo_final >= 0 else "Credor"
+            linhas.append({
+                "chave": k,
+                "saldo_inicial": a["ini"],
+                "debitos": a["deb"],
+                "creditos": a["cred"],
+                "saldo_final": saldo_final,
+                "natureza": natureza
+            })
+        return linhas
+
+    # -------------------- Balancete (HTML) --------------------
+
+    def _html_balancete(self, linhas: list, d1_ord: int, d2_ord: int, agrup: str) -> str:
+        linhas = linhas or []  # <--- NOVO: garante lista
+        head = self._html_header("Balancete") + \
+               f"<div class='muted'>Período: {str(d1_ord)} a {str(d2_ord)} • Agrupar por: {agrup}</div>"
+
+        if not linhas:
+            # <--- NOVO: retorno elegante quando não há dados
+            return head + "<div class='card'><div class='muted'>Sem movimentações no período.</div></div>"
+
+        def fmt_money(v: float) -> str:
+            try:
+                return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            except Exception:
+                return "R$ 0,00"
+
+        head = self._html_header("Balancete") + \
+               f"<div class='muted'>Período: {str(d1_ord)} a {str(d2_ord)} • Agrupar por: {agrup}</div>"
+
+        html = [head, "<div class='card'><table>",
+                "<tr><th>{}</th><th>Saldo Inicial</th><th>Débitos</th><th>Créditos</th>"
+                "<th>Saldo Final</th><th>Natureza</th></tr>".format("Documento" if agrup=="Categoria" else "Conta")]
+
+        tot_deb = tot_cred = 0.0
+        for row in linhas:
+            tot_deb  += row["debitos"]
+            tot_cred += row["creditos"]
+            html.append(
+                "<tr>"
+                f"<td>{row['chave']}</td>"
+                f"<td>{fmt_money(row['saldo_inicial'])}</td>"
+                f"<td>{fmt_money(row['debitos'])}</td>"
+                f"<td>{fmt_money(row['creditos'])}</td>"
+                f"<td>{fmt_money(row['saldo_final'])}</td>"
+                f"<td>{row['natureza']}</td>"
+                "</tr>"
+            )
+
+        html.append(
+            "<tr><th>Total</th>"
+            "<th></th>"
+            f"<th>{fmt_money(tot_deb)}</th>"
+            f"<th>{fmt_money(tot_cred)}</th>"
+            "<th></th><th></th></tr>"
+        )
+
+        html.append("</table></div>")
+        return "\n".join(html)
+
+    # -------------------- Razão (dados) --------------------
+
+    def _razao(self, d1_ord: int, d2_ord: int, agrup: str) -> dict:
+        """
+        Retorna dict chave -> { 'saldo_inicial': float, 'mov': [ {data_ord, doc, participante, historico, deb, cred, saldo} ... ] }
+        """
+        antes = self.db.fetch_all(
+            "SELECT data_ord, valor_entrada, valor_saida, tipo_doc, cod_conta, id_participante, num_doc, historico "
+            "FROM lancamento WHERE data_ord < ?", (d1_ord,)
+        ) or []
+
+        periodo = self.db.fetch_all(
+            "SELECT data_ord, valor_entrada, valor_saida, tipo_doc, cod_conta, id_participante, num_doc, historico "
+            "FROM lancamento WHERE data_ord BETWEEN ? AND ? ORDER BY data_ord, id", (d1_ord, d2_ord)
+        ) or []
+
+        contas_map = self._map_contas()
+        part_map   = self._map_participantes()
+    
+        def _key(row):
+            if isinstance(row, (list, tuple)):
+                _tipo_doc = row[3]; _cod_conta = row[4]
+            else:
+                _tipo_doc  = row.get("tipo_doc"); _cod_conta = row.get("cod_conta")
+            if agrup == "Categoria":
+                return self._doc_group_label(_tipo_doc)
+            else:
+                return contas_map.get(int(_cod_conta), f"Conta { _cod_conta }") if _cod_conta else "Conta —"
+        
+    
+        grupos = {}
+        # saldo inicial por grupo
+        for r in antes:
+            ve = (r[1] if isinstance(r,(list,tuple)) else r.get("valor_entrada")) or 0.0
+            vs = (r[2] if isinstance(r,(list,tuple)) else r.get("valor_saida"))   or 0.0
+            k  = _key(r)
+            g  = grupos.setdefault(k, {"saldo_inicial":0.0, "mov":[]})
+            g["saldo_inicial"] += float(ve) - float(vs)
+    
+        # movimentos do período
+        for r in periodo:
+            k    = _key(r)
+            g    = grupos.setdefault(k, {"saldo_inicial":0.0, "mov":[]})
+            ve   = (r[1] if isinstance(r,(list,tuple)) else r.get("valor_entrada")) or 0.0
+            vs   = (r[2] if isinstance(r,(list,tuple)) else r.get("valor_saida"))   or 0.0
+            part = (r[5] if isinstance(r,(list,tuple)) else r.get("id_participante")) or 0
+            doc  = (r[6] if isinstance(r,(list,tuple)) else r.get("num_doc")) or ""
+            hist = (r[7] if isinstance(r,(list,tuple)) else r.get("historico")) or ""
+            g["mov"].append({
+                "data_ord": int(r[0] if isinstance(r,(list,tuple)) else r.get("data_ord") or 0),
+                "doc": str(doc),
+                "participante": part_map.get(int(part), ""),
+                "historico": str(hist),
+                "deb": float(ve),
+                "cred": float(vs),
+            })
+    
+        # saldo acumulado em cada grupo
+        for k, g in grupos.items():
+            saldo = float(g["saldo_inicial"])
+            # ordena por data_ord (e mantém ordem de inserção em empates)
+            g["mov"].sort(key=lambda m: m["data_ord"])
+            for m in g["mov"]:
+                saldo = saldo + m["deb"] - m["cred"]
+                m["saldo"] = saldo
+    
+        return grupos
+    # -------------------- Razão (HTML) --------------------
+
+    def _html_razao(self, grupos: dict, d1_ord: int, d2_ord: int, agrup: str) -> str:
+        grupos = grupos or {}  # <--- NOVO: garante dict
+        head = self._html_header("Razão") + \
+               f"<div class='muted'>Período: {str(d1_ord)} a {str(d2_ord)} • Agrupar por: {agrup}</div>"
+
+        if not grupos:
+            # <--- NOVO: retorno elegante quando não há dados
+            return head + "<div class='card'><div class='muted'>Sem movimentações no período.</div></div>"
+
+        def fmt_money(v: float) -> str:
+            try:
+                return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            except Exception:
+                return "R$ 0,00"
+
+        head = self._html_header("Razão") + \
+               f"<div class='muted'>Período: {str(d1_ord)} a {str(d2_ord)} • Agrupar por: {agrup}</div>"
+
+        html = [head]
+        chave_label = ("Documento" if agrup == "Categoria" else "Conta")
+
+        for chave in sorted(grupos.keys(), key=lambda s: str(s).lower()):
+            g = grupos[chave]
+            html.append("<div class='card'>")
+            html.append(f"<h2>{chave_label}: {chave}</h2>")
+            html.append("<table>")
+            html.append("<tr>"
+                        "<th>Data</th><th>Documento</th><th>Participante</th><th>Histórico</th>"
+                        "<th>Débito</th><th>Crédito</th><th>Saldo</th>"
+                        "</tr>")
+            html.append(
+                f"<tr><td colspan='6'><b>Saldo inicial</b></td><td>{fmt_money(g.get('saldo_inicial',0.0))}</td></tr>"
+            )
+            for m in g["mov"]:
+                data_str = str(m["data_ord"])
+                data_fmt = f"{data_str[6:8]}/{data_str[4:6]}/{data_str[0:4]}" if len(data_str)==8 else data_str
+                html.append(
+                    "<tr>"
+                    f"<td>{data_fmt}</td>"
+                    f"<td>{m['doc']}</td>"
+                    f"<td>{m['participante']}</td>"
+                    f"<td>{m['historico']}</td>"
+                    f"<td>{fmt_money(m['deb'])}</td>"
+                    f"<td>{fmt_money(m['cred'])}</td>"
+                    f"<td>{fmt_money(m['saldo'])}</td>"
+                    "</tr>"
+                )
+            html.append("</table></div>")
+
+        return "\n".join(html)
 
     # ------------------------- CONSULTAS -------------------------
     def _dados_mes_geral(self, d1_ord: int, d2_ord: int):
@@ -2967,6 +3409,25 @@ class ReportCenterDialog(QDialog):
             rows = self._dre_por_fazenda(d1_ord, d2_ord)
             html = self._html_dre_por_fazenda(rows)
             self.text_view.setHtml(html); self.stack.setCurrentIndex(1)
+
+        elif t == "Balancete":
+            d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+            d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+            agrup = self.cmb_agrup.currentText()
+            linhas = (self._balancete(d1_ord, d2_ord, agrup) or [])  # <--- NOVO
+            html = self._html_balancete(linhas, d1_ord, d2_ord, agrup)
+            self.text_view.setHtml(html)
+            self.stack.setCurrentIndex(1)
+
+        elif t == "Razão":
+            d1_ord = int(self.dt_ini.date().toString("yyyyMMdd"))
+            d2_ord = int(self.dt_fim.date().toString("yyyyMMdd"))
+            agrup = self.cmb_agrup.currentText()
+            grupos = (self._razao(d1_ord, d2_ord, agrup) or {})      # <--- NOVO
+            html = self._html_razao(grupos, d1_ord, d2_ord, agrup)
+            self.text_view.setHtml(html)
+            self.stack.setCurrentIndex(1)
+
 
     def _html_header(self, titulo: str) -> str:
         return f"""
@@ -5943,12 +6404,14 @@ class MainWindow(QMainWindow):
             dlg_export.close(); dlg_menu.accept()
 
     def abrir_balancete(self):
-        dlg = RelatorioPeriodoDialog("Balancete", self)
-        if dlg.exec(): d1, d2 = dlg.periodo  # lógica de balancete
+        dlg = ReportCenterDialog(self, d_ini=self.dt_ini.date(), d_fim=self.dt_fim.date())
+        dlg.cmb_tipo.setCurrentText("Balancete")
+        dlg.exec()
 
     def abrir_razao(self):
-        dlg = RelatorioPeriodoDialog("Razão", self)
-        if dlg.exec(): d1, d2 = dlg.periodo  # lógica de razão
+        dlg = ReportCenterDialog(self, d_ini=self.dt_ini.date(), d_fim=self.dt_fim.date())
+        dlg.cmb_tipo.setCurrentText("Razão")
+        dlg.exec()
 
     def mostrar_sobre(self):
         QMessageBox.information(self, "Sobre o Sistema",

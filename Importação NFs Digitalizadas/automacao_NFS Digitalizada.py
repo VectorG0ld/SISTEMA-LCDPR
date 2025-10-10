@@ -969,7 +969,7 @@ LAYOUTS: List[LayoutSpec] = [
             "MUNICIPIO_TOMADOR": {"ESQUERDA": 3, "CIMA": 24, "DIREITA": 97, "BAIXO": 40},
             "NUMERO_NFS": {"ESQUERDA": 65, "CIMA": 2, "DIREITA": 97, "BAIXO": 15},
             "PRESTADOR_CNPJ": {"ESQUERDA": 3, "CIMA": 15, "DIREITA": 97, "BAIXO": 28},
-            "VALOR_NFS": {"ESQUERDA": 60, "CIMA": 42, "DIREITA": 97, "BAIXO": 55},
+            "VALOR_NFS": {"ESQUERDA": 60, "CIMA": 45, "DIREITA": 97, "BAIXO": 70},
         },
         filter_default=replace(CFG_FALLBACK, preto=1.22, ruido=1.0, contraste=1.18, gama=1.12, borda=1.1),
         filters_by_topic={
