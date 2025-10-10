@@ -173,6 +173,12 @@ Client.table = _table_proxy
 Client.from_ = _table_proxy
 
 
+class _Rows(list):
+    """Compat wrapper used in branches that returned _Rows; behaves like a regular list-of-rows."""
+    def __init__(self, data=None):
+        super().__init__(data or [])
+
+
 def valida_cnpj(cnpj: str) -> bool:
     import re
     nums = re.sub(r'\D', '', cnpj or '')
@@ -543,7 +549,13 @@ class Database:
                     "tipo_exploracao","participacao","area_total","area_utilizada"]
             payload = dict(zip(cols, params))
             if self.perfil_id: payload["perfil_id"] = self.perfil_id
-            
+
+           # Normalizar IE: manter apenas dígitos
+            ie = payload.get("insc_estadual")
+            if ie is not None:
+                ie_digits = re.sub(r"\D", "", str(ie))
+                payload["insc_estadual"] = ie_digits or None
+ 
             # menor ID livre
             ids = (self.sb.table("imovel_rural").select("id").order("id", desc=False).execute().data) or []
             taken = {r["id"] for r in ids if r.get("id") is not None and int(r["id"]) > 0}
@@ -556,8 +568,17 @@ class Database:
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
         if s_low.startswith("update imovel_rural set"):
-            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel","endereco","num","compl","bairro","uf","cod_mun","cep","tipo_exploracao","participacao","area_total","area_utilizada"]
+            cols = ["cod_imovel","pais","moeda","cad_itr","caepf","insc_estadual","nome_imovel",
+                    "endereco","num","compl","bairro","uf","cod_mun","cep",
+                    "tipo_exploracao","participacao","area_total","area_utilizada"]
             payload = dict(zip(cols, params[:-1])); imovel_id = params[-1]
+        
+            # Normalizar IE aqui (escopo certo)
+            ie = payload.get("insc_estadual")
+            if ie is not None:
+                ie_digits = re.sub(r"\D", "", str(ie))
+                payload["insc_estadual"] = ie_digits or None
+        
             self.sb.table("imovel_rural").update(payload).eq("id", imovel_id).execute()
             return type("Cur", (), {"fetchall": lambda *_: [], "fetchone": lambda *_: None})()
 
@@ -786,7 +807,6 @@ class Database:
                     total += si
             return [(total,)]
         
-
         # 2) MIN/MAX(data_ord) FROM lancamento  (perfil: considera por CONTA OU por IMÓVEL)
         if s_low.startswith("select min(data_ord), max(data_ord) from lancamento"):
             def _pick(rows, which):
@@ -1209,6 +1229,16 @@ class Database:
                         .execute().data) or []
             return _tuplize(rows, ["cod_imovel"])
 
+        # Imóvel rural por IE (insc_estadual)
+        m = re.match(r"select\s+cod_imovel\s+from\s+imovel_rural\s+where\s+insc_estadual\s*=\s*\?", s_low)
+        if m:
+            ie = re.sub(r"\D", "", str(params[0] or ""))  # deixa só dígitos
+            q = self.sb.table("imovel_rural").select("cod_imovel").eq("insc_estadual", ie)
+            if getattr(self, "perfil_id", None):
+                q = q.eq("perfil_id", self.perfil_id)      # mantém o escopo por perfil, se aplicável
+            rows = (q.limit(1).execute().data) or []
+            return _tuplize(rows, ["cod_imovel"])
+
         # Agrupamento mensal (ym = AAAAMM) de receitas e despesas no período
         m = re.match(r"select\s+substr\(cast\(data_ord\s+as\s+text\),1,6\)\s+as\s+ym.*where\s+data_ord\s+between\s+\?\s+and\s+\?\s+group\s+by\s+ym\s+order\s+by\s+ym", s_low, re.S)
         if m:
@@ -1248,23 +1278,25 @@ class Database:
             norm_numdoc, digits = params[0], params[1]
 
             # 1) pega ids do participante pelo cpf_cnpj
-            presp = self.sb("participante").select("id").eq("cpf_cnpj", digits).limit(50).execute()
-            p_ids = [r["id"] for r in (presp.data or [])] if presp.ok else []
+            presp = self.sb.table("participante").select("id").eq("cpf_cnpj", digits).limit(50).execute().data or []
+            p_ids = [r["id"] for r in presp]
 
             # 2) busca lançamento por num_doc e participante
             found = False
             if p_ids:
-                lresp = (
-                    self.sb("lancamento")
+                lrows = (
+                    self.sb.table("lancamento")
                     .select("id")
                     .eq("num_doc", norm_numdoc)
                     .in_("id_participante", p_ids)
                     .limit(1)
                     .execute()
-                )
-                found = bool(lresp.ok and lresp.data)
+                    .data
+                ) or []
+                found = bool(lrows)
 
-            return _FakeCursor([(1,)] if found else [])
+            # Retorna uma lista compatível com os demais ramos ([(1,)] se encontrado, [] caso contrário)
+            return [(1,)] if found else []
 
         # --- imovel_rural por cod_imovel (+ opcional perfil_id) ---
         if "from imovel_rural" in s_low and "where cod_imovel" in s_low:
