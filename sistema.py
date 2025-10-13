@@ -694,11 +694,21 @@ class Database:
         # Relatório: receitas/despesas agrupadas por ano-mês
         m = re.match(r"select\s+substr\(cast\(data_ord as text\),1,6\)\s+as\s+ym.*from\s+lancamento.*group\s+by\s+ym\s+order\s+by\s+ym", s_low, re.S)
         if m:
+            # PRECISA de cod_conta/cod_imovel para poder filtrar por perfil
             rows = (self.sb.table("lancamento")
-                        .select("data_ord, valor_entrada, valor_saida")
+                        .select("data_ord, valor_entrada, valor_saida, cod_conta, cod_imovel")
                         .gte("data_ord", params[0])
                         .lte("data_ord", params[1])
                         .execute().data) or []
+
+            # Filtro por perfil (ACEITA por CONTA OU por IMÓVEL) – igual aos outros selects
+            if getattr(self, "perfil_id", None):
+                contas  = (self.sb.table("conta_bancaria").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                imoveis = (self.sb.table("imovel_rural").select("id").eq("perfil_id", self.perfil_id).execute().data) or []
+                conta_ids  = {r["id"] for r in contas}
+                imovel_ids = {r["id"] for r in imoveis}
+                rows = [r for r in rows if (r.get("cod_conta") in conta_ids) or (r.get("cod_imovel") in imovel_ids)]
+
             # agrega manualmente
             agg = {}
             for r in rows:
@@ -895,11 +905,11 @@ class Database:
             for r in rows:
                 v = (r.get(col) or 0) or 0
                 tl = r.get("tipo_lanc")
-                if tl in (1, 2):
+                if tl in (1, 2, 3):
                     if tl != tipo_alvo:
                         continue
                 else:
-                    # fallback: aceita se a própria coluna tem valor (>0)
+                    # fallback só quando realmente não há tipo; decide pela coluna (>0)
                     if not v or float(v) <= 0:
                         continue
                 try:
@@ -1100,6 +1110,40 @@ class Database:
 
             rows_sorted = sorted(rows, key=_key)
 
+            # 4.4.1 Saldo consolidado DO PERÍODO (não usa saldo_final por conta)
+            rows_asc = sorted(rows, key=lambda r: ((r.get("data_ord") or 0), (r.get("id") or 0)))
+            run_total = 0.0
+            saldo_por_id = {}
+
+            for rr in rows_asc:
+                ent = float(rr.get("valor_entrada") or 0)
+                sai = float(rr.get("valor_saida") or 0)
+                run_total += (ent - sai)
+                saldo_por_id[rr.get("id")] = run_total
+
+            out = []
+            for r in rows_sorted:
+                dtxt = _fmt_date_iso_to_br(str(r.get("data") or ""))
+                tl = int(r.get("tipo_lanc") or 0)
+                tipo = "Receita" if tl == 1 else ("Despesa" if tl == 2 else "Adiantamento")
+
+                # >>> aqui muda: usa o consolidado do período, não o saldo_final/natureza
+                saldo_consolidado = saldo_por_id.get(r.get("id"), 0.0)
+
+                out.append((
+                    r.get("id"),
+                    dtxt,
+                    imap.get(r.get("cod_imovel"), ""),
+                    r.get("num_doc"),
+                    pmap.get(r.get("id_participante"), ""),
+                    r.get("historico"),
+                    tipo,
+                    r.get("valor_entrada") or 0,
+                    r.get("valor_saida") or 0,
+                    saldo_consolidado,
+                    r.get("usuario") or ""
+                ))
+            return out
             out = []
             for r in rows_sorted:
                 dtxt = _fmt_date_iso_to_br(str(r.get("data") or ""))
@@ -2607,19 +2651,23 @@ class DashboardWidget(QWidget):
         fl.addWidget(t); fl.addWidget(v)
         return frm
 
+    # DashboardWidget
     def on_dash_filter_changed(self):
         self.settings.setValue("dashFilterIni", self.dt_dash_ini.date())
         self.settings.setValue("dashFilterFim", self.dt_dash_fim.date())
+
+        # empurra datas para a aba Lançamentos, se existir
+        mw = self.parent()
+        if mw and hasattr(mw, "dt_ini") and hasattr(mw, "dt_fim"):
+            mw.dt_ini.setDate(self.dt_dash_ini.date())
+            mw.dt_fim.setDate(self.dt_dash_fim.date())
+            mw.carregar_lancamentos()
+
         self.load_data()
 
     def load_data(self):
         d1_ord = int(self.dt_dash_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_dash_fim.date().toString("yyyyMMdd"))
-
-        # Saldo total
-        saldo = self.db.fetch_one("SELECT SUM(saldo_atual) FROM saldo_contas")[0] or 0
-        s = f"{saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        self.saldo_card.findChild(QLabel, "value").setText(f"R$ {s}")
 
         # Receitas e Despesas no intervalo (indexado e cobrindo)
         rec = self.db.fetch_one(
@@ -2630,6 +2678,16 @@ class DashboardWidget(QWidget):
             "SELECT SUM(valor_saida)   FROM lancamento WHERE data_ord BETWEEN ? AND ?",
             (d1_ord, d2_ord)
         )[0] or 0
+
+        # Saldo do PERÍODO (usa a mesma base dos cartões de Receita/Despesa)
+        saldo = (rec or 0) - (desp or 0)
+
+        # Atualiza os cards
+        fmt = lambda v: f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        self.saldo_card.findChild(QLabel, "value").setText(f"R$ {fmt(saldo)}")
+        self.receita_card.findChild(QLabel, "value").setText(f"R$ {fmt(rec)}")
+        self.despesa_card.findChild(QLabel, "value").setText(f"R$ {fmt(desp)}")
+
 
         r = f"{rec:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.receita_card.findChild(QLabel, "value").setText(f"R$ {r}")
@@ -5301,7 +5359,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         # Painel
-        self.dashboard = DashboardWidget(); self.tabs.addTab(self.dashboard, "Painel")
+        self.dashboard = DashboardWidget()
+        self.dashboard._external_apply = self._apply_filters_everywhere
+        self.tabs.addTab(self.dashboard, "Painel")
 
         # Lançamentos
         w_l = QWidget(); l_l = QVBoxLayout(w_l); l_l.setContentsMargins(10,10,10,10)
@@ -5322,7 +5382,7 @@ class MainWindow(QMainWindow):
         self.dt_fim = QDateEdit(_fim); self.dt_fim.setCalendarPopup(True); self.dt_fim.setDisplayFormat("dd/MM/yyyy")
         self.lanc_filter_layout.addWidget(self.dt_fim)
 
-        btn_filtrar = QPushButton("Filtrar"); btn_filtrar.clicked.connect(self.carregar_lancamentos); self.lanc_filter_layout.addWidget(btn_filtrar)
+        btn_filtrar = QPushButton("Filtrar"); btn_filtrar.clicked.connect(self._apply_filters_everywhere); self.lanc_filter_layout.addWidget(btn_filtrar)
         self.btn_edit_lanc = QPushButton("Editar Lançamento"); self.btn_edit_lanc.setEnabled(False); self.btn_edit_lanc.clicked.connect(self.editar_lancamento)
         self.lanc_filter_layout.addWidget(self.btn_edit_lanc)
         self.btn_del_lanc = QPushButton("Excluir Lançamento"); self.btn_del_lanc.setEnabled(False); self.btn_del_lanc.clicked.connect(self.excluir_lancamento)
@@ -5423,9 +5483,8 @@ class MainWindow(QMainWindow):
         ListAccelerator.install(self)
 
         # Dados iniciais
-        self.carregar_lancamentos(); self.profile_selector.setCurrentText("Cleuber Marcos")
-        self.carregar_planejamento(); self._load_lanc_filter_settings()
-
+        QTimer.singleShot(0, self._apply_filters_everywhere)
+        
     def _on_realtime_change(self, payload):
         # payload["table"] tem o nome da tabela; payload["eventType"] = INSERT|UPDATE|DELETE
         t = payload.get("table")
@@ -6247,14 +6306,19 @@ class MainWindow(QMainWindow):
         # 4) Busca via Supabase (sem SQL)
         sb = self.db.sb
 
-        # Lançamentos do período (campos necessários)
-        lans = (sb.table("lancamento")
-                  .select("id,data,data_ord,cod_imovel,cod_conta,id_participante,num_doc,tipo_doc,historico,tipo_lanc,valor_entrada,valor_saida")
-                  .gte("data_ord", d1_ord)
-                  .lte("data_ord", d2_ord)
-                  .order("data_ord")
-                  .order("id")
-                  .execute().data) or []
+        # Lançamentos do período (campos necessários) + filtro por perfil
+        q = (sb.table("lancamento")
+                .select("id,data,data_ord,cod_imovel,cod_conta,id_participante,num_doc,tipo_doc,historico,tipo_lanc,valor_entrada,valor_saida")
+                .gte("data_ord", d1_ord)
+                .lte("data_ord", d2_ord))
+
+        if getattr(self.db, "perfil_id", None):
+            q = q.eq("perfil_id", self.db.perfil_id)
+
+        lans = (q.order("data_ord")
+                .order("id")
+                .execute().data) or []
+
 
         if not lans:
             QMessageBox.information(self, "Exportar Planilha LCDPR",
@@ -6849,7 +6913,7 @@ class MainWindow(QMainWindow):
                     ent = float(row.valor_entrada or 0)
                     sai = float(row.valor_saida or 0)
                     tipo_doc = int(row.tipo_doc) if str(row.tipo_doc).strip().isdigit() else 4
-                    tipo_lanc = int(row.tipo_lanc) if str(row.tipo_lanc).strip().isdigit() else (1 if sai > 0 else 2)
+                    tipo_lanc = int(row.tipo_lanc) if str(row.tipo_lanc).strip().isdigit() else (1 if ent > 0 else 2)
 
                     # Saldo/natureza por conta (consulta 1x e mantém acumulado)
                     if id_conta not in saldos:
@@ -7117,6 +7181,29 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(widget, TAB_TITLE)
         self.tabs.setCurrentWidget(widget)
+
+    # MainWindow
+    def _apply_filters_everywhere(self):
+        ini = self.dt_ini.date()
+        fim = self.dt_fim.date()
+        # garante ordem válida
+        if fim < ini:
+            ini, fim = fim, ini
+            self.dt_ini.setDate(ini)
+            self.dt_fim.setDate(fim)
+
+        # propaga pro Painel
+        self.dashboard.dt_dash_ini.setDate(ini)
+        self.dashboard.dt_dash_fim.setDate(fim)
+
+        # persiste (o Painel lê dessas keys)
+        self.dashboard.settings.setValue("dashFilterIni", ini)
+        self.dashboard.settings.setValue("dashFilterFim", fim)
+
+        # recarrega tudo com o mesmo período
+        self.dashboard.load_data()
+        self.carregar_lancamentos()
+
 
     def closeEvent(self, event):
         try:
