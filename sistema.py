@@ -6590,6 +6590,14 @@ class MainWindow(QMainWindow):
         import re
         from datetime import datetime
 
+        # --- helpers Folha ---
+        _ref_re = re.compile(r"REF\.\s*(\d{2}/\d{4})", re.IGNORECASE)
+        def _extract_ref(h: str) -> str:
+            if not h:
+                return ""
+            m = _ref_re.search(h)
+            return (m.group(1) or "").strip() if m else ""
+
         sb = self.db.sb
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         usuario_ts = f"{CURRENT_USER} dia {now}"
@@ -6662,8 +6670,10 @@ class MainWindow(QMainWindow):
                         
                             # ✅ define primeiro d,m,y e só então monta as variações
                             d, m, y = data_br.split("-")                  # DD-MM-AAAA
-                            data_iso = f"{y}-{m}-{d}"                    # AAAA-MM-DD (ISO)
-                            data_str = f"{d}/{m}/{y}"                    # DD/MM/AAAA (legado/visual)
+                            # vindo do TXT: "DD-MM-AAAA"
+                            d, m, y = data_br.split("-")
+                            data_iso = f"{y}-{m}-{d}"      # -> "AAAA-MM-DD" (para o banco)
+                            data_str = f"{d}/{m}/{y}"      # -> "DD/MM/AAAA" (apenas logs/UI)
                             data_ord = int(f"{y}{m}{d}")                 # AAAAMMDD (inteiro para filtros)
                         
                             tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
@@ -6780,18 +6790,62 @@ class MainWindow(QMainWindow):
                         saldos[id_conta] = saldo_f
                         nat = 'P' if saldo_f >= 0 else 'N'
 
-                        # De-dup por participante + número do documento (sem espaços)
+                        # --- DEDUPE condicional ---
                         num_doc_n = (num_doc or "").replace(" ", "")
-                        if id_participante:
-                            dup = (sb.table("lancamento")
-                                     .select("id")
-                                     .eq("id_participante", id_participante)
-                                     .eq("num_doc", num_doc_n)
-                                     .limit(1).execute().data)
-                            if dup:
+                        is_folha = (str(tipo_doc).strip() == "5") or (str(historico or "").strip().upper().startswith("FOLHA"))
+                        
+                        if is_folha and id_participante:
+                            # Folha: dup se MESMA data + MESMO valor + MESMA REF (e opc: mesmo imóvel)
+                            alvo = float(sai or 0.0) if (sai or 0.0) > 0 else float(ent or 0.0)
+                            # candidatos no mesmo dia
+                            q = (sb.table("lancamento")
+                                    .select("id,data,tipo_doc,historico,valor_entrada,valor_saida,cod_imovel")
+                                    .eq("id_participante", id_participante)
+                                    .eq("data", data_iso))   # <<-- use ISO: AAAA-MM-DD
+                            # opcional: se sua tabela tiver 'cod_imovel', restringe para ficar à prova de colisão
+                            try:
+                                q = q.eq("cod_imovel", id_imovel)
+                            except Exception:
+                                pass
+                            cand = (q.order("id", desc=True).limit(200).execute().data) or []
+                        
+                            ref_lin = _extract_ref(historico)
+                            exists = False
+                            for c in cand:
+                                tdoc = int(c.get("tipo_doc") or 0)
+                                ve   = float(c.get("valor_entrada") or 0.0)
+                                vs   = float(c.get("valor_saida") or 0.0)
+                                vcand = vs if vs > 0 else ve
+                        
+                                hist_db = (c.get("historico") or "").strip().upper()
+                                ref_db  = _extract_ref(hist_db)
+                                same_ref = (ref_lin and ref_db and ref_lin == ref_db) or (not ref_lin and not ref_db and hist_db == (historico or "").strip().upper())
+                        
+                                if (tdoc == 5 or hist_db.startswith("FOLHA")) and abs(vcand - alvo) < 0.01 and same_ref:
+                                    exists = True
+                                    break
+                                
+                            if exists:
                                 if lineno % 200 == 0:
                                     GlobalProgress.set_value(lineno)
                                 continue
+                            
+                        else:
+                            # Outros tipos (NF, fatura etc.): dup por participante + num_doc (mas ignorar "N"/vazio)
+                            if id_participante:
+                                if num_doc_n.upper() == "N":
+                                    num_doc_n = ""
+                                if num_doc_n:
+                                    dup = (sb.table("lancamento")
+                                             .select("id")
+                                             .eq("id_participante", id_participante)
+                                             .eq("num_doc", num_doc_n)
+                                             .limit(1).execute().data)
+                                    if dup:
+                                        if lineno % 200 == 0:
+                                            GlobalProgress.set_value(lineno)
+                                        continue
+                                    
 
                         # Insert
                         payload = {

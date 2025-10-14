@@ -182,8 +182,45 @@ TRIBUTOS_CNPJ = {
 # ============================
 # Helpers
 # ============================
+import re
+
+_ref_re = re.compile(r"REF\.\s*(\d{2}/\d{4})", re.IGNORECASE)
+
+def _extract_ref(h: str) -> str:
+    if not h:
+        return ""
+    m = _ref_re.search(h)
+    return (m.group(1) or "").strip() if m else ""
+
 def _digits(s) -> str:
     return re.sub(r"\D", "", str(s or ""))
+
+def _extract_name_from_historico(h: str) -> str:
+    """
+    Tenta extrair um nome/hint do texto de histórico:
+    - primeiro tenta conteúdo entre parênteses;
+    - depois tenta o trecho após um traço/dash;
+    - fallback: as primeiras palavras do histórico.
+    """
+    if not h:
+        return ""
+    try:
+        s = str(h).strip()
+        # conteúdo entre parênteses
+        m = re.search(r"\(([^)]+)\)", s)
+        if m:
+            return m.group(1).strip()
+        # após um traço (–, — ou -)
+        m = re.search(r"[-–—]\s*(.+)$", s)
+        if m:
+            return m.group(1).strip()
+        # como fallback, usa até 4 primeiras palavras
+        parts = s.split()
+        if not parts:
+            return ""
+        return " ".join(parts[:4]).strip()
+    except Exception:
+        return ""
 
 def _to_cent(valor) -> str:
     """Converte para centavos sem pontuação. Aceita 123,45 | 123.45 | 'R$ 123,45' | float | int."""
@@ -774,7 +811,7 @@ class FolhaWorker(QThread):
                         continue
                     
                     # dedupe por sessão
-                    key = (_norm(nome), data_func_br)
+                    key = (cpf, data_func_br)      # CPF + DATA
                     if key in self._vistos:
                         self._emit(f"↩️ DUP ignorado (sessão): {nome} {_br_slash(data_func_br)}", "warning")
                         continue
@@ -1797,17 +1834,30 @@ class AutomacaoFolhaUI(QWidget):
                                 .execute().data) or []
     
                         # 3) regra: se for folha (tipo_doc=5) OU histórico começa com "FOLHA"
-                        #    e o valor bate (entrada/saída), consideramos duplicado
                         alvo = round(float(valor_alvo or 0), 2)
                         for c in cand:
                             tdoc = int(c.get("tipo_doc") or 0)
-                            hist = (c.get("historico") or "").upper()
                             ve   = round(float(c.get("valor_entrada") or 0), 2)
                             vs   = round(float(c.get("valor_saida") or 0), 2)
                             vcand = vs if vs > 0 else ve
-                            if (tdoc == 5 or hist.startswith("FOLHA")) and abs(vcand - alvo) < 0.01:
+
+                            hist_lin = (historico or "").strip().upper()
+                            hist_db  = (c.get("historico") or "").strip().upper()
+
+                            ref_lin = _extract_ref(hist_lin)  # "REF. 02/2025"
+                            ref_db  = _extract_ref(hist_db)
+                            same_ref = (ref_lin and ref_db and ref_lin == ref_db) or (not ref_lin and not ref_db and hist_lin == hist_db)
+
+                            if (tdoc == 5 or hist_db.startswith("FOLHA")) and abs(vcand - alvo) < 0.01 and same_ref:
                                 exists = True
-                                # log amigável
+                                # >>> DIAGNÓSTICO: logar QUAL linha do banco bateu
+                                self._emit(
+                                    f"↩️ DUP no banco • CPF {cpf_cnpj} • {data_str} • "
+                                    f"R$ {alvo:,.2f} • REF {(_extract_ref(historico) or '?')} • "
+                                    f"match(id={c.get('id')}, tipo_doc={tdoc}, hist='{c.get('historico')}', "
+                                    f"v_ent={c.get('valor_entrada')}, v_sai={c.get('valor_saida')})",
+                                    "warning"
+                                )
                                 dups_log.append({
                                     "cpf": cpf_cnpj,
                                     "data": data_str,
@@ -1816,6 +1866,7 @@ class AutomacaoFolhaUI(QWidget):
                                     "hist": historico
                                 })
                                 break
+
                 except Exception:
                     exists = False
     
