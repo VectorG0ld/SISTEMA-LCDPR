@@ -124,6 +124,32 @@ def _iter_xmls(dirs):
             if info:
                 yield info
 
+def _should_use_data_nota(nota_row, data_pagamento):
+    """
+    Retorna True se devemos usar a data da NOTA (planilha) em vez da data de pagamento (base),
+    quando o pagamento é do ANO ANTERIOR ao ano de referência do processamento.
+    - Ano de referência: coluna 'ANO' da planilha, se existir; caso contrário, ano de data_nota.
+    """
+    try:
+        # 1) tenta a coluna ANO da planilha
+        alvo = nota_row.get('ANO', None)
+        if pd.notna(alvo):
+            alvo = int(str(alvo).strip())
+        else:
+            alvo = None
+    except Exception:
+        alvo = None
+
+    # 2) fallback: ano da própria data da nota
+    if alvo is None and pd.notna(nota_row.get('data_nota', pd.NaT)):
+        alvo = int(nota_row['data_nota'].year)
+
+    # 3) decide
+    if alvo is not None and pd.notna(data_pagamento):
+        return int(data_pagamento.year) < int(alvo)
+
+    return False
+
 def _xml_menciona_nf_do_mesmo_fornecedor(cnpj_emit: str, nnf_procurada: str, xml_info: dict) -> bool:
     """
     Verdadeiro se o XML é do mesmo fornecedor e 'menciona' a NF procurada:
@@ -573,7 +599,9 @@ for i, nota in df_to_process.iterrows():
             
             # Formatar data pagamento
             data_pgto = parcela_encontrada['data_pagamento']
-            data_str = data_pgto.strftime('%d%m%Y') if not pd.isna(data_pgto) else ""
+            usa_data_nota = _should_use_data_nota(nota, data_pgto)
+            data_base = nota['data_nota'] if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
+            data_str = data_base.strftime('%d%m%Y') if not pd.isna(data_base) else ""
             
             # Obter código do banco
             banco_nome = str(parcela_encontrada['banco']).strip()
@@ -619,7 +647,7 @@ for i, nota in df_to_process.iterrows():
             if status_nota == "Ativa" and status_pag == "Pago" and data_str:
                 # === NOVO FORMATO (PIPE '|') ===
                 # Ex.: 01-01-2025|006|001|14209|1|PAGAMENTO NF 14209 HOHL MAQUINAS AGRICOLAS LTDA|01608488001250|2|000|573500|573500|N
-                data_fmt = parcela_encontrada['data_pagamento'].strftime('%d-%m-%Y')  # DD-MM-AAAA
+                data_fmt = data_base.strftime('%d-%m-%Y') if not pd.isna(data_base) else nota['data_nota'].strftime('%d-%m-%Y')
                 fornecedor = nota['fornecedor']
                 cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)  # "006"
                 num_nf = nota['num_nf_busca']
@@ -809,11 +837,28 @@ for i, nota in df_to_process.iterrows():
     # montar resultado como PAGO (TXT usa valor do PAGAMENTO, não o da NF)
     status_nota = "Ativa"
     status_pag = "Pago"
-    data_pg = pgto['data_pagamento']
-    data_str = data_pg.strftime('%d%m%Y') if not pd.isna(data_pg) else ""
+    # Ano de referência (planilha): tenta 'ANO'; se não houver/estiver vazio, usa ano de data_nota
+    try:
+        ref_ano = int(nota['ANO']) if ('ANO' in nota.index and pd.notna(nota['ANO'])) else None
+    except Exception:
+        ref_ano = None
+    if ref_ano is None:
+        ref_ano = int(nota['data_nota'].year) if ('data_nota' in nota.index and pd.notna(nota['data_nota'])) else None
+    
+    # Data do pagamento (base)
+    data_pg = pgto['data_pagamento']  # pode ser NaT
+    
+    # Regra: se o pagamento for de ANO ANTERIOR ao ano de referência, usar a data da NOTA
+    usar_data_nota = (pd.notna(data_pg) and ref_ano is not None and int(data_pg.year) < ref_ano)
+    
+    # Data “base” para planilha e TXT
+    data_base = nota['data_nota'] if (usar_data_nota or pd.isna(data_pg)) else data_pg
+    
+    # → Planilha
+    data_str = data_base.strftime('%d%m%Y') if pd.notna(data_base) else ""
     banco_nome = str(pgto['banco']).strip()
     cod_banco = MAP_CONTAS.get(banco_nome, MAP_CONTAS["Não Mapeado"])
-
+    
     results[pos_res].update({
         'Status Nota': status_nota,
         'Status Pagamento': status_pag,
@@ -821,9 +866,10 @@ for i, nota in df_to_process.iterrows():
         'Data Pagamento': data_str,
         'Observações': f"Diferença via XML (NF ref.: {achado.get('nnf','?')} | {Path(achado['path']).name})"
     })
-
-    # TXT com valor do PAGAMENTO (diferença)
-    data_fmt = data_pg.strftime('%d-%m-%Y') if not pd.isna(data_pg) else nota['data_nota'].strftime('%d-%m-%Y')
+    
+    # → TXT com valor do PAGAMENTO (diferença)
+    data_fmt = (data_base.strftime('%d-%m-%Y') if pd.notna(data_base)
+                else (nota['data_nota'].strftime('%d-%m-%Y') if pd.notna(nota.get('data_nota', pd.NaT)) else ""))
     fornecedor = nota['fornecedor']
     cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)
     num_nf = nf_alvo

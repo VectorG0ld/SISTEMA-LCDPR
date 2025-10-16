@@ -111,7 +111,7 @@ class _RestTable:
     def upsert(self, payload, on_conflict=None):
         self._method = "POST"; self._payload = payload
         if on_conflict: self.params["on_conflict"] = on_conflict
-        self.headers["Prefer"] = "resolution=merge-duplicates,return=representation"
+        self.headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
         return self
     def delete(self):
         self._method = "DELETE"; self._payload = None; return self
@@ -4185,7 +4185,7 @@ class LancamentoDialog(QDialog):
                     "FROM lancamento WHERE cod_conta=? AND id > ? ORDER BY id",
                     (conta_id, self.lanc_id),
                 )
-                
+
                 updates = []
                 for rid, v_ent, v_sai in rows:
                     saldo_atual = saldo_atual + float(v_ent or 0) - float(v_sai or 0)
@@ -4196,14 +4196,11 @@ class LancamentoDialog(QDialog):
                         "saldo_final": abs(saldo_atual),
                         "natureza_saldo": nat_r
                     })
-                
+
                 if updates:
                     # 1 chamada ao backend; 'returning=minimal' evita tráfego extra
-                    self.db.sb.table("lancamento") \
-                        .upsert(updates, on_conflict="id", returning="minimal") \
-                        .execute()
-                
-                
+                    self.db.sb.table("lancamento").upsert(updates, on_conflict="id").execute()
+
             else:
                 sql = """
                 INSERT INTO lancamento (
