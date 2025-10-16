@@ -3,6 +3,12 @@ import numpy as np
 from datetime import datetime
 import os
 import sys
+# --- NOVOS IMPORTS ---
+from difflib import SequenceMatcher
+import unicodedata
+import xml.etree.ElementTree as ET
+import re
+from glob import glob
 
 # --- Força stdout/stderr em UTF-8, independente da code page do Windows ---
 try:
@@ -51,6 +57,89 @@ def _resolve_paths():
         return base_json, testes_json
     return (r"\\rilkler\LIVRO CAIXA\TESTE\BASE DE DADOS.xlsx",
             r"\\rilkler\LIVRO CAIXA\TESTE\TESTES.xlsx")
+
+# Pastas onde estão os XMLs (ajuste/adicione caminhos conforme sua estrutura)
+XML_DIRS = [
+    r"\\rilkler\LIVRO CAIXA\ISENTOS",         # <— exemplo
+    r"\\rilkler\LIVRO CAIXA\OUTROS_XMLS"      # <— adicione mais se precisar
+]
+SIMILARIDADE_MIN_NOME = 0.80  # 80%
+
+def _norm_txt(s: str) -> str:
+    s = str(s or "").upper().strip()
+    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("ASCII")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+def _sim(a: str, b: str) -> float:
+    return SequenceMatcher(None, _norm_txt(a), _norm_txt(b)).ratio()
+
+NS_NFE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+
+def _parse_xml_info(xml_path: str):
+    """
+    Retorna dict com:
+        cnpj_emit, xnome_emit, nnf, vnf (float), infcpl (str), ref_list (list[str])
+    Ignora/retorna None se algo der muito errado.
+    """
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        # atende nfeProc/NFe/infNFe
+        inf = root.find(".//nfe:infNFe", NS_NFE)
+        if inf is None:
+            return None
+
+        cnpj_emit = (inf.findtext(".//nfe:emit/nfe:CNPJ", default="", namespaces=NS_NFE) or "").strip()
+        xnome_emit = inf.findtext(".//nfe:emit/nfe:xNome", default="", namespaces=NS_NFE) or ""
+        nnf = (inf.findtext(".//nfe:ide/nfe:nNF", default="", namespaces=NS_NFE) or "").strip()
+        vnf_txt = inf.findtext(".//nfe:total/nfe:ICMSTot/nfe:vNF", default="0", namespaces=NS_NFE) or "0"
+        vnf = float(str(vnf_txt).replace(",", "."))
+        infcpl = inf.findtext(".//nfe:infAdic/nfe:infCpl", default="", namespaces=NS_NFE) or ""
+
+        ref_list = []
+        for r in inf.findall(".//nfe:NFref/nfe:refNFe", NS_NFE):
+            if r is not None and r.text:
+                ref_list.append(r.text.strip())
+
+        return {
+            "cnpj_emit": re.sub(r"\D", "", cnpj_emit).zfill(14),
+            "xnome_emit": xnome_emit,
+            "nnf": nnf,
+            "vnf": vnf,
+            "infcpl": infcpl,
+            "ref_list": ref_list,
+            "path": xml_path,
+        }
+    except Exception:
+        return None
+
+def _iter_xmls(dirs):
+    for d in dirs:
+        p = Path(d)
+        if not p.exists():
+            continue
+        for xmlf in p.rglob("*.xml"):
+            info = _parse_xml_info(str(xmlf))
+            if info:
+                yield info
+
+def _xml_menciona_nf_do_mesmo_fornecedor(cnpj_emit: str, nnf_procurada: str, xml_info: dict) -> bool:
+    """
+    Verdadeiro se o XML é do mesmo fornecedor e 'menciona' a NF procurada:
+    - mesmo CNPJ do emitente
+    - e a sequência/numero da NF alvo aparece em infCpl OU consta em NFref (chave tem a NF original).
+    """
+    if xml_info["cnpj_emit"] != cnpj_emit:
+        return False
+    alvo = re.sub(r"\D", "", str(nnf_procurada))
+    infcpl = xml_info.get("infcpl", "") or ""
+    if alvo and alvo in re.sub(r"\D", "", infcpl):
+        return True
+    for ch in xml_info.get("ref_list", []):
+        if alvo and alvo in (re.sub(r"\D", "", ch) or ""):
+            return True
+    return False
 
 base_dados_path, testes_path = _resolve_paths()
 
@@ -165,9 +254,33 @@ try:
     
     # Criar colunas auxiliares
     df_despesas['num_nf_busca'] = df_despesas['Nº NF'].astype(str).str.strip().str.replace(' ', '').str.replace('.', '').str.upper()
-    df_despesas['cnpj_busca'] = df_despesas['CNPJ'].astype(str).apply(
-        lambda x: ''.join(filter(str.isdigit, x)).zfill(14)
-    )
+    # CNPJ com fallback (se a coluna CNPJ vier vazia/IE, extrai da Chave de Acesso - XML)
+    def _cnpj_from_row(row):
+        # 1) tenta a coluna CNPJ
+        cnpj = re.sub(r'\D', '', str(row.get('CNPJ', '')))
+        if len(cnpj) == 14 and cnpj != '0'*14:
+            return cnpj
+
+        # 2) tenta extrair da CHAVE DE ACESSO (44 dígitos) na coluna 'XML'
+        #    CNPJ do emitente = posições 7–20 (1-based) => fatia [6:20] (0-based)
+        chave = re.sub(r'\D', '', str(row.get('XML', '')))
+        if len(chave) == 44:
+            cnpj_xml = chave[6:20]
+            if len(cnpj_xml) == 14:
+                return cnpj_xml
+
+        # 3) varre a linha inteira procurando algum bloco de 14 dígitos (ex.: colunas auxiliares)
+        for v in row.values:
+            s = re.sub(r'\D', '', str(v))
+            m = re.search(r'(?<!\d)(\d{14})(?!\d)', s)
+            if m:
+                return m.group(1)
+
+        # 4) último recurso: zero-fill
+        return cnpj.zfill(14)
+
+    df_despesas['cnpj_busca'] = df_despesas.apply(_cnpj_from_row, axis=1)
+
     df_despesas['valor_busca'] = pd.to_numeric(df_despesas['DESPESAS'], errors='coerce')
     
     # Converter data da nota com formato DD/MM/AAAA
@@ -179,7 +292,9 @@ try:
     
     # Obter nome do fornecedor (coluna EMITENTE)
     df_despesas['fornecedor'] = df_despesas['EMITENTE'].astype(str).str.strip()
-    
+
+    df_despesas['fornecedor_norm'] = df_despesas['fornecedor'].apply(_norm_txt)
+
     # Obter código da fazenda
     df_despesas['cod_fazenda'] = df_despesas['FAZENDA'].map(MAP_FAZENDAS).fillna('0')
     
@@ -255,7 +370,7 @@ try:
     df_base = pd.read_excel(base_dados_path, sheet_name='Planilha1', header=header_row)
     df_base = df_base.dropna(subset=['Nº NF']).reset_index(drop=True)
     
-    # Mapear colunas
+    # Mapear colunas (renomeia apenas as que existirem; não faz subset!)
     col_map = {
         'Nº NF': 'num_nf',
         'CPF/CNPJ': 'cnpj',
@@ -266,10 +381,31 @@ try:
         'Data do Pagamento': 'data_pagamento',
         'Data venc.': 'data_vencimento'
     }
-    
-    df_base = df_base[list(col_map.keys())].copy()
-    df_base.rename(columns=col_map, inplace=True)
-    
+    presentes = {k: v for k, v in col_map.items() if k in df_base.columns}
+    df_base.rename(columns=presentes, inplace=True)
+
+    # === NOVO: colunas auxiliares para regras pedidas ===
+
+    # (a) N° Primário → identifica o mesmo pagamento, mesmo se houver linhas múltiplas
+    if 'N° Primário' in df_base.columns:
+        df_base.rename(columns={'N° Primário': 'num_primario'}, inplace=True)
+    else:
+        df_base['num_primario'] = np.nan  # se a coluna não existir
+
+    # (b) Nome do fornecedor na base (títulos variam—pegamos o que houver)
+    col_for = None
+    for cand in ['Fornecedor', 'Favorecido', 'Razão Social', 'Emitente', 'Nome Fornecedor']:
+        if cand in df_base.columns:
+            col_for = cand
+            break
+    if col_for is None:
+        df_base['fornecedor_base'] = ''
+    else:
+        df_base.rename(columns={col_for: 'fornecedor_base'}, inplace=True)
+
+    # normalização do nome (para similaridade)
+    df_base['fornecedor_base_norm'] = df_base['fornecedor_base'].apply(_norm_txt)
+
     # Normalização
     df_base['num_nf'] = df_base['num_nf'].astype(str).str.strip().str.replace(' ', '').str.replace('.', '').str.upper()
     df_base['cnpj'] = df_base['cnpj'].astype(str).apply(
@@ -321,57 +457,101 @@ for i, nota in df_to_process.iterrows():
     # Criar cópia da linha original
     result_row = nota.to_dict()
     
-    # Buscar parcelas NÃO CANCELADAS correspondentes (mesma NF e CNPJ)
-    mask_nao_canceladas = (
-        (df_base['num_nf'] == nota['num_nf_busca']) &
-        (df_base['cnpj'] == nota['cnpj_busca']) &
-        (~df_base['associada']) &
-        (df_base['pagamento_cancelado'] != 'SIM')  # Priorizar não cancelados
-    )
-    
-    parcelas = df_base[mask_nao_canceladas]
-    
-    # Se não encontrou parcelas não canceladas, verificar se existem canceladas
-    if parcelas.empty:
-        mask_canceladas = (
-            (df_base['num_nf'] == nota['num_nf_busca']) &
-            (df_base['cnpj'] == nota['cnpj_busca']) &
-            (~df_base['associada']) &
-            (df_base['pagamento_cancelado'] == 'SIM')
-        )
-        parcelas_canceladas = df_base[mask_canceladas]
-        
-        if not parcelas_canceladas.empty:
-            # Existem parcelas mas todas canceladas
-            result_row.update({
-                'Status Nota': "Ativa",
-                'Status Pagamento': 'Cancelado',
-                'Banco': '',
-                'Data Pagamento': '',
-                'Observações': 'Todas as parcelas canceladas'
-            })
-            results.append(result_row)
-            continue
-    
-    # Tentar encontrar parcela pela data de vencimento (entre as não canceladas)
+    # === [SUBSTITUIR TODO O BLOCO A PARTIR DAQUI] ===
+    # CAMADA 1: NF + CNPJ + não cancelado + não associada
     data_nota = nota['data_nota']
     parcela_encontrada = None
     
-    for idx, parcela in parcelas.iterrows():
-        # Comparar data de vencimento com data da nota
-        if not pd.isna(parcela['data_vencimento']) and not pd.isna(data_nota):
-            if parcela['data_vencimento'].date() == data_nota.date():
-                parcela_encontrada = parcela
-                df_base.at[idx, 'associada'] = True
-                break
+    mask1 = (
+        (df_base['num_nf'] == nota['num_nf_busca']) &
+        (df_base['cnpj'] == nota['cnpj_busca']) &
+        (~df_base['associada']) &
+        (df_base['pagamento_cancelado'] != 'SIM')
+    )
+    cands = df_base[mask1].copy()
+
+    # Excluir candidatos cujo N° Primário conste como cancelado para essa NF
+    if 'num_primario' in df_base.columns and not cands.empty:
+        grupo_nf = df_base.loc[(df_base['num_nf'] == nota['num_nf_busca'])].copy()
+        primarios_cancelados = set(
+            grupo_nf.loc[grupo_nf['pagamento_cancelado'] == 'SIM', 'num_primario']
+                    .dropna().astype(str).unique().tolist()
+        )
+        if primarios_cancelados:
+            cands = cands.loc[~cands['num_primario'].astype(str).isin(primarios_cancelados)].copy()
     
-    # Se não encontrou por data, tentar por valor
-    if parcela_encontrada is None:
-        for idx, parcela in parcelas.iterrows():
-            if np.isclose(parcela['valor'], nota['valor_busca'], atol=0.01):
-                parcela_encontrada = parcela
-                df_base.at[idx, 'associada'] = True
-                break
+    
+    # CAMADA 2: mesma NF (ignorando CNPJ) + não cancelado + não associada,
+    # respeitando a regra do N° Primário se a coluna existir.
+    if cands.empty:
+        grupo_nf = df_base.loc[
+            (df_base['num_nf'] == nota['num_nf_busca']) &
+            (~df_base['associada'])
+        ].copy()
+    
+        if 'num_primario' in grupo_nf.columns:
+            primarios_cancelados = set(
+                grupo_nf.loc[grupo_nf['pagamento_cancelado'] == 'SIM', 'num_primario']
+                        .dropna().astype(str).unique().tolist()
+            )
+            cands = grupo_nf.loc[
+                (grupo_nf['pagamento_cancelado'] != 'SIM') &
+                (~grupo_nf['num_primario'].astype(str).isin(primarios_cancelados))
+            ].copy()
+        else:
+            cands = grupo_nf.loc[(grupo_nf['pagamento_cancelado'] != 'SIM')].copy()
+    
+    # CAMADA 3: fallback por NOME (≥80%) se houver coluna de fornecedor na base
+    if cands.empty and ('fornecedor_base_norm' in df_base.columns):
+        grupo_nf = df_base.loc[
+            (df_base['num_nf'] == nota['num_nf_busca']) &
+            (~df_base['associada']) &
+            (df_base['pagamento_cancelado'] != 'SIM')
+        ].copy()
+    
+        try:
+            nome_nota_norm = _norm_txt(nota.get('fornecedor', ''))
+            grupo_nf['sim_nome'] = grupo_nf['fornecedor_base_norm'].apply(lambda x: _sim(x, nome_nota_norm))
+            cands = grupo_nf.loc[grupo_nf['sim_nome'] >= SIMILARIDADE_MIN_NOME].copy()
+        except NameError:
+            # _norm_txt/_sim não estão definidos (se o item 3 ainda não foi aplicado); ignore similaridade
+            pass
+        
+    # RANQUEAR candidatos e escolher o melhor
+    if not cands.empty:
+        cands['score'] = 0.0
+        # Preferir CNPJ igual
+        cands['score'] += (cands['cnpj'] == nota['cnpj_busca']).astype(float) * 2.0
+        # Preferir data de vencimento igual à data da nota
+        if not pd.isna(data_nota):
+            cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
+        # Aproximação por valor
+        cands['diff_val'] = (cands['valor'] - float(nota['valor_busca'])).abs()
+        cands['score'] += (np.isclose(cands['valor'], nota['valor_busca'], atol=0.01)).astype(float) * 1.0
+        cands['score'] -= (cands['diff_val'] > 5.0).astype(float) * 0.5
+        # Se veio da camada 3, mantenha a similaridade influenciando
+        if 'sim_nome' in cands.columns:
+            cands['score'] += cands['sim_nome']
+
+        # Preferir quem tem DATA DE PAGAMENTO preenchida
+        cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
+
+        # Preferir quem tem CONTA (banco) preenchida
+        cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
+
+        # (opcional) leve preferência se a data do pagamento = data da nota
+        if not pd.isna(data_nota):
+            cands['score'] += (cands['data_pagamento'].dt.date == data_nota.date()).astype(float) * 0.5
+
+
+        cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'],
+                          ascending=[False, True, False])
+
+        idx_sel = cands.index[0]
+        parcela_encontrada = cands.loc[idx_sel]
+        df_base.at[idx_sel, 'associada'] = True
+    # === [FIM DO BLOCO SUBSTITUÍDO] ===
+    
     
     # Processar resultado
     if parcela_encontrada is not None:
@@ -399,14 +579,41 @@ for i, nota in df_to_process.iterrows():
             banco_nome = str(parcela_encontrada['banco']).strip()
             cod_banco = MAP_CONTAS.get(banco_nome, MAP_CONTAS["Não Mapeado"])
             
-            # Atualizar linha de resultado
+            # >>> NOVO: origem da associação (mais informativa)
+            origem = (
+                "Associada por CNPJ"
+                if str(parcela_encontrada.get('cnpj', '')) == str(nota['cnpj_busca'])
+                else "Associada por NF"
+            )
+            # Se CNPJ não bateu mas o N° Primário é diferente (ou seja, outra linha válida)
+            if (
+                hasattr(parcela_encontrada, "index")
+                and 'num_primario' in parcela_encontrada.index
+                and pd.notna(parcela_encontrada['num_primario'])
+                and str(parcela_encontrada.get('cnpj', '')) != str(nota['cnpj_busca'])
+            ):
+                origem = "Associada por NF (N° Primário distinto)"
+            
+            # Se você aplicou o passo de similaridade (item 4/3), acrescenta o % aproximado
+            if (
+                hasattr(parcela_encontrada, "index")
+                and 'sim_nome' in parcela_encontrada.index
+                and not pd.isna(parcela_encontrada['sim_nome'])
+            ):
+                try:
+                    origem += " + Nome≈" + f"{float(parcela_encontrada['sim_nome']):.0%}"
+                except Exception:
+                    pass
+                
+            # Atualizar linha de resultado (apenas troca o campo 'Observações')
             result_row.update({
                 'Status Nota': status_nota,
                 'Status Pagamento': status_pag,
                 'Banco': cod_banco,  # Agora apenas o código do banco
                 'Data Pagamento': data_str,
-                'Observações': 'Associada por data vencimento' if 'data_vencimento' in locals() else 'Associada por valor'
+                'Observações': origem
             })
+
             
             # Gerar linha para TXT com novo formato
             if status_nota == "Ativa" and status_pag == "Pago" and data_str:
@@ -419,7 +626,7 @@ for i, nota in df_to_process.iterrows():
                 cnpj = nota['cnpj_busca']
                 
                 # valor em centavos, sem separadores (ex.: 5735,00 -> "573500")
-                valor_cent = str(int(round(float(nota['valor_busca']) * 100)))
+                valor_cent = str(int(round(float(parcela_encontrada['valor']) * 100)))
                 
                 # descrição padronizada
                 descricao = f"PAGAMENTO NF {num_nf} {fornecedor}".upper()
@@ -530,6 +737,111 @@ print(f"- Produtos especiais (combustível/lubrificante): {produtos_especiais}")
 print(f"  > Produtos especiais cancelados: {produtos_especiais_cancelados}")
 print(f"- Parcelas associadas: {pagamentos_associados}")
 print(f"- Parcelas não pagas: {parcelas_nao_pagas}")
+
+# =========================
+# PASSO EXTRA (pós-associação):
+#   Para notas ainda "Não pago", procurar XML do mesmo fornecedor que
+#   mencione a NF original; calcular a DIFERENÇA e buscar pagamento igual a essa diferença.
+# =========================
+print("\nAnalisando XMLs para diferenças (devolução/reefaturamento)...")
+
+# Mapa rápido: índice da nota -> posição no results
+idx_to_results_pos = {}
+for pos, r in enumerate(results):
+    idx_to_results_pos[df_to_process.index[pos]] = pos  # assume ordem idêntica
+
+# Carregar (lazy) infos de XMLs apenas 1x
+xml_infos = list(_iter_xmls(XML_DIRS))
+
+ajustes_por_xml = 0
+
+for i, nota in df_to_process.iterrows():
+    # se já está pago, ignore
+    pos_res = idx_to_results_pos.get(i)
+    if pos_res is None:
+        continue
+    if results[pos_res].get('Status Pagamento') == 'Pago':
+        continue
+
+    nf_alvo = str(nota['num_nf_busca'])
+    cnpj_alvo = nota['cnpj_busca']
+    valor_nf = float(nota['valor_busca'] or 0.0)
+
+    # achar um XML do mesmo fornecedor que referencia essa NF
+    achado = None
+    for x in xml_infos:
+        if _xml_menciona_nf_do_mesmo_fornecedor(cnpj_alvo, nf_alvo, x):
+            achado = x
+            break
+
+    if not achado:
+        continue  # nenhum XML do mesmo fornecedor mencionando esta NF
+
+    # diferença entre a NF original e a NF 'referenciante'
+    diferenca = round(abs(valor_nf - float(achado['vnf'])), 2)
+    if diferenca <= 0.01:
+        continue
+
+    # procurar um pagamento NÃO associado com exatamente esse valor (tolerância centavos)
+    #   prioridade: mesmo CNPJ; senão, por nome ≥80% (mesma NF)
+    cand = df_base.loc[
+        (~df_base['associada']) &
+        (df_base['pagamento_cancelado'] != 'SIM') &
+        (np.isclose(df_base['valor'], diferenca, atol=0.01))
+    ].copy()
+
+    if cand.empty:
+        continue
+
+    # priorização: mesma NF alvo, depois CNPJ, depois similaridade por nome
+    cand['score'] = 0.0
+    cand['score'] += (cand['num_nf'] == nf_alvo).astype(float) * 2.0
+    cand['score'] += (cand['cnpj'] == cnpj_alvo).astype(float) * 1.5
+    if 'fornecedor_base_norm' in cand.columns:
+        cand['sim_nome'] = cand['fornecedor_base_norm'].apply(lambda x: _sim(x, nota['fornecedor_norm']))
+        cand.loc[cand['sim_nome'] >= SIMILARIDADE_MIN_NOME, 'score'] += cand['sim_nome']
+
+    cand = cand.sort_values('score', ascending=False)
+    j = cand.index[0]
+    pgto = cand.loc[j]
+    df_base.at[j, 'associada'] = True
+
+    # montar resultado como PAGO (TXT usa valor do PAGAMENTO, não o da NF)
+    status_nota = "Ativa"
+    status_pag = "Pago"
+    data_pg = pgto['data_pagamento']
+    data_str = data_pg.strftime('%d%m%Y') if not pd.isna(data_pg) else ""
+    banco_nome = str(pgto['banco']).strip()
+    cod_banco = MAP_CONTAS.get(banco_nome, MAP_CONTAS["Não Mapeado"])
+
+    results[pos_res].update({
+        'Status Nota': status_nota,
+        'Status Pagamento': status_pag,
+        'Banco': cod_banco,
+        'Data Pagamento': data_str,
+        'Observações': f"Diferença via XML (NF ref.: {achado.get('nnf','?')} | {Path(achado['path']).name})"
+    })
+
+    # TXT com valor do PAGAMENTO (diferença)
+    data_fmt = data_pg.strftime('%d-%m-%Y') if not pd.isna(data_pg) else nota['data_nota'].strftime('%d-%m-%Y')
+    fornecedor = nota['fornecedor']
+    cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)
+    num_nf = nf_alvo
+    cnpj = cnpj_alvo
+    valor_cent = str(int(round(float(diferenca) * 100)))
+    descricao = f"PAGAMENTO NF {num_nf} {fornecedor}".upper()
+    parcela_txt = "1"
+
+    txt_line = [
+        data_fmt, cod_fazenda3, "001", num_nf, parcela_txt,
+        descricao, cnpj, "2", "000", valor_cent, valor_cent, "N"
+    ]
+    txt_lines.append("|".join(txt_line))
+    pagamentos_associados += 1
+    linhas_pagas_idx.append(i)
+    ajustes_por_xml += 1
+
+print(f"✅ Ajustes por XML (diferença): {ajustes_por_xml}")
 
 # =====================================================================
 # SALVAR RESULTADOS FORMATADOS
@@ -687,24 +999,8 @@ try:
     
     #   b) Todos os produtos especiais (qualquer substring em PRODUTO)
     pattern = '|'.join(PRODUTOS_ESPECIAIS)
-    #   a) Notas pagas
-    idx_pagas = set(linhas_pagas_idx)
-    
-    #   b) Todos os produtos especiais (qualquer substring em PRODUTO)
-    pattern = '|'.join(PRODUTOS_ESPECIAIS)
-    idx_especiais = set(
-        df_despesas['PRODUTO']
-            .astype(str)
-            .str.upper()
-            .str.contains(pattern, na=False)
-            .loc[lambda s: s]  # filtra True → índice
-            .index
-    )
-    
-    # <<< DEBUG AQUI >>>
-    print("DEBUG: índices especiais:", idx_especiais)
-    print("DEBUG: produtos marcados como especiais:",
-          df_despesas.loc[list(idx_especiais), 'PRODUTO'].tolist())
+
+    idx_especiais = set(df_despesas.loc[df_despesas['produto_especial']].index)
     
     #   c) União de ambos
     idx_para_destacar = idx_pagas.union(idx_especiais)

@@ -4178,23 +4178,32 @@ class LancamentoDialog(QDialog):
                 """
                 self.db.execute_query(sql, params + [self.lanc_id])
 
-                # 2) Recalcula em CADEIA os lançamentos posteriores da mesma conta
+                # 2) Recalcula em CADEIA os lançamentos posteriores da mesma conta (otimizado + seguro)
                 saldo_atual = saldo_f
-                with self.db.bulk():
-                    rows = self.db.fetch_all(
-                        "SELECT id, valor_entrada, valor_saida "
-                        "FROM lancamento WHERE cod_conta=? AND id > ? ORDER BY id",
-                        (conta_id, self.lanc_id),
-                    )
-                    for rid, v_ent, v_sai in rows:
-                        saldo_atual = saldo_atual + float(v_ent or 0) - float(v_sai or 0)
-                        nat_r = 'P' if saldo_atual >= 0 else 'N'
-                        self.db.execute_query(
-                            "UPDATE lancamento SET saldo_final=?, natureza_saldo=? WHERE id=?",
-                            (abs(saldo_atual), nat_r, rid),
-                            autocommit=False
-                        )
-
+                rows = self.db.fetch_all(
+                    "SELECT id, valor_entrada, valor_saida "
+                    "FROM lancamento WHERE cod_conta=? AND id > ? ORDER BY id",
+                    (conta_id, self.lanc_id),
+                )
+                
+                updates = []
+                for rid, v_ent, v_sai in rows:
+                    saldo_atual = saldo_atual + float(v_ent or 0) - float(v_sai or 0)
+                    nat_r = 'P' if saldo_atual >= 0 else 'N'
+                    updates.append({
+                        "id": rid,
+                        "cod_conta": conta_id,               # <- evita NOT NULL caso o PostgREST tente inserir
+                        "saldo_final": abs(saldo_atual),
+                        "natureza_saldo": nat_r
+                    })
+                
+                if updates:
+                    # 1 chamada ao backend; 'returning=minimal' evita tráfego extra
+                    self.db.sb.table("lancamento") \
+                        .upsert(updates, on_conflict="id", returning="minimal") \
+                        .execute()
+                
+                
             else:
                 sql = """
                 INSERT INTO lancamento (
@@ -7236,27 +7245,18 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(widget, TAB_TITLE)
         self.tabs.setCurrentWidget(widget)
 
-    # MainWindow
     def _apply_filters_everywhere(self):
         ini = self.dt_ini.date()
         fim = self.dt_fim.date()
-        # garante ordem válida
         if fim < ini:
             ini, fim = fim, ini
             self.dt_ini.setDate(ini)
             self.dt_fim.setDate(fim)
 
-        # propaga pro Painel
-        self.dashboard.dt_dash_ini.setDate(ini)
-        self.dashboard.dt_dash_fim.setDate(fim)
-
-        # persiste (o Painel lê dessas keys)
-        self.dashboard.settings.setValue("dashFilterIni", ini)
-        self.dashboard.settings.setValue("dashFilterFim", fim)
-
-        # recarrega tudo com o mesmo período
-        self.dashboard.load_data()
+        # Apenas aplica o filtro na lista de lançamentos.
+        # NÃO altera datas do Dashboard nem recarrega o Dashboard.
         self.carregar_lancamentos()
+
 
 
     def closeEvent(self, event):
