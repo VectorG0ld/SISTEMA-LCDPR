@@ -1189,9 +1189,9 @@ LAYOUTS: List[LayoutSpec] = [
         ],
         crops={
             "DATA": {"ESQUERDA": 0, "CIMA": 10, "DIREITA": 30, "BAIXO": 18},
-            "MUNICIPIO_TOMADOR": {"ESQUERDA": 2, "CIMA": 24, "DIREITA": 98, "BAIXO": 33},
+            "MUNICIPIO_TOMADOR": {"ESQUERDA": 2, "CIMA": 35, "DIREITA": 98, "BAIXO": 45},
             "NUMERO_NFS": {"ESQUERDA": 65, "CIMA": 2, "DIREITA": 97, "BAIXO": 15},
-            "PRESTADOR_CNPJ": {"ESQUERDA": 3, "CIMA": 18, "DIREITA": 97, "BAIXO": 29},
+            "PRESTADOR_CNPJ": {"ESQUERDA": 2, "CIMA": 24, "DIREITA": 98, "BAIXO": 33},
             "VALOR_NFS": {"ESQUERDA": 55, "CIMA": 68, "DIREITA": 97, "BAIXO": 103},
         },
         filter_default=replace(CFG_FALLBACK, preto=1.25, ruido=1.0, contraste=1.20, gama=1.15, borda=1.2),
@@ -2567,7 +2567,7 @@ class WorkerSeparar(BaseWorker):
                     general_keywords=general_keywords,
                     ignore_keywords=ignore_keywords,
                     names_keywords=names_keywords,
-                    dpi=150,
+                    dpi=300,
                     lang="por"
                 )
             self._emit("Separação concluída.", "success")

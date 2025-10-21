@@ -93,12 +93,18 @@ def process_page(image, page_num, lang="por"):
     if _cancelled():
         return ""
     try:
-        text = pytesseract.image_to_string(image, lang=lang)
+        # OCR mais robusto e menos ruído
+        text = pytesseract.image_to_string(
+            image,
+            lang=lang,                # recomendo lang="por" (ou "por+eng" se tiver muito texto em inglês)
+            config="--oem 3 --psm 6"
+        )
         return text or ""
     except Exception:
         return ""
 
-def ocr_pdf_pages(pdf_path, dpi=150, lang="por"):
+
+def ocr_pdf_pages(pdf_path, dpi=300, lang="por"):
     # Retorna (texts:list[str], num_pages:int, threads:int)
     if _cancelled():
         return [], 0, 0
@@ -198,47 +204,84 @@ def has_any_kw(text_norm: str, keywords: list[str]) -> bool:
             return True
     return False
 
+# ✔️ NOVO: marcadores fortes e regex de CNPJ
+CNPJ_14DIG_RE = re.compile(r"\d{14}")
+
+NFSE_STRONG_MARKERS = [
+    "nfs e",
+    "nota fiscal de servico eletronica",
+    "documento auxiliar da nfs e",
+    "chave de acesso",          # muitas prefeituras
+    "numero da nfs e",
+    "codigo de verificacao",
+]
+NFSE_PARTIES = [
+    "prestador de servico",
+    "tomador de servico",
+]
+NFSE_PUBLIC = [
+    "prefeitura municipal",
+    "municipio",
+]
+
+def _contains_any(text_norm: str, words: list[str]) -> int:
+    return sum(1 for w in words if w in text_norm)
+
+def is_nota(text_norm: str, raw_text: str, nf_keywords: list[str]) -> bool:
+    """
+    Modo estrito: exige pelo menos:
+      - 1 marcador forte  (NFSE_STRONG_MARKERS)  E
+      - 1 marcador de partes (NFSE_PARTIES)      E
+      - presença de um CNPJ (14 dígitos no bruto)
+    OU
+      - ( "documento auxiliar da nfs e" E "chave de acesso" E CNPJ )
+    """
+    strong = _contains_any(text_norm, NFSE_STRONG_MARKERS)
+    parties = _contains_any(text_norm, NFSE_PARTIES)
+    public  = _contains_any(text_norm, NFSE_PUBLIC)
+
+    has_cnpj = bool(CNPJ_14DIG_RE.search(digits_only(raw_text)))
+
+    has_doc_aux = ("documento auxiliar da nfs e" in text_norm)
+    has_chave   = ("chave de acesso" in text_norm)
+
+    rule_strict = (strong >= 1 and parties >= 1 and has_cnpj) or (has_doc_aux and has_chave and has_cnpj)
+
+    # ❗Ignora 'general_keywords' como gatilho único; usamos só como apoio (opcional):
+    if not rule_strict:
+        return False
+
+    # Opcional: reforça com marca público/município quando existir
+    if public == 0 and strong == 1:
+        # muito no limite? segure
+        return False
+
+    return True
+
 def is_recebimento(text_norm: str, raw_text: str = "") -> bool:
     """
-    Detecta 'Recebimento de Mercadoria' com flexibilidade:
-    - 'Recebimento de Mercadoria'
-    - 'Nº/No/N0 Recebimento' (checado no texto cru para pegar 'º')
-    - 'Solicitação de Pagamento' (variações sem acento)
-    - 'Relatório Impresso por SAP Business'
-    - 'Impresso por SAP Business One'
+    Apertado para reduzir falso positivo:
+    - exige 'recebimento de mercadoria' E referência ao SAP
+    - aceita 'nº/no/n0 recebimento' no texto cru, mas também exige SAP
     """
-    # 1) Frase canônica (já normalizada)
-    if "recebimento de mercadoria" in text_norm:
+    sap = ("sap business" in text_norm) or ("sap business one" in text_norm)
+
+    if "recebimento de mercadoria" in text_norm and sap:
         return True
 
-    # 2) Nº/No/N0 Recebimento (olha no texto cru por causa de 'º')
-    if re.search(r"\bn[ºo0]\s*recebimento\b", raw_text or "", flags=re.IGNORECASE):
+    if sap and re.search(r"\bn[ºo0]\s*recebimento\b", raw_text or "", flags=re.IGNORECASE):
         return True
 
-    # 3) Novas frases (sem acentos / pontuação)
-    # solicitacao de pagamento
-    if "solicitacao de pagamento" in text_norm:
-        return True
-
-    # relatorio impresso por sap business (com/sem 'one')
-    if re.search(r"\brelatorio\s+impresso\s+por\s+sap\s+business(\s+one)?\b", text_norm):
-        return True
-
-    # impresso por sap business (com/sem 'one')
-    if re.search(r"\bimpresso\s+por\s+sap\s+business(\s+one)?\b", text_norm):
-        return True
-
+    # ❌ removido: 'solicitacao de pagamento' e 'impresso por sap...' (causavam ruído)
     return False
-
-def is_nota(text_norm: str, nf_keywords: list[str]) -> bool:
-    return has_any_kw(text_norm, nf_keywords)
 
 def find_names(text_norm: str, names_keywords: list[str]) -> set[str]:
     found = set()
     for name in names_keywords:
-        if name.lower() in text_norm:
+        if normalize_text(name) in text_norm:
             found.add(name)
     return found
+
 
 def build_segments(pages_text: list[str], nf_keywords: list[str], names_keywords: list[str], ignore_keywords: list[str]):
     receb_list, nota_list = [], []
@@ -256,7 +299,7 @@ def build_segments(pages_text: list[str], nf_keywords: list[str], names_keywords
             page_types.append('receb'); page_names.append(names)
             receb_list.append({'type': 'receb', 'pages': [i], 'names': set(names)})
 
-        elif is_nota(tn, nf_keywords):
+        elif is_nota(tn, t, nf_keywords):  # << aqui entra o raw_text
             if ignored:
                 page_types.append(None); page_names.append(names); ignoradas += 1; continue
             page_types.append('nota'); page_names.append(names)
@@ -266,6 +309,7 @@ def build_segments(pages_text: list[str], nf_keywords: list[str], names_keywords
             page_types.append(None); page_names.append(names)
 
     return receb_list, nota_list, page_types, page_names, ignoradas
+
 
 # ---------- Pareamento e Export ----------
 def choose_owner_name(names_from_segments: list[set[str]], names_priority: list[str]) -> str | None:
@@ -383,12 +427,16 @@ def process_pdfs(source_folder,
                  general_keywords,
                  ignore_keywords,
                  names_keywords,
-                 dpi=150,
+                 dpi=300,
                  lang="por"):
 
     # (a UI já mostra "Iniciando…"; não duplicar)
     print(f"🔎 Pasta de origem: {source_folder}", flush=True)
     ensure_dir(separated_base_folder)
+
+    # === AGREGADOR TXT (inicializa) ===
+    agg_lines = []
+    agg_out = os.path.join(separated_base_folder, "_OCR_AGREGADO.txt")
 
     for file in os.listdir(source_folder):
         if _cancelled():
@@ -408,6 +456,22 @@ def process_pdfs(source_folder,
             break
         if not texts:
             print(f"❌ Nenhum texto extraído de '{file_path}'. Pulando.", flush=True)
+            _divider(); print("", flush=True)
+            # === AGREGADOR: adiciona leitura bruta deste PDF ===
+            agg_lines.append(f"===== ARQUIVO: {file} =====\n")
+            for i, page_txt in enumerate(texts, start=1):
+                agg_lines.append(f"-- Página {i} --\n{(page_txt or '').strip()}\n")
+            agg_lines.append("\n")
+
+            continue
+
+        # ✅ VETO GLOBAL: se QUALQUER página tiver uma ignore_keyword, NÃO copia nada deste PDF
+        has_ignore_anywhere = any(
+            contains_ignored(normalize_text(t), t, ignore_keywords)  # usa suas funções já declaradas
+            for t in texts
+        )
+        if has_ignore_anywhere:
+            print(f"🚫 Ignorado (palavra proibida encontrada): {file}", flush=True)
             _divider(); print("", flush=True)
             continue
 
@@ -449,6 +513,15 @@ def process_pdfs(source_folder,
             duration_s=dt
         )
 
+        # === AGREGADOR: grava TXT único ===
+        if agg_lines:
+            try:
+                with open(agg_out, "w", encoding="utf-8") as f:
+                    f.write("\n".join(agg_lines))
+                print(f"📝 TXT consolidado salvo em: {agg_out}", flush=True)
+            except Exception as e:
+                print(f"❌ Falha ao salvar TXT consolidado: {e}", flush=True)
+
 # ---------- MAIN ----------
 if __name__ == "__main__":
     # Ajuste seus diretórios aqui:
@@ -473,6 +546,18 @@ if __name__ == "__main__":
         "C M DE OLIVEIRA",
         "09.688.164/001-28",
         "36.372.676/0001-53",
+        "Preço do Frete",
+        "Técnica - Campo",
+        "Diagnóstico Técnico",
+        "Hs de Moto",
+        "Clásula",
+        "COMPRADOR(A,ES)",
+        "DANFE",
+        "DOCUMENTO AUXILIAR DA NOTA FISCAL",
+        "Proposta Comercial",
+        "82.413.816/0001-01",
+        "INOVAGE"
+
     ]
 
     # Mantido como você pediu:
@@ -484,6 +569,6 @@ if __name__ == "__main__":
         general_keywords=general_keywords,
         ignore_keywords=ignore_keywords,
         names_keywords=names_keywords,
-        dpi=150,
+        dpi=300,
         lang="por"
     )

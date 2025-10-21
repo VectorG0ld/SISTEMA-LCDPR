@@ -76,7 +76,8 @@ CODIGOS_CIDADES = {
     "LAGOA CONFUSAO": "Frutacc", "LAGOA DA CONFUSAO - TO": "Frutacc",
     "RIALMA": "Aliança", "Trombas": "Primavera", "CERES": "Aliança",
     "Formoso do Araguaia": "União", "FORMOSO DO ARAGUAIA": "União",
-    "APARECIDA DO RIO NEGRO": "Primavera",
+    "APARECIDA DO RIO NEGRO": "Primavera", "Gurupi - TO": "Frutacc",
+    "Goianésia - GO": "Aliança", "Palmas - TO": "Guara",
     "Tasso Fragoso": "Guara", "BALSAS": "Guara", "Balsas": "Guara",
     "Montividiu": "Barragem",
 }
@@ -174,6 +175,13 @@ class ConfigDialog(QDialog):
         row2 = QHBoxLayout(); row2.addWidget(self.isento_path_edit); row2.addWidget(btn_isento)
         form.addRow("Pasta XMLs ISENTO:", row2)
 
+        # --- NOVO: caminho para NOTAS RECEBIDAS.xlsx ---
+        self.notas_receb_path_edit = QLineEdit(self.config.get('notas_recebidas_path', ''))
+        self.notas_receb_path_edit.setPlaceholderText("Caminho para a planilha NOTAS RECEBIDAS.xlsx")
+        btn_notas = QPushButton("Procurar"); btn_notas.clicked.connect(self.browse_notas_recebidas)
+        row3 = QHBoxLayout(); row3.addWidget(self.notas_receb_path_edit); row3.addWidget(btn_notas)
+        form.addRow("Planilha NOTAS RECEBIDAS:", row3)
+
         lay.addWidget(grp)
         btns = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
@@ -187,8 +195,17 @@ class ConfigDialog(QDialog):
         folder = QFileDialog.getExistingDirectory(self, "Selecione a pasta de XMLs ISENTOS")
         if folder: self.isento_path_edit.setText(folder)
 
+    def browse_notas_recebidas(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Selecione a planilha NOTAS RECEBIDAS", "", "Excel (*.xlsx)")
+        if file:
+            self.notas_receb_path_edit.setText(file)
+
     def get_config(self):
-        return { 'excel_path': self.excel_path_edit.text(), 'isento_path': self.isento_path_edit.text() }
+        return {
+            'excel_path': self.excel_path_edit.text(),
+            'isento_path': self.isento_path_edit.text(),
+            'notas_recebidas_path': self.notas_receb_path_edit.text(),  # NOVO
+        }
 
 class AssocPagDialog(QDialog):
     def __init__(self, base_default="", testes_default="", parent=None):
@@ -316,6 +333,7 @@ class RuralXmlImporter(QWidget):
         self.testes_path = self.config.get('testes_path', '')
         self.excel_path = self.config.get('excel_path', r"\\rilkler\LIVRO CAIXA\TESTE\TESTES.xlsx")
         self.isento_path = self.config.get('isento_path', '')
+        self.notas_recebidas_path = self.config.get('notas_recebidas_path', '')
 
     # ---------- UI helpers ----------
     def _apply_global_styles(self):
@@ -625,11 +643,21 @@ class RuralXmlImporter(QWidget):
 
             program = sys.executable
             args = ["-u", str(script_path), base_file, testes_file]
-
+            
+            # NOVO: se houver caminho configurado para NOTAS RECEBIDAS.xlsx, envia como 3º argumento
+            nr_cfg = self.config.get("notas_recebidas_path", "") or getattr(self, "notas_recebidas_path", "")
+            if nr_cfg:
+                p = Path(nr_cfg)
+                if p.exists() and p.suffix.lower() == ".xlsx":
+                    args.append(str(p))
+                else:
+                    self.log_msg(f"AVISO: caminho de NOTAS RECEBIDAS inválido ou inexistente:\n{nr_cfg}", "warning")
+            
             self.btn_assoc.setEnabled(False)
             self.btn_cancel.setEnabled(True)
-            self.log_msg("Abrindo 'Varredura NFE.py' para associar pagamentos...", "info")
+            self.log_msg("Abrindo 'Varredura NFE.py' para associar pagamentos/recebimentos.", "info")
             self.proc.start(program, args)
+
 
         except Exception as e:
             self.log_msg(f"Erro ao iniciar varredura: {e}", "error")
@@ -695,6 +723,18 @@ class RuralXmlImporter(QWidget):
                                 QMessageBox.critical(self, "Erro ao importar", f"Falha ao importar PAGAMENTOS.txt:\n{_e}")
                         else:
                             QMessageBox.warning(self, "Arquivo não encontrado", f"Não encontrei o arquivo:\n{pag_file}")
+
+                        receb_file = _Path(__file__).parent / "RECEBIMENTOS.txt"
+                        if receb_file.exists():
+                            try:
+                                main_win._import_lancamentos_txt(str(receb_file))
+                                main_win.carregar_lancamentos()
+                                main_win.dashboard.load_data()
+                                QMessageBox.information(self, "Concluído", "Recebimentos importados com sucesso.")
+                            except Exception as _e:
+                                QMessageBox.critical(self, "Erro ao importar", f"Falha ao importar RECEBIMENTOS.txt:\n{_e}")
+                        else:
+                            self.log_msg(f"RECEBIMENTOS.txt não encontrado em {receb_file}", "warning")
             except Exception:
                 pass
         else:
@@ -881,6 +921,7 @@ class RuralXmlImporter(QWidget):
             # MESCLA ao invés de sobrescrever (preserva base_dados_path e testes_path)
             new_cfg = dialog.get_config() or {}
             self.config.update(new_cfg)
+            self.notas_recebidas_path = self.config.get('notas_recebidas_path', '')
             self.excel_path  = self.config.get('excel_path', '')
             self.isento_path = self.config.get('isento_path', '')
             self.save_config()
@@ -1000,78 +1041,250 @@ class RuralXmlImporter(QWidget):
                 self.log_msg(f"Processando arquivo: {filename}", "title")
                 tree = ET.parse(xml_file)
                 root = tree.getroot()
+                # === NOVO: Suporta NF-e e NFSe ===
                 ns = {'n': 'http://www.portalfiscal.inf.br/nfe'}
-
+                ns_nfse = {'s': 'http://www.sped.fazenda.gov.br/nfse'}
+                
+                # Tenta NF-e primeiro
                 ide = root.find('.//n:ide', ns)
-                dh = ide.find('n:dhEmi', ns).text
-                nNF = ide.find('n:nNF', ns).text
-                tp = ide.find('n:tpNF', ns).text
-                nat = ide.find('n:natOp', ns).text
-                try:
-                    dt = datetime.fromisoformat(dh)
-                except ValueError:
-                    dt = datetime.strptime(dh, "%Y-%m-%dT%H:%M:%S%z")
-                date = dt.strftime("%d/%m/%Y")
-                month = dt.month
-                year = dt.year
-
-                emit = root.find('.//n:emit', ns)
-                emit_name = emit.findtext('n:xNome', default='', namespaces=ns)
-                emit_id_node = emit.find('n:CNPJ', ns) or emit.find('n:CPF', ns)
-                emit_id = emit_id_node.text.strip() if emit_id_node is not None and emit_id_node.text else ''
-
-                dest = root.find('.//n:dest', ns)
-                dest_name = dest.findtext('n:xNome', default='', namespaces=ns)
-                dest_id_node = dest.find('n:CNPJ', ns) or dest.find('n:CPF', ns)
-                dest_id = dest_id_node.text.strip() if dest_id_node is not None and dest_id_node.text else ''
-
-                if not emit_id or not dest_id:
-                    all_ids = [n.text.strip() for n in root.findall('.//n:CNPJ', ns) + root.findall('.//n:CPF', ns) if n.text]
-                    if not emit_id and all_ids:
-                        emit_id = all_ids[0]
-                    if not dest_id and len(all_ids) > 1:
-                        dest_id = all_ids[-1]
-
-                cleuber_emit = emit_id == CLEUBER_CPF
-                cleuber_dest = dest_id == CLEUBER_CPF
-
-                if cleuber_emit:
-                    farm_ie_node = emit.find('n:IE', ns)
-                elif cleuber_dest:
-                    farm_ie_node = dest.find('n:IE', ns)
+                
+                is_nfse = False
+                if ide is not None:
+                    # ---------- NF-e ----------
+                    dh = (ide.findtext('n:dhEmi', default='', namespaces=ns) or '').strip()
+                    nNF = (ide.findtext('n:nNF', default='', namespaces=ns) or '').strip()
+                    tp  = (ide.findtext('n:tpNF', default='0', namespaces=ns) or '0').strip()
+                    nat = (ide.findtext('n:natOp', default='', namespaces=ns) or '').strip()
+                
+                    # data de emissão NF-e
+                    try:
+                        dt = datetime.fromisoformat(dh)
+                    except Exception:
+                        dt = datetime.strptime(dh, "%Y-%m-%dT%H:%M:%S%z")
+                    date  = dt.strftime("%d/%m/%Y")
+                    month = dt.month
+                    year  = dt.year
+                
+                    # participantes
+                    emit = root.find('.//n:emit', ns)
+                    dest = root.find('.//n:dest', ns)
+                    emit_name = emit.findtext('n:xNome', default='', namespaces=ns)
+                    dest_name = dest.findtext('n:xNome', default='', namespaces=ns)
+                    emit_id_node = emit.find('n:CNPJ', ns) or emit.find('n:CPF', ns)
+                    dest_id_node = dest.find('n:CNPJ', ns) or dest.find('n:CPF', ns)
+                    emit_id = emit_id_node.text.strip() if (emit_id_node is not None and emit_id_node.text) else ''
+                    dest_id = dest_id_node.text.strip() if (dest_id_node is not None and dest_id_node.text) else ''
+                
+                    # fallback se faltou CNPJ/CPF em algum nó
+                    if not emit_id or not dest_id:
+                        all_ids = [n.text.strip() for n in root.findall('.//n:CNPJ', ns) + root.findall('.//n:CPF', ns) if n.text]
+                        if not emit_id and all_ids: emit_id = all_ids[0]
+                        if not dest_id and len(all_ids) > 1: dest_id = all_ids[-1]
+                
+                    cleuber_emit = (emit_id == CLEUBER_CPF)
+                    cleuber_dest = (dest_id == CLEUBER_CPF)
+                
+                    # IE -> fazenda; se não houver IE, cair para cidade
+                    farm_ie_node = emit.find('n:IE', ns) if cleuber_emit else (dest.find('n:IE', ns) if cleuber_dest else None)
+                    farm_ie = (farm_ie_node.text.strip() if (farm_ie_node is not None and farm_ie_node.text in FARM_MAPPING) else '')
+                    if farm_ie:
+                        farm_name = FARM_MAPPING.get(farm_ie, 'ISENTO')
+                    else:
+                        # fallback por cidade (xMun)
+                        xmun_node = (emit.find('n:enderEmit/n:xMun', ns) if cleuber_emit
+                                     else (dest.find('n:enderDest/n:xMun', ns) if cleuber_dest else None))
+                        xmun = (xmun_node.text.strip() if (xmun_node is not None and xmun_node.text) else '')
+                        farm_name = CODIGOS_CIDADES.get(xmun, 'ISENTO')
+                
+                    # define contraparte e coluna do valor
+                    if cleuber_emit:
+                        final_name, final_id = dest_name, dest_id
+                        valor_col = 13 if tp == '1' else 14
+                        operation_type = "RECEITA (Cleuber Emitente, tpNF=1)" if tp == '1' else "DESPESA (Cleuber Emitente, tpNF=0)"
+                    elif cleuber_dest:
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 14 if tp == '1' else 13
+                        operation_type = "DESPESA (Cleuber Destinatário, tpNF=1)" if tp == '1' else "RECEITA (Cleuber Destinatário, tpNF=0)"
+                    else:
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 13 if tp == '1' else 14
+                        operation_type = "RECEITA (Cleuber não encontrado, tpNF=1)" if tp == '1' else "DESPESA (Cleuber não encontrado, tpNF=0)"
+                        self.log_msg(f"Cleuber não encontrado como emitente/destinatário. Usando: {operation_type}", "warning")
+                
                 else:
-                    farm_ie_node = None
+                    # ---------- NFSe (padrão nacional SPED) ----------
+                    is_nfse = True
+                    infs = root.find('.//s:infNFSe', ns_nfse)
+                    if infs is None:
+                        raise ValueError("XML não parece ser NF-e nem NFSe suportado")
 
-                farm_ie = farm_ie_node.text.strip() if farm_ie_node is not None and farm_ie_node.text in FARM_MAPPING else ''
-                farm_name = FARM_MAPPING.get(farm_ie, 'ISENTO')
+                    nfse_id = (infs.get('Id') or '').strip()  # ex.: "NFS5221601..."
+                
+                    # número da NFSe
+                    nNF = (infs.findtext('.//s:nNFSe', default='', namespaces=ns_nfse) or '').strip()
+                    if not nNF:
+                        nNF = (infs.findtext('.//s:nDFSe', default='', namespaces=ns_nfse) or '').strip()
+                
+                    # data de emissão: vários municípios mudam a tag — tentamos algumas
+                    dh = (infs.findtext('.//s:dhEmiNFSe', default='', namespaces=ns_nfse)
+                          or infs.findtext('.//s:dhEmi', default='', namespaces=ns_nfse)
+                          or root.findtext('.//s:DPS//s:dhEmi', default='', namespaces=ns_nfse) or '')
+                    dt = None
+                    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                        if not dh: break
+                        try:
+                            dt = datetime.strptime(dh, fmt)
+                            break
+                        except Exception:
+                            continue
+                    if dt is None:
+                        dt = datetime.now()
+                    date  = dt.strftime("%d/%m/%Y")
+                    month = dt.month
+                    year  = dt.year
+                
+                    # participantes (prestador=emit, tomador=toma)
+                    emit = infs.find('.//s:emit', ns_nfse)
+                    toma = infs.find('.//s:toma', ns_nfse)
+                    emit_name = (emit.findtext('s:xNome', default='', namespaces=ns_nfse) or '')
 
-                det = root.find('.//n:det', ns)
-                prod = det.find('n:prod/n:xProd', ns).text
-                cfop = det.find('n:prod/n:CFOP', ns).text
+                    # toma pode não existir: proteja os findtext
+                    toma_name = ((toma.findtext('s:xNome', default='', namespaces=ns_nfse) if toma is not None else '') or '')
 
-                total = float(root.find('.//n:ICMSTot/n:vNF', ns).text)
-                key = root.find('.//n:infProt/n:chNFe', ns).text
+                    emit_id = ((emit.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
+                                emit.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip())
 
-                if cleuber_emit:
-                    final_name = dest_name; final_id = dest_id
-                    if tp == '1':
-                        valor_col = 13; operation_type = "RECEITA (Cleuber Emitente, tpNF=1)"
+                    toma_id = (((toma.findtext('s:CNPJ', default='', namespaces=ns_nfse) if toma is not None else '') or
+                                (toma.findtext('s:CPF',  default='', namespaces=ns_nfse) if toma is not None else '') or '').strip())
+                
+                    # --- NOVO: se NÃO houver tomador e o INTERMEDIÁRIO for o CLEUBER, usar o intermediário como tomador ---
+                    interm = (root.find('.//s:interm', ns_nfse) or root.find('.//s:DPS//s:interm', ns_nfse))
+                    if (not toma_id or not toma_name) and interm is not None:
+                        interm_id = ((interm.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
+                                      interm.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip())
+                        if interm_id == CLEUBER_CPF:
+                            # promove o intermediário a "tomador" para fins de classificação
+                            toma = interm
+                            toma_id = interm_id
+                            toma_name = (interm.findtext('s:xNome', default='', namespaces=ns_nfse) or '')
+
+                    cleuber_emit = (emit_id == CLEUBER_CPF)
+                    cleuber_dest = (toma_id == CLEUBER_CPF)
+                
+                    # valor: preferir vLiq; fallback vServ no DPS
+                    vliq = (infs.findtext('.//s:valores/s:vLiq', default='', namespaces=ns_nfse) or '').strip()
+                    if vliq:
+                        total = float(str(vliq).replace(',', '.'))
                     else:
-                        valor_col = 14; operation_type = "DESPESA (Cleuber Emitente, tpNF=0)"
-                elif cleuber_dest:
-                    final_name = emit_name; final_id = emit_id
-                    if tp == '1':
-                        valor_col = 14; operation_type = "DESPESA (Cleuber Destinatário, tpNF=1)"
-                    else:
-                        valor_col = 13; operation_type = "RECEITA (Cleuber Destinatário, tpNF=0)"
-                else:
-                    final_name = emit_name; final_id = emit_id
-                    if tp == '1':
-                        valor_col = 13; operation_type = "RECEITA (Cleuber não encontrado, tpNF=1)"
-                    else:
-                        valor_col = 14; operation_type = "DESPESA (Cleuber não encontrado, tpNF=0)"
-                    self.log_msg(f"Cleuber não encontrado como emitente/destinatário. Usando: {operation_type}", "warning")
+                        vserv = (root.findtext('.//s:DPS//s:valores//s:vServ', default='0', namespaces=ns_nfse) or '0')
+                        total = float(str(vserv).replace(',', '.'))
+                
+                    # descrição do serviço (xProd equivalente)
+                    prod = (root.findtext('.//s:DPS//s:xDescServ', default='', namespaces=ns_nfse) or '')
+                    cfop = ""  # NFSe não tem CFOP
+                
+                    # IE -> fazenda; se não houver IE, cair para cidade
+                    farm_ie = ''
+                    farm_name = 'ISENTO'
 
+                    # 1) tentar IE (se houver em algum layout)
+                    ie_node = None
+                    if emit is not None:
+                        ie_node = emit.find('s:IE', ns_nfse)
+                    if (ie_node is None or not (ie_node.text or '').strip()) and toma is not None:
+                        ie_node = toma.find('s:IE', ns_nfse)
+
+                    if ie_node is not None:
+                        ie_txt = (ie_node.text or '').strip()
+                        if ie_txt in FARM_MAPPING:
+                            farm_ie = ie_txt
+                            farm_name = FARM_MAPPING[ie_txt]
+
+                    # 2) se não achou IE mapeada, SEMPRE tentar por cidade (independe de Cleuber)
+                    if farm_name == 'ISENTO':
+                        import unicodedata, re
+
+                        def _variants(s: str):
+                            s = (s or '').strip()
+                            if not s:
+                                return []
+                            # sem acento
+                            s_noacc = unicodedata.normalize('NFKD', s)
+                            s_noacc = ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
+                            # gerar variações
+                            cand = [s, s.upper(), s_noacc, s_noacc.upper()]
+                            # remover “- GO” se vier junto, e também testar com “ - GO”
+                            base = re.sub(r'\s*-\s*[A-Z]{2}$', '', s_noacc, flags=re.I).strip()
+                            uf_cand = []
+                            # tentar descobrir UF (se existir em algum ponto)
+                            uf = (infs.findtext('s:UFIncid', default='', namespaces=ns_nfse) or
+                                  emit.findtext('s:ender/s:UF', default='', namespaces=ns_nfse) if emit is not None else '' or
+                                  toma.findtext('s:ender/s:UF', default='', namespaces=ns_nfse) if toma is not None else '')
+                            uf = (uf or '').strip().upper()
+                            if base:
+                                uf_cand = [f'{base} - {uf}'] if uf else []
+                            return cand + uf_cand
+
+                        # ordem de preferência de cidade na NFSe
+                        cand_raw = [
+                            infs.findtext('s:xLocIncid', default='', namespaces=ns_nfse) or '',
+                            infs.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) or '',
+                            infs.findtext('s:xLocEmi', default='', namespaces=ns_nfse) or '',
+                            # endereços (podem não existir, mas tentamos)
+                            emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
+                            toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma is not None else '',
+                        ]
+
+                        for raw in cand_raw:
+                            for key_try in _variants(raw):
+                                if key_try and key_try in CODIGOS_CIDADES:
+                                    farm_name = CODIGOS_CIDADES[key_try]
+                                    break
+                            if farm_name != 'ISENTO':
+                                break
+                            
+                    # define contraparte e coluna do valor (NFSe: serviço prestado/ tomado ≈ tpNF)
+                    if cleuber_emit:
+                        final_name, final_id = toma_name, toma_id
+                        valor_col = 13  # receita quando Cleuber é prestador
+                        operation_type = "RECEITA (NFSe — Cleuber Prestador)"
+                    elif cleuber_dest:
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 14  # despesa quando Cleuber é tomador
+                        operation_type = "DESPESA (NFSe — Cleuber Tomador)"
+                    else:
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 14  # mais conservador: tratamos como despesa
+                        operation_type = "DESPESA (NFSe — Cleuber não encontrado)"
+                        self.log_msg(f"Cleuber não encontrado na NFSe. Usando: {operation_type}", "warning")
+                # === FIM DO BLOCO NOVO ===
+
+                # --- NOVO (NF-e): campos usados na planilha/ISENTO ---
+                if not is_nfse:
+                    prod  = root.findtext('.//n:det/n:prod/n:xProd', default='', namespaces=ns) or ''
+                    cfop  = root.findtext('.//n:det/n:prod/n:CFOP', default='', namespaces=ns) or ''
+                    v_total_txt = root.findtext('.//n:ICMSTot/n:vNF', default='0', namespaces=ns) or '0'
+                    try:
+                        total = float(str(v_total_txt).replace(',', '.'))
+                    except Exception:
+                        total = 0.0
+
+                    # Chave da NFe (para marcação de ISENTO por chNFe)
+                    key = (root.findtext('.//n:protNFe//n:chNFe', default='', namespaces=ns)
+                           or root.findtext('.//n:infProt/n:chNFe', default='', namespaces=ns) or '')
+
+                # --- NOVO (NFSe): normalizações para escrita na planilha ---
+                if is_nfse:
+                    # 'nat' não existe em NFSe; use algo descritivo
+                    nat = "SERVIÇO"
+                    # Chave da NFSe: usar o atributo Id de <infNFSe>; se não houver, cair para nNF
+                    if nfse_id:
+                        # normaliza: remove prefixos não numéricos (ex.: "NFS") e mantém só os dígitos
+                        import re
+                        key = re.sub(r'^\D+', '', nfse_id)
+                    else:
+                        key = nNF or ""
+                                    
                 dups = root.findall('.//n:dup', ns)
                 if dups:
                     self.log_msg(f"Nota fiscal {nNF} possui {len(dups)} parcela(s)", "info")

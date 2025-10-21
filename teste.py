@@ -100,8 +100,8 @@ def _cancelled() -> bool:
 
 # ================== CONFIG ==================
 
-BASE_DIR = r"C:\Users\conta\Downloads"
-DPI = 300
+BASE_DIR = r"C:\Users\conta\OneDrive\Documentos\NOTAS DE SERVICO\SEPARADOS\Cleuber\TESTANDO"
+DPI = 200
 PRINT_ONLY_IA = True
 WRITE_TXT_OUTPUT = False
 

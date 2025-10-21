@@ -202,8 +202,11 @@ def _prompt_base_for(owner: str) -> str:
     return (
         "Você é um leitor especializado em talões de energia.\n"
         "Extraia e retorne apenas um JSON com os campos:\n"
-        "  - data_vencimento (DDMMYYYY) — data de vencimento, não emissão.\n"
-        "    Priorize o nome do arquivo; se não tiver, busque no texto.\n"
+        "  - data_vencimento (DDMMYYYY) — CAPTURE APENAS DO TEXTO do talão (ignore o nome do arquivo).\n"
+        "    Procure por rótulos como “Vencimento”, “VENC.”, “Data de vencimento” ou pelo padrão\n"
+        "    “<Mês> / <Ano> <dd/mm/aaaa>”. Se houver várias datas, escolha a explicitamente indicada\n"
+        "    como vencimento; em caso de ambiguidade, prefira a primeira data após o mês/ano da referência\n"
+        "    e posterior à emissão. Retorne como DDMMYYYY.\n"
         "  - valor (0,00) — total a pagar, precedido de \"R$\".\n"
         "  - numero_nf — número da nota fiscal (NF, Nota Fiscal Nº etc.).\n"
         "    Retire pontos e traços do número.\n"
@@ -558,6 +561,34 @@ class GerarTXTWorker(BaseWorker):
 
             def _secs(delta) -> int:
                 return int(delta.total_seconds())
+            
+            PT_MESES = r"(JANEIRO|FEVEREIRO|MAR[CÇ]O|ABRIL|MAIO|JUNHO|JULHO|AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO)"
+
+            def _compact_date_br(s: str) -> str:
+                # "dd/mm/aaaa" -> "ddmmaaaa"
+                s = (s or "").strip()
+                m = re.match(r"^(\d{2})[/-](\d{2})[/-](\d{4})$", s)
+                return f"{m.group(1)}{m.group(2)}{m.group(3)}" if m else re.sub(r"\D", "", s)
+
+            def _extract_venc_from_text(raw: str) -> str:
+                t = (raw or "").upper()
+                t = re.sub(r"[ \t]+", " ", t)
+
+                # 1) Rótulos clássicos
+                for pat in [
+                    r"(?:VENC(?:IMENTO)?|VENC\.)\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})",
+                    r"DATA\s+DE\s+VENC(?:IMENTO)?\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})",
+                ]:
+                    m = re.search(pat, t)
+                    if m:
+                        return _compact_date_br(m.group(1))
+
+                # 2) Padrão do NF3e: "<Mês> / <Ano> <dd/mm/aaaa>"
+                m = re.search(PT_MESES + r"\s*/\s*\d{4}\s+(\d{2}/\d{2}/\d{4})", t)
+                if m:
+                    return _compact_date_br(m.group(1))
+
+                return ""  # não achou no texto
 
             # ===== Cabeçalho da sessão (será reimpresso no resumo final com total/tempo) =====
             session_start = datetime.now()
@@ -646,8 +677,13 @@ class GerarTXTWorker(BaseWorker):
                             continue
 
                         # Normaliza campos
-                        df = str(data.get("data_vencimento", "") or "")
+                        df_ai  = str(data.get("data_vencimento", "") or "")
                         vf_raw = str(data.get("valor", "") or "")
+
+                        # 🔒 Vencimento confiável: prioriza o que vier do TEXTO do PDF
+                        df_txt = _extract_venc_from_text(full_text)
+                        df = df_txt or df_ai
+                        df = re.sub(r"\D", "", df)  # garante "DDMMYYYY"
 
                         # valor numérico
                         vf_clean = re.sub(r"R\$\s*", "", vf_raw).replace(".", "")

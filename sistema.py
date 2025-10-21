@@ -25,6 +25,7 @@ from PySide6.QtPrintSupport import QPrinter
 
 from contextlib import contextmanager
 import shiboken6
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
@@ -1650,20 +1651,30 @@ class ListAccelerator:
     def _apply_filter(table: QTableWidget, text: str):
         needle = (text or "").casefold()
 
+        # --- dentro de ListAccelerator._apply_filter(table, text) ---
+        
         # pausa ordenação e repaints
         sort_enabled = table.isSortingEnabled()
+        # NOVO: capturar indicador atual (se existir)
+        hdr = table.horizontalHeader()
+        try:
+            sort_section = hdr.sortIndicatorSection()
+            sort_order   = hdr.sortIndicatorOrder()
+        except Exception:
+            sort_section = -1
+            sort_order   = None
+        
         if sort_enabled:
             table.setSortingEnabled(False)
-
+        
         table.setUpdatesEnabled(False)
         try:
             if not needle:
-                # mostrar tudo rápido
                 for r in range(table.rowCount()):
                     if table.isRowHidden(r):
                         table.setRowHidden(r, False)
                 return
-
+        
             for r in range(table.rowCount()):
                 cache = ListAccelerator._ensure_row_cache(table, r)
                 hide = needle not in cache
@@ -1673,6 +1684,12 @@ class ListAccelerator:
             table.setUpdatesEnabled(True)
             if sort_enabled:
                 table.setSortingEnabled(True)
+                # NOVO: restaurar exatamente o indicador anterior, sem disparar resort inesperado
+                try:
+                    if sort_section is not None and sort_section >= 0 and sort_order is not None:
+                        hdr.setSortIndicator(sort_section, sort_order)
+                except Exception:
+                    pass
             QCoreApplication.processEvents()
 
     @staticmethod
@@ -4187,19 +4204,53 @@ class LancamentoDialog(QDialog):
                 )
 
                 updates = []
+                
+                # 3.1) Calcula os novos saldos em cadeia usando as 3 colunas
+                saldo_atual = saldo_f  # começa do saldo do lançamento editado já aplicado
+                calc = []  # [(id, novo_sf, nova_nat)]
                 for rid, v_ent, v_sai in rows:
                     saldo_atual = saldo_atual + float(v_ent or 0) - float(v_sai or 0)
-                    nat_r = 'P' if saldo_atual >= 0 else 'N'
-                    updates.append({
-                        "id": rid,
-                        "cod_conta": conta_id,               # <- evita NOT NULL caso o PostgREST tente inserir
-                        "saldo_final": abs(saldo_atual),
-                        "natureza_saldo": nat_r
-                    })
-
+                    novo_sf  = abs(saldo_atual)
+                    nova_nat = 'P' if saldo_atual >= 0 else 'N'
+                    calc.append((rid, novo_sf, nova_nat))
+                
+                if calc:
+                    # 3.2) Uma leitura só: pega os valores atuais para TODOS os ids
+                    ids = [rid for rid, _, _ in calc]
+                    atuais = (self.db.sb.table("lancamento")
+                                .select("id,saldo_final,natureza_saldo")
+                                .in_("id", ids)
+                                .execute().data) or []
+                    curmap = {r["id"]: (float(r.get("saldo_final") or 0), (r.get("natureza_saldo") or "").upper()) for r in atuais}
+                
+                    # 3.3) Só agenda update quando tiver diferença real
+                    for rid, novo_sf, nova_nat in calc:
+                        sf_atual, nat_atual = curmap.get(rid, (None, None))
+                        if sf_atual is None or (sf_atual != float(novo_sf)) or (nat_atual != nova_nat):
+                            updates.append({
+                                "id": rid,
+                                "saldo_final": novo_sf,
+                                "natureza_saldo": nova_nat,
+                            })
+                
+                # 3.4) Aplica os PATCHs em paralelo (rápido)
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                
+                def _patch_one(sb_client, u):
+                    return (sb_client.table("lancamento")
+                            .update({"saldo_final": u["saldo_final"], "natureza_saldo": u["natureza_saldo"]})
+                            .eq("id", u["id"]).execute())
+                
+                def _apply_updates_parallel(sb_client, updates_list, max_workers=8, chunk_size=64):
+                    for i in range(0, len(updates_list), chunk_size):
+                        chunk = updates_list[i:i+chunk_size]
+                        with ThreadPoolExecutor(max_workers=max_workers) as exe:
+                            futs = [exe.submit(_patch_one, sb_client, u) for u in chunk]
+                            for f in as_completed(futs):
+                                _ = f.result()
+                
                 if updates:
-                    # 1 chamada ao backend; 'returning=minimal' evita tráfego extra
-                    self.db.sb.table("lancamento").upsert(updates, on_conflict="id").execute()
+                    _apply_updates_parallel(self.db.sb, updates)
 
             else:
                 sql = """
@@ -6798,6 +6849,7 @@ class MainWindow(QMainWindow):
 
                         # --- DEDUPE condicional ---
                         num_doc_n = (num_doc or "").replace(" ", "")
+                        
                         is_folha = (str(tipo_doc).strip() == "5") or (str(historico or "").strip().upper().startswith("FOLHA"))
                         
                         if is_folha and id_participante:

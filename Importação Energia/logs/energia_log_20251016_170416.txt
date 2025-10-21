@@ -1,0 +1,1769 @@
+🧾 Geração de TXT — 16/10/2025
+⏳ Início: 16:17:23 • 2 subpastas • 300 PDFs
+
+👤 Cleuber  —  ⏱️ 1168s (16:17:23 → 16:36:51)
+📄 Talão 1 — 10036854415 .Fazenda Primaveira Retiro . Casa da Beiro do Lago . Wandres .ref 02.25 venc 28.02.25.pdf
+🗓️ Venc.: 28/02/2025  •  💰 R$ 27,30  •  🧾 NF: 135316110
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:26  •  📌 Talão processado
+
+📄 Talão 2 — 10036854415 .Fazenda Primaveira Retiro . Casa da Beiro do Lago . Wandres .ref 05.25 venc 29.05.25.pdf
+🗓️ Venc.: 29/05/2025  •  💰 R$ 56,14  •  🧾 NF: 146584426
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:32  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 10036854415 .Fazenda Primaveira Retiro . Casa da Beiro do Lago . Wandres .ref 06.25 venc 30.06.25.pdf; pulando.
+📄 Talão 4 — 10036854415 .Fazenda Primaveira Retiro . Casa da Beiro do Lago . Wandres .ref 07.25 venc 31.07.25.pdf
+🗓️ Venc.: 31/07/2025  •  💰 R$ 62,09  •  🧾 NF: 154345495
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:41  •  📌 Talão processado
+
+📄 Talão 5 — 10036854415 .Fazenda Primaveira Retiro . Casa da Beiro do Lago . Wandres .ref 08.25 venc 29.08.25.pdf
+🗓️ Venc.: 29/08/2025  •  💰 R$ 45,14  •  🧾 NF: 158435857
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:45  •  📌 Talão processado
+
+📄 Talão 6 — 10037038786. Fazenda Retiro. Carvoeira ref 01.25 VENC 29.01.25.pdf
+🗓️ Venc.: 29/01/2025  •  💰 R$ 241,27  •  🧾 NF: 131521143
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:49  •  📌 Talão processado
+
+📄 Talão 7 — 10037038786. Fazenda Retiro. Carvoeira ref 02.25 VENC 28.02.25.pdf
+🗓️ Venc.: 28/02/2025  •  💰 R$ 150,95  •  🧾 NF: 135316109
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:17:52  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 10037038786. Fazenda Retiro. Carvoeira ref 03.25 VENC 31.03.25.pdf; pulando.
+📄 Talão 9 — 1010206-9. Fazenda Frutacc . Sede venc 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 8.693,42  •  🧾 NF: 003912236
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:17:59  •  📌 Talão processado
+
+📄 Talão 10 — 1010206-9. Fazenda Frutacc . Sede venc 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 5.744,45  •  🧾 NF: 004111235
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:03  •  📌 Talão processado
+
+📄 Talão 11 — 1010206-9. Fazenda Frutacc . Sede venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 6.201,66  •  🧾 NF: 004317130
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:08  •  📌 Talão processado
+
+📄 Talão 12 — 1010206-9. Fazenda Frutacc . Sede venc 01.05.25 ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 9.126,33  •  🧾 NF: 004513403
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:11  •  📌 Talão processado
+
+📄 Talão 13 — 1010206-9. Fazenda Frutacc . Sede venc 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 8.226,43  •  🧾 NF: 004717049
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:15  •  📌 Talão processado
+
+📄 Talão 14 — 1010206-9. Fazenda Frutacc . Sede venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 7.262,99  •  🧾 NF: 004926367
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:18  •  📌 Talão processado
+
+📄 Talão 15 — 1010206-9. Fazenda Frutacc . Sede venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 7.589,82  •  🧾 NF: 005137266
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:22  •  📌 Talão processado
+
+📄 Talão 16 — 1010206-9. Fazenda Frutacc . Sede venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 117,98  •  🧾 NF: 005350680
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:26  •  📌 Talão processado
+
+📄 Talão 17 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.02.25 .ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 532,32  •  🧾 NF: 003898238
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:31  •  📌 Talão processado
+
+📄 Talão 18 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.03.25 .ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 518,82  •  🧾 NF: 004107762
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:34  •  📌 Talão processado
+
+📄 Talão 19 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.04.25 .ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 30.440,71  •  🧾 NF: 004319963
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:39  •  📌 Talão processado
+
+📄 Talão 20 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.05.25 .ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 527,05  •  🧾 NF: 004499318
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:43  •  📌 Talão processado
+
+📄 Talão 21 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.06.25 .ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 2.258,16  •  🧾 NF: 004740409
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:47  •  📌 Talão processado
+
+📄 Talão 22 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.07.25 .ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 13.789,28  •  🧾 NF: 004911779
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:51  •  📌 Talão processado
+
+📄 Talão 23 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.08.25 .ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 864,77  •  🧾 NF: 005109692
+🏢 Fornecedor: Energisa Tocantins
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:54  •  📌 Talão processado
+
+📄 Talão 24 — 1021419-5. Fazenda Frutacc II. Bombeamento da Dren. Módulo 09 venc 01.09.25 .ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 972,28  •  🧾 NF: 005329514
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:18:57  •  📌 Talão processado
+
+📄 Talão 25 — 1040228-7. Fazenda Siganna venc 18.07.2025 ref 07.25.PDF
+🗓️ Venc.: 18/07/2025  •  💰 R$ 16.241,11  •  🧾 NF: 005109694
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:01  •  📌 Talão processado
+
+📄 Talão 26 — 1040228-7. Fazenda Siganna venc 20.02 ref 02.25.PDF
+🗓️ Venc.: 20/02/2025  •  💰 R$ 572,48  •  🧾 NF: 004107764
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:05  •  📌 Talão processado
+
+📄 Talão 27 — 1040228-7. Fazenda Siganna venc 20.06.2025 ref 06.25.PDF
+🗓️ Venc.: 20/06/2025  •  💰 R$ 576,15  •  🧾 NF: 004911781
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:08  •  📌 Talão processado
+
+📄 Talão 28 — 1040228-7. Fazenda Siganna venc 21.01 ref 01.25.PDF
+🗓️ Venc.: 21/01/2025  •  💰 R$ 587,39  •  🧾 NF: 003898240
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:11  •  📌 Talão processado
+
+📄 Talão 29 — 1040228-7. Fazenda Siganna venc 21.05 ref 05.25.pdf
+🗓️ Venc.: 21/05/2025  •  💰 R$ 580,75  •  🧾 NF: 004713603
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:13  •  📌 Talão processado
+
+📄 Talão 30 — 1040228-7. Fazenda Siganna venc 21.08.2025 ref 08.25.PDF
+🗓️ Venc.: 21/08/2025  •  💰 R$ 12.517,36  •  🧾 NF: 005329516
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:17  •  📌 Talão processado
+
+📄 Talão 31 — 1040228-7. Fazenda Siganna venc 22.04 ref 04.25.PDF
+🗓️ Venc.: 22/04/2025  •  💰 R$ 581,57  •  🧾 NF: 004499320
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:21  •  📌 Talão processado
+
+📄 Talão 32 — 1040228-7. Fazenda Siganna venc 22.06.2025 ref 06.25.pdf
+🗓️ Venc.: 22/06/2025  •  💰 R$ 576,15  •  🧾 NF: 004911781
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:25  •  📌 Talão processado
+
+📄 Talão 33 — 1040228-7. Fazenda Siganna venc 24.03 ref 03.25.pdf
+🗓️ Venc.: 24/03/2025  •  💰 R$ 587,39  •  🧾 NF: 004319965
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:19:28  •  📌 Talão processado
+
+📄 Talão 34 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 16.01 ref 01.25.pdf
+🗓️ Venc.: 16/01/2025  •  💰 R$ 35,19  •  🧾 NF: 1487948
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:41  •  📌 Talão processado
+
+📄 Talão 35 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 16.04 ref 04.25.pdf
+🗓️ Venc.: 16/04/2025  •  💰 R$ 43,80  •  🧾 NF: 1623476
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:44  •  📌 Talão processado
+
+📄 Talão 36 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 16.05 ref 05.25.pdf
+🗓️ Venc.: 16/05/2025  •  💰 R$ 38,59  •  🧾 NF: 1667379
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:47  •  📌 Talão processado
+
+📄 Talão 37 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 16.06 ref 06.25.pdf
+🗓️ Venc.: 16/06/2025  •  💰 R$ 35,12  •  🧾 NF: 1710599
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:50  •  📌 Talão processado
+
+📄 Talão 38 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 16.07.2025 ref 07.25.pdf
+🗓️ Venc.: 16/07/2025  •  💰 R$ 37,95  •  🧾 NF: 1753253
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:53  •  📌 Talão processado
+
+📄 Talão 39 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 17.02 ref 02.25.pdf
+🗓️ Venc.: 17/02/2025  •  💰 R$ 37,61  •  🧾 NF: 1533563
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:19:56  •  📌 Talão processado
+
+📄 Talão 40 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 17.03 ref 03.25.pdf
+🗓️ Venc.: 17/03/2025  •  💰 R$ 38,32  •  🧾 NF: 1578221
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:00  •  📌 Talão processado
+
+📄 Talão 41 — 120101087 Fazenda Aliança. Casa do Lado da Balança venc 18.08.2025 ref 08.25.pdf
+🗓️ Venc.: 18/08/2025  •  💰 R$ 38,66  •  🧾 NF: 1794769
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:03  •  📌 Talão processado
+
+📄 Talão 42 — 120101502 Fazenda Aliança. Balança e Oficina venc 16.01 ref 01.25.pdf
+🗓️ Venc.: 16/01/2025  •  💰 R$ 273,95  •  🧾 NF: 1487977
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:15  •  📌 Talão processado
+
+📄 Talão 43 — 120101502 Fazenda Aliança. Balança e Oficina venc 16.04 ref 04.25.pdf
+🗓️ Venc.: 16/04/2025  •  💰 R$ 489,76  •  🧾 NF: 1623347
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:18  •  📌 Talão processado
+
+📄 Talão 44 — 120101502 Fazenda Aliança. Balança e Oficina venc 16.05 ref 05.25.pdf
+🗓️ Venc.: 16/05/2025  •  💰 R$ 594,15  •  🧾 NF: 1667452
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:21  •  📌 Talão processado
+
+📄 Talão 45 — 120101502 Fazenda Aliança. Balança e Oficina venc 16.06 ref 06.25.pdf
+🗓️ Venc.: 16/06/2025  •  💰 R$ 416,66  •  🧾 NF: 1710674
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:24  •  📌 Talão processado
+
+📄 Talão 46 — 120101502 Fazenda Aliança. Balança e Oficina venc 16.07.2025 ref 07.25.pdf
+🗓️ Venc.: 16/07/2025  •  💰 R$ 389,73  •  🧾 NF: 1753328
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:27  •  📌 Talão processado
+
+📄 Talão 47 — 120101502 Fazenda Aliança. Balança e Oficina venc 17.02 ref 02.25.pdf
+🗓️ Venc.: 17/02/2025  •  💰 R$ 394,69  •  🧾 NF: 1533638
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:30  •  📌 Talão processado
+
+📄 Talão 48 — 120101502 Fazenda Aliança. Balança e Oficina venc 17.03 ref 03.25.pdf
+🗓️ Venc.: 17/03/2025  •  💰 R$ 421,56  •  🧾 NF: 1578304
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:33  •  📌 Talão processado
+
+📄 Talão 49 — 120101502 Fazenda Aliança. Balança e Oficina venc 18.08.2025 ref 08.25.pdf
+🗓️ Venc.: 18/08/2025  •  💰 R$ 474,28  •  🧾 NF: 1794827
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:37  •  📌 Talão processado
+
+📄 Talão 50 — 120101546 Fazenda Aliança .Deposito venc 12.05 ref 05.25.pdf
+🗓️ Venc.: 12/05/2025  •  💰 R$ 97,89  •  🧾 NF: 1667365
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:40  •  📌 Talão processado
+
+📄 Talão 51 — 120101546 Fazenda Aliança .Deposito venc 14.07.2025 ref 07.25.pdf
+🗓️ Venc.: 14/07/2025  •  💰 R$ 100,46  •  🧾 NF: 1753434
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:43  •  📌 Talão processado
+
+📄 Talão 52 — 120101546 Fazenda Aliança .Deposito venc 14.08.2025 ref 07.25.pdf
+🗓️ Venc.: 14/08/2025  •  💰 R$ 128,45  •  🧾 NF: 1794758
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:45  •  📌 Talão processado
+
+📄 Talão 53 — 120101546 Fazenda Aliança .Deposito venc 14.08.2025 ref 08.25.pdf
+🗓️ Venc.: 14/08/2025  •  💰 R$ 128,45  •  🧾 NF: 1794758
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:48  •  📌 Talão processado
+
+📄 Talão 54 — 120101546 Fazenda Aliança .Deposito venc 16.06 ref 06.25.pdf
+🗓️ Venc.: 16/06/2025  •  💰 R$ 98,53  •  🧾 NF: 1710582
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:20:53  •  📌 Talão processado
+
+📄 Talão 55 — 120101560 Fazenda Aliança. Sementeira. ref 01.25 venc 16.01.25.pdf
+🗓️ Venc.: 16/01/2025  •  💰 R$ 1.671,10  •  🧾 NF: 1487946
+🏢 Fornecedor: Companhia Hidroelétrica
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:04  •  📌 Talão processado
+
+📄 Talão 56 — 120101560 Fazenda Aliança. Sementeira. ref 02.25 venc 17.02.25.pdf
+🗓️ Venc.: 17/02/2025  •  💰 R$ 82,07  •  🧾 NF: 1533561
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:08  •  📌 Talão processado
+
+📄 Talão 57 — 120101560 Fazenda Aliança. Sementeira. ref 03.25 venc 17.03.25.pdf
+🗓️ Venc.: 17/03/2025  •  💰 R$ 135,44  •  🧾 NF: 1578219
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:12  •  📌 Talão processado
+
+📄 Talão 58 — 120101560 Fazenda Aliança. Sementeira. ref 04.25 venc 16.04.25.pdf
+🗓️ Venc.: 16/04/2025  •  💰 R$ 1.550,63  •  🧾 NF: 1623474
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:16  •  📌 Talão processado
+
+📄 Talão 59 — 120101560 Fazenda Aliança. Sementeira. ref 05.25 venc 16.05.25.pdf
+🗓️ Venc.: 16/05/2025  •  💰 R$ 1.120,42  •  🧾 NF: 1667377
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:19  •  📌 Talão processado
+
+📄 Talão 60 — 120101560 Fazenda Aliança. Sementeira. ref 06.25 venc 16.06.25.pdf
+🗓️ Venc.: 16/06/2025  •  💰 R$ 83,33  •  🧾 NF: 1710597
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:22  •  📌 Talão processado
+
+📄 Talão 61 — 120101560 Fazenda Aliança. Sementeira. ref 07.25 venc 16.07.25.pdf
+🗓️ Venc.: 16/07/2025  •  💰 R$ 523,31  •  🧾 NF: 1753448
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:25  •  📌 Talão processado
+
+📄 Talão 62 — 120101560 Fazenda Aliança. Sementeira. ref 08.25 venc 18.08.25.pdf
+🗓️ Venc.: 18/08/2025  •  💰 R$ 653,00  •  🧾 NF: 1794767
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:28  •  📌 Talão processado
+
+📄 Talão 63 — 120401546 Fazenda Aliança .Deposito venc 11.02 ref 02.25.pdf
+🗓️ Venc.: 11/02/2025  •  💰 R$ 97,16  •  🧾 NF: 1533548
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:32  •  📌 Talão processado
+
+📄 Talão 64 — 120401546 Fazenda Aliança .Deposito venc 11.03 ref 03.25.pdf
+🗓️ Venc.: 11/03/2025  •  💰 R$ 95,07  •  🧾 NF: 1578207
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:34  •  📌 Talão processado
+
+📄 Talão 65 — 120401546 Fazenda Aliança .Deposito venc 14.01 ref 01.25.pdf
+🗓️ Venc.: 14/01/2025  •  💰 R$ 96,44  •  🧾 NF: 1487943
+🏢 Fornecedor: Chesopo
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:43  •  📌 Talão processado
+
+📄 Talão 66 — 120401546 Fazenda Aliança .Deposito venc 14.04 ref 04.25.pdf
+🗓️ Venc.: 14/04/2025  •  💰 R$ 96,40  •  🧾 NF: 1623462
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:47  •  📌 Talão processado
+
+📄 Talão 67 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 27.02.25 ref 02.25.pdf
+🗓️ Venc.: 27/02/2025  •  💰 R$ 71,31  •  🧾 NF: 1565492
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:51  •  📌 Talão processado
+
+📄 Talão 68 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 28.01.25 ref 01.25.pdf
+🗓️ Venc.: 28/01/2025  •  💰 R$ 132,26  •  🧾 NF: 1519639
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:54  •  📌 Talão processado
+
+📄 Talão 69 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 28.03.25 ref 03.25.pdf
+🗓️ Venc.: 28/03/2025  •  💰 R$ 69,65  •  🧾 NF: 1608329
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:21:57  •  📌 Talão processado
+
+📄 Talão 70 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 28.08.25 ref 08.25.pdf
+🗓️ Venc.: 28/08/2025  •  💰 R$ 21.245,57  •  🧾 NF: 1827417
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:01  •  📌 Talão processado
+
+📄 Talão 71 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 29.07.25 ref 07.25.pdf
+🗓️ Venc.: 29/07/2025  •  💰 R$ 21.633,26  •  🧾 NF: 1784581
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:06  •  📌 Talão processado
+
+📄 Talão 72 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 30.04.25 ref 04.25.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 83,09  •  🧾 NF: 1655865
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:09  •  📌 Talão processado
+
+📄 Talão 73 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 30.05.25 ref 05.25.pdf
+🗓️ Venc.: 30/05/2025  •  💰 R$ 183,87  •  🧾 NF: 1700175
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:15  •  📌 Talão processado
+
+📄 Talão 74 — 210200119 .Fazenda JB . IMOVEL NOVO CLEUBER ( JONAS BORGES) .venc 30.06.25 ref 06.25.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 76,10  •  🧾 NF: 1741014
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:19  •  📌 Talão processado
+
+📄 Talão 75 — 210200155 Fazenda Aliança. Sede.venc 27.02 ref 02.25.pdf
+🗓️ Venc.: 28/02/2025  •  💰 R$ 242,89  •  🧾 NF: 1565491
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:23  •  📌 Talão processado
+
+📄 Talão 76 — 210200155 Fazenda Aliança. Sede.venc 28.01 ref 01.25.pdf
+🗓️ Venc.: 28/01/2025  •  💰 R$ 182,52  •  🧾 NF: 1519638
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:26  •  📌 Talão processado
+
+📄 Talão 77 — 210200155 Fazenda Aliança. Sede.venc 28.03 ref 03.25.pdf
+🗓️ Venc.: 28/03/2025  •  💰 R$ 233,23  •  🧾 NF: 1608334
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:31  •  📌 Talão processado
+
+📄 Talão 78 — 210200155 Fazenda Aliança. Sede.venc 28.08.2025 ref 08.25.pdf
+🗓️ Venc.: 28/08/2025  •  💰 R$ 257,12  •  🧾 NF: 1826973
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:34  •  📌 Talão processado
+
+📄 Talão 79 — 210200155 Fazenda Aliança. Sede.venc 29.07.2025 ref 07.25.pdf
+🗓️ Venc.: 29/07/2025  •  💰 R$ 340,36  •  🧾 NF: 1784582
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:37  •  📌 Talão processado
+
+📄 Talão 80 — 210200155 Fazenda Aliança. Sede.venc 30.04 ref 04.25.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 245,69  •  🧾 NF: 1655866
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:42  •  📌 Talão processado
+
+📄 Talão 81 — 210200155 Fazenda Aliança. Sede.venc 30.05 ref 05.25.pdf
+🗓️ Venc.: 30/05/2025  •  💰 R$ 241,01  •  🧾 NF: 1700174
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:44  •  📌 Talão processado
+
+📄 Talão 82 — 210200155 Fazenda Aliança. Sede.venc 30.06.2025 ref 06.25.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 248,10  •  🧾 NF: 1741013
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:49  •  📌 Talão processado
+
+📄 Talão 83 — 210200156 Fazenda Aliança. Irrigação de Melancia Pivô 10 - Venc 28.08.2025 ref 08.25.pdf
+🗓️ Venc.: 28/08/2025  •  💰 R$ 3.060,22  •  🧾 NF: 1826972
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:52  •  📌 Talão processado
+
+📄 Talão 84 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 27.02 ref 02.25.pdf
+🗓️ Venc.: 27/02/2025  •  💰 R$ 102,02  •  🧾 NF: 1565490
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:22:55  •  📌 Talão processado
+
+📄 Talão 85 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 28.01 ref 01.25.pdf
+🗓️ Venc.: 28/01/2025  •  💰 R$ 63,22  •  🧾 NF: 1519635
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:00  •  📌 Talão processado
+
+📄 Talão 86 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 28.03 ref 03.25.pdf
+🗓️ Venc.: 28/03/2025  •  💰 R$ 183,78  •  🧾 NF: 1608328
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:03  •  📌 Talão processado
+
+📄 Talão 87 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 29.07.2025 ref 07.25.pdf
+🗓️ Venc.: 29/07/2025  •  💰 R$ 2.787,17  •  🧾 NF: 1784583
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:06  •  📌 Talão processado
+
+📄 Talão 88 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 30.04 ref 04.25.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 367,78  •  🧾 NF: 1655867
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:09  •  📌 Talão processado
+
+📄 Talão 89 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 30.05 ref 05.25.pdf
+🗓️ Venc.: 30/05/2025  •  💰 R$ 2.540,79  •  🧾 NF: 1700168
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:13  •  📌 Talão processado
+
+📄 Talão 90 — 210200156 Fazenda Aliança. Irrigação de Melancia. venc 30.06.2025 ref 06.25.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 2.013,25  •  🧾 NF: 1741012
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:16  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 210200229 Fazenda Aliança. Pivô 03, 08, 09 - Venc 16.09.25 ref 08.25.pdf; pulando.
+📄 Talão 92 — 210200229 Fazenda Aliança. Pivô 03.venc 16.07.25 ref 06.25.pdf
+🗓️ Venc.: 16/07/2025  •  💰 R$ 603,22  •  🧾 NF: 1741011
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:23  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 210200229 Fazenda Aliança. Pivô 03.venc 17.02.25 ref 01.25.pdf; pulando.
+⚠️ Valor zero detectado em 210200229 Fazenda Aliança. Pivô 03.venc 17.03.25 ref 02.25.pdf; pulando.
+⚠️ Valor zero detectado em 210200229 Fazenda Aliança. Pivô 03.venc 18.08.25 ref 07.25.pdf; pulando.
+📄 Talão 96 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 16.04 .ref 03.25.pdf
+🗓️ Venc.: 16/04/2025  •  💰 R$ 153,13  •  🧾 NF: 1608331
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:40  •  📌 Talão processado
+
+📄 Talão 97 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 16.05..ref 04.25.pdf
+🗓️ Venc.: 16/05/2025  •  💰 R$ 302,41  •  🧾 NF: 1655868
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:43  •  📌 Talão processado
+
+📄 Talão 98 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 16.06..ref 05.25.pdf
+🗓️ Venc.: 16/06/2025  •  💰 R$ 770,40  •  🧾 NF: 1700171
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:47  •  📌 Talão processado
+
+📄 Talão 99 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 16.07.2025..ref 06.25.pdf
+🗓️ Venc.: 16/07/2025  •  💰 R$ 797,33  •  🧾 NF: 1741010
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:52  •  📌 Talão processado
+
+📄 Talão 100 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 16.09.2025..ref 08.25.pdf
+🗓️ Venc.: 16/09/2025  •  💰 R$ 4.697,11  •  🧾 NF: 1826971
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:23:56  •  📌 Talão processado
+
+📄 Talão 101 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 17.02 .ref 01.25.pdf
+🗓️ Venc.: 17/02/2025  •  💰 R$ 199,15  •  🧾 NF: 1519637
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:01  •  📌 Talão processado
+
+📄 Talão 102 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 17.03 .ref 02.25.pdf
+🗓️ Venc.: 17/03/2025  •  💰 R$ 158,89  •  🧾 NF: 1565489
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:05  •  📌 Talão processado
+
+📄 Talão 103 — 210200232 Fazenda Aliança. Pivôs 01 e 02.venc 18.08.2025..ref 07.25.pdf
+🗓️ Venc.: 18/08/2025  •  💰 R$ 647,68  •  🧾 NF: 1784577
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:10  •  📌 Talão processado
+
+📄 Talão 104 — 210200233 .Fazenda Aliança . Pivo 05 e 06 - Venc 28.08.25 ref 08.25.pdf
+🗓️ Venc.: 28/08/2025  •  💰 R$ 76,45  •  🧾 NF: 1826970
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:16  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 210200233 .Fazenda Aliança . Pivo 06.venc 28.01.25 ref 01.25.pdf; pulando.
+📄 Talão 106 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 27.02 ref 02.25.pdf
+🗓️ Venc.: 27/02/2025  •  💰 R$ 283,01  •  🧾 NF: 1565487
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:27  •  📌 Talão processado
+
+📄 Talão 107 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 28.01 ref 01.25.pdf
+🗓️ Venc.: 28/01/2025  •  💰 R$ 228,67  •  🧾 NF: 1519633
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:33  •  📌 Talão processado
+
+📄 Talão 108 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 28.03 ref 03.25.pdf
+🗓️ Venc.: 28/03/2025  •  💰 R$ 258,91  •  🧾 NF: 1608333
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:37  •  📌 Talão processado
+
+📄 Talão 109 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 29.07.2025 ref 07.25.pdf
+🗓️ Venc.: 29/07/2025  •  💰 R$ 660,23  •  🧾 NF: 1784580
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:42  •  📌 Talão processado
+
+📄 Talão 110 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 30.04 ref 04.25.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 341,99  •  🧾 NF: 1655870
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:46  •  📌 Talão processado
+
+📄 Talão 111 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 30.05 ref 05.25.pdf
+🗓️ Venc.: 30/05/2025  •  💰 R$ 565,66  •  🧾 NF: 1700169
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:51  •  📌 Talão processado
+
+📄 Talão 112 — 210200234 Fazenda Aliança. Pivôs 04 e 05.venc 30.06 ref 06.25.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 817,99  •  🧾 NF: 1741008
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:55  •  📌 Talão processado
+
+📄 Talão 113 — 210200234 Fazenda Aliança. Pivôs 04 e 07.venc 28.08.2025 ref 08.25.pdf
+🗓️ Venc.: 28/08/2025  •  💰 R$ 605,73  •  🧾 NF: 1826969
+🏢 Fornecedor: Companhia Hidroelétrica São Patrício
+🧩 Participante: 01377555000110  •  🏠 Imóvel: 001
+✅ OK 16:24:59  •  📌 Talão processado
+
+📄 Talão 114 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 28.02.25 ref 02.25 . pdf.pdf
+🗓️ Venc.: 28/02/2025  •  💰 R$ 90,38  •  🧾 NF: 135315842
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:02  •  📌 Talão processado
+
+📄 Talão 115 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 29.05.25 ref 05.25 . pdf.pdf
+🗓️ Venc.: 29/05/2025  •  💰 R$ 248,82  •  🧾 NF: 146584419
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:06  •  📌 Talão processado
+
+📄 Talão 116 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 29.08.25 ref 08.25. pdf.pdf
+🗓️ Venc.: 29/08/2025  •  💰 R$ 253,97  •  🧾 NF: 158435852
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:09  •  📌 Talão processado
+
+📄 Talão 117 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 30.04.25 ref 04.25 . pdf.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 129,57  •  🧾 NF: 142819627
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:13  •  📌 Talão processado
+
+📄 Talão 118 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 30.06.25 ref 06.25 . pdf.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 661,74  •  🧾 NF: 150397293
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:17  •  📌 Talão processado
+
+📄 Talão 119 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 31.03.25 ref 03.25 . pdf.pdf
+🗓️ Venc.: 31/03/2025  •  💰 R$ 149,70  •  🧾 NF: 138868088
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:23  •  📌 Talão processado
+
+📄 Talão 120 — 2560007685. Fazenda Primavera. Fazenda Primavera Retiro venc 31.07.25 ref 07.25. pdf.pdf
+🗓️ Venc.: 31/07/2025  •  💰 R$ 283,31  •  🧾 NF: 154345131
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:46  •  📌 Talão processado
+
+📄 Talão 121 — 2560007740. Fazenda Primavera. Sede venc 29.01.25 ref 01.25 . pdf.pdf
+🗓️ Venc.: 29/01/2025  •  💰 R$ 1.526,05  •  🧾 NF: 131521141
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:53  •  📌 Talão processado
+
+📄 Talão 122 — 2560007740. Fazenda Primavera. Sede venc 29.05.25 ref 05.25 . pdf.pdf
+🗓️ Venc.: 29/05/2025  •  💰 R$ 3.919,10  •  🧾 NF: 146584421
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:25:59  •  📌 Talão processado
+
+📄 Talão 123 — 2560007740. Fazenda Primavera. Sede venc 29.08.25 ref 08.25. pdf.pdf
+🗓️ Venc.: 29/08/2025  •  💰 R$ 4.524,01  •  🧾 NF: 158435855
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:26:06  •  📌 Talão processado
+
+📄 Talão 124 — 2560007740. Fazenda Primavera. Sede venc 30.04.25 ref 04.25 . pdf.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 1.970,13  •  🧾 NF: 142819629
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:26:13  •  📌 Talão processado
+
+📄 Talão 125 — 2560007740. Fazenda Primavera. Sede venc 30.06.25 ref 06.25 . pdf.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 5.843,49  •  🧾 NF: 150397295
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:26:20  •  📌 Talão processado
+
+📄 Talão 126 — 2560007740. Fazenda Primavera. Sede venc 31.03.25 ref 03.25 . pdf.pdf
+🗓️ Venc.: 31/03/2025  •  💰 R$ 4.617,05  •  🧾 NF: 138868090
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:26:28  •  📌 Talão processado
+
+📄 Talão 127 — 2560007740. Fazenda Primavera. Sede venc 31.07.25 ref 07.25. pdf.pdf
+🗓️ Venc.: 31/07/2025  •  💰 R$ 4.515,80  •  🧾 NF: 154345133
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:26:34  •  📌 Talão processado
+
+📄 Talão 128 — 2820254 -7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.09.25 ref 07.2025.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 48.447,40  •  🧾 NF: 005296242
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:26:41  •  📌 Talão processado
+
+📄 Talão 129 — 2820254 -7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.09.25 ref 07.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 7.217,26  •  🧾 NF: 005271177
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:26:48  •  📌 Talão processado
+
+📄 Talão 130 — 2820254 -7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.10.25 ref 08.25.pdf
+🗓️ Venc.: 01/10/2025  •  💰 R$ 45.632,78  •  🧾 NF: 005484680
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:26:51  •  📌 Talão processado
+
+📄 Talão 131 — 2820254-7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.03.25 ref 01.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 20.017,87  •  🧾 NF: 004037545
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:26:57  •  📌 Talão processado
+
+📄 Talão 132 — 2820254-7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.04.25 ref 02.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 11.360,62  •  🧾 NF: 004237254
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:00  •  📌 Talão processado
+
+📄 Talão 133 — 2820254-7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.05.25 ref 03.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 1.365,09  •  🧾 NF: 004437791
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:05  •  📌 Talão processado
+
+📄 Talão 134 — 2820254-7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.06.25 ref 04.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 40.195,27  •  🧾 NF: 004640299
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:09  •  📌 Talão processado
+
+📄 Talão 135 — 2820254-7. Fazenda Frutacc I. Irrigação do Traffo 02. venc 01.08.25 ref 06.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 46.151,40  •  🧾 NF: 005049060
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:15  •  📌 Talão processado
+
+📄 Talão 136 — 2840217-0. Fazenda Frutacc. Balança venc 01.02.25 ref 01.25. pdf.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 1.067,85  •  🧾 NF: 003912234
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:18  •  📌 Talão processado
+
+📄 Talão 137 — 2840217-0. Fazenda Frutacc. Balança venc 01.03.25 ref 02.25. pdf.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 951,02  •  🧾 NF: 004111243
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:22  •  📌 Talão processado
+
+📄 Talão 138 — 2840217-0. Fazenda Frutacc. Balança venc 01.04.25 ref 03.25. pdf.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 1.100,01  •  🧾 NF: 004317087
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:25  •  📌 Talão processado
+
+📄 Talão 139 — 2840217-0. Fazenda Frutacc. Balança venc 01.05.25 ref 04.25. pdf.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 1.120,77  •  🧾 NF: 004513380
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:29  •  📌 Talão processado
+
+📄 Talão 140 — 2840217-0. Fazenda Frutacc. Balança venc 01.06.25 ref 05.25. pdf.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 1.354,06  •  🧾 NF: 004717012
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:32  •  📌 Talão processado
+
+📄 Talão 141 — 2840217-0. Fazenda Frutacc. Balança venc 01.07.25 ref 07.25. pdf.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 947,12  •  🧾 NF: 004926332
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:36  •  📌 Talão processado
+
+📄 Talão 142 — 2840217-0. Fazenda Frutacc. Balança venc 01.08.25 ref 07.25. pdf.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 847,84  •  🧾 NF: 005137235
+🏢 Fornecedor: Energisa Tocantins
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:38  •  📌 Talão processado
+
+📄 Talão 143 — 2840217-0. Fazenda Frutacc. Balança venc 01.09.25 ref 08.25. pdf.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 35,39  •  🧾 NF: 005350667
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:41  •  📌 Talão processado
+
+📄 Talão 144 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.02.25.REF 01.2025.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 1.717,39  •  🧾 NF: 003898246
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:48  •  📌 Talão processado
+
+📄 Talão 145 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.03.25.REF 02.2025.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 17.840,02  •  🧾 NF: 004107771
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:52  •  📌 Talão processado
+
+📄 Talão 146 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.04.25.REF 03.2025.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 20.315,70  •  🧾 NF: 004319975
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:56  •  📌 Talão processado
+
+📄 Talão 147 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.05.25.REF 04.2025.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 1.699,94  •  🧾 NF: 004499327
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:27:59  •  📌 Talão processado
+
+📄 Talão 148 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.06.25.REF 05.2025.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 1.697,46  •  🧾 NF: 004713573
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:02  •  📌 Talão processado
+
+📄 Talão 149 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.07.25.REF 06.2025.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 1.684,10  •  🧾 NF: 004911788
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:05  •  📌 Talão processado
+
+📄 Talão 150 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.08.25.REF 07.2025.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 49.227,26  •  🧾 NF: 005109701
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:10  •  📌 Talão processado
+
+📄 Talão 151 — 2891630-2. Fazenda Frutacc III. Irrigação do Trafo 03. VENC 01.09.25.REF 08.2025.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 46.216,78  •  🧾 NF: 005329528
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:13  •  📌 Talão processado
+
+📄 Talão 152 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 1.791,57  •  🧾 NF: 004317122
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:19  •  📌 Talão processado
+
+📄 Talão 153 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 01.05.25 ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 97,03  •  🧾 NF: 004513369
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:23  •  📌 Talão processado
+
+📄 Talão 154 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 846,60  •  🧾 NF: 004926340
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:25  •  📌 Talão processado
+
+📄 Talão 155 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 1.270,61  •  🧾 NF: 005137228
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:28  •  📌 Talão processado
+
+📄 Talão 156 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 117,98  •  🧾 NF: 005350664
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:31  •  📌 Talão processado
+
+📄 Talão 157 — 2962620-7. Fazenda Frutacc III. Drenagem Trafo do Cocal venc 02.06.25 ref 05.25.pdf
+🗓️ Venc.: 02/06/2025  •  💰 R$ 5.177,35  •  🧾 NF: 004717003
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:34  •  📌 Talão processado
+
+📄 Talão 158 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 639,96  •  🧾 NF: 003839868
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:38  •  📌 Talão processado
+
+📄 Talão 159 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 6.362,67  •  🧾 NF: 004050419
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:43  •  📌 Talão processado
+
+📄 Talão 160 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 643,59  •  🧾 NF: 004249841
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:48  •  📌 Talão processado
+
+📄 Talão 161 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.05.25 ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 637,22  •  🧾 NF: 004439131
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:52  •  📌 Talão processado
+
+📄 Talão 162 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 636,32  •  🧾 NF: 004641440
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:56  •  📌 Talão processado
+
+📄 Talão 163 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 6.553,32  •  🧾 NF: 004849888
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:28:58  •  📌 Talão processado
+
+📄 Talão 164 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 33.895,17  •  🧾 NF: 005059981
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:29:01  •  📌 Talão processado
+
+📄 Talão 165 — 3077594-4. Fazenda Frutacc II. Drenagem do Módulo 02 venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 743,99  •  🧾 NF: 005272051
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:29:05  •  📌 Talão processado
+
+📄 Talão 166 — 3088047-0. Fazenda L3. Sede Venc 01.04..25 ref 02.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 8.367,49  •  🧾 NF: 004171019
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:09  •  📌 Talão processado
+
+📄 Talão 167 — 3088047-0. Fazenda L3. Sede Venc 01.06..25 ref 04.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 6.150,21  •  🧾 NF: 004568442
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:12  •  📌 Talão processado
+
+📄 Talão 168 — 3088047-0. Fazenda L3. Sede Venc 03.04..25 ref 03.25.pdf
+🗓️ Venc.: 03/04/2025  •  💰 R$ 8.962,38  •  🧾 NF: 004366003
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:17  •  📌 Talão processado
+
+📄 Talão 169 — 3088047-0. Fazenda L3. Sede Venc 04.07.25 ref 06.25.pdf
+🗓️ Venc.: 04/07/2025  •  💰 R$ 7.376,22  •  🧾 NF: 004983722
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:21  •  📌 Talão processado
+
+📄 Talão 170 — 3088047-0. Fazenda L3. Sede Venc 04.09.25 ref 08.25.pdf
+🗓️ Venc.: 04/09/2025  •  💰 R$ 6.861,41  •  🧾 NF: 005409290
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:25  •  📌 Talão processado
+
+📄 Talão 171 — 3088047-0. Fazenda L3. Sede Venc 05.06..25 ref 05.25.pdf
+🗓️ Venc.: 05/06/2025  •  💰 R$ 14.170,71  •  🧾 NF: 004774114
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:28  •  📌 Talão processado
+
+📄 Talão 172 — 3088047-0. Fazenda L3. Sede Venc 05.08.25 ref 07.25.pdf
+🗓️ Venc.: 05/08/2025  •  💰 R$ 4.376,50  •  🧾 NF: 005195393
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:29:31  •  📌 Talão processado
+
+📄 Talão 173 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.02.25.ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 22,46  •  🧾 NF: 003934664
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:35  •  📌 Talão processado
+
+📄 Talão 174 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.03.25.ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 1.506,53  •  🧾 NF: 004133822
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:39  •  📌 Talão processado
+
+📄 Talão 175 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.04.25.ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 1.929,88  •  🧾 NF: 004334283
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:42  •  📌 Talão processado
+
+📄 Talão 176 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.06.25.ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 2.258,16  •  🧾 NF: 004740409
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:45  •  📌 Talão processado
+
+📄 Talão 177 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.07.25.ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 2.116,12  •  🧾 NF: 004955243
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:49  •  📌 Talão processado
+
+📄 Talão 178 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.08.25.ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 1.114,16  •  🧾 NF: 005161776
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:54  •  📌 Talão processado
+
+📄 Talão 179 — 3089796-1. Fazenda Rio Formoso. Sede venc 01.09.25.ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 1.609,54  •  🧾 NF: 005380780
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:29:59  •  📌 Talão processado
+
+📄 Talão 180 — 3089796-1. Fazenda Rio Formoso. Sede venc 02.05.25.ref 04.25.pdf
+🗓️ Venc.: 02/05/2025  •  💰 R$ 2.197,88  •  🧾 NF: 004536300
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:03  •  📌 Talão processado
+
+📄 Talão 181 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 13.854,51  •  🧾 NF: 003934356
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:07  •  📌 Talão processado
+
+📄 Talão 182 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 17.052,57  •  🧾 NF: 004133846
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:11  •  📌 Talão processado
+
+📄 Talão 183 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 32.338,75  •  🧾 NF: 004334291
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:14  •  📌 Talão processado
+
+📄 Talão 184 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 97,31  •  🧾 NF: 004740424
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:17  •  📌 Talão processado
+
+📄 Talão 185 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 8.006,53  •  🧾 NF: 004955230
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:20  •  📌 Talão processado
+
+📄 Talão 186 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 12.057,92  •  🧾 NF: 005161786
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:30  •  📌 Talão processado
+
+📄 Talão 187 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 43.611,92  •  🧾 NF: 005380786
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:37  •  📌 Talão processado
+
+📄 Talão 188 — 3172983-3. Fazenda Rio Formoso - Trafo do Recalque venc 02.05.25 ref 04.25.pdf
+🗓️ Venc.: 02/05/2025  •  💰 R$ 12.574,49  •  🧾 NF: 004536196
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:41  •  📌 Talão processado
+
+📄 Talão 189 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 24.334,91  •  🧾 NF: 003934549
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:45  •  📌 Talão processado
+
+📄 Talão 190 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 27.931,74  •  🧾 NF: 004133847
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:48  •  📌 Talão processado
+
+📄 Talão 191 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 5.927,29  •  🧾 NF: 004334292
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:51  •  📌 Talão processado
+
+📄 Talão 192 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 97,31  •  🧾 NF: 004740425
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:54  •  📌 Talão processado
+
+📄 Talão 193 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 7.411,92  •  🧾 NF: 004935598
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:30:58  •  📌 Talão processado
+
+📄 Talão 194 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 16.491,29  •  🧾 NF: 005122915
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:31:03  •  📌 Talão processado
+
+📄 Talão 195 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 21.378,44  •  🧾 NF: 005336393
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:31:08  •  📌 Talão processado
+
+📄 Talão 196 — 3173963-4. Fazenda Rio Formoso. Irrigação do Trafo 01 venc 02.05.25 ref 04.25.pdf
+🗓️ Venc.: 02/05/2025  •  💰 R$ 97,03  •  🧾 NF: 004536197
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:31:12  •  📌 Talão processado
+
+📄 Talão 197 — 3316654-7 Bomba de Irrigaçao. Vera Cruz. venc 11.04.25 ref 04.25. pdf.pdf
+🗓️ Venc.: 11/04/2025  •  💰 R$ 963,91  •  🧾 NF: 004439136
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:31:15  •  📌 Talão processado
+
+📄 Talão 198 — 3316654-7 Bomba de Irrigaçao. Vera Cruz. venc 11.05.25 ref 05.25. pdf.pdf
+🗓️ Venc.: 14/05/2025  •  💰 R$ 29.203,33  •  🧾 NF: 004641445
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:31:19  •  📌 Talão processado
+
+📄 Talão 199 — 3316654-7 Bomba de Irrigaçao. Vera Cruz. venc 11.07.25 ref 07.25. pdf.pdf
+🗓️ Venc.: 11/07/2025  •  💰 R$ 20.489,27  •  🧾 NF: 005059964
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:31:23  •  📌 Talão processado
+
+📄 Talão 200 — 3316654-7 Bomba de Irrigaçao. Vera Cruz. venc 12.06.25 ref 06.25. pdf.pdf
+🗓️ Venc.: 12/06/2025  •  💰 R$ 954,91  •  🧾 NF: 004849893
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:31:26  •  📌 Talão processado
+
+📄 Talão 201 — 3316654-7 Bomba de Irrigaçao. Vera Cruz. venc 13.08.25 ref 08.25. pdf.pdf
+🗓️ Venc.: 13/08/2025  •  💰 R$ 20.840,76  •  🧾 NF: 005272068
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:31:30  •  📌 Talão processado
+
+📄 Talão 202 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 18.07.25 ref 07.25.pdf
+🗓️ Venc.: 18/07/2025  •  💰 R$ 33.651,79  •  🧾 NF: 005109602
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:34  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 20.02.25 ref 02.25.zerado.pdf; pulando.
+📄 Talão 204 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 20.06.25 ref 06.25.pdf
+🗓️ Venc.: 20/06/2025  •  💰 R$ 1.469,72  •  🧾 NF: 004911698
+🏢 Fornecedor: Energisa Tocantins
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:39  •  📌 Talão processado
+
+📄 Talão 205 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 21.01.25 ref 01.25.pdf
+🗓️ Venc.: 21/01/2025  •  💰 R$ 1.498,33  •  🧾 NF: 003898145
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:42  •  📌 Talão processado
+
+📄 Talão 206 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 21.08.25 ref 08.25.pdf
+🗓️ Venc.: 21/08/2025  •  💰 R$ 34.838,63  •  🧾 NF: 005329428
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:46  •  📌 Talão processado
+
+📄 Talão 207 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 22.04.25 ref 04.25.pdf
+🗓️ Venc.: 22/04/2025  •  💰 R$ 1.483,56  •  🧾 NF: 004499238
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:50  •  📌 Talão processado
+
+📄 Talão 208 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 22.05.25 ref 05.25.pdf
+🗓️ Venc.: 22/05/2025  •  💰 R$ 1.481,47  •  🧾 NF: 004713507
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:53  •  📌 Talão processado
+
+📄 Talão 209 — 3361457-9. Fazenda L3. UC recente. Transformador da Beira do Rio . venc 24.03.25 ref 03.25.pdf
+🗓️ Venc.: 24/03/2025  •  💰 R$ 1.240,87  •  🧾 NF: 004319884
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:31:57  •  📌 Talão processado
+
+📄 Talão 210 — 3385813-5. Fazenda L3. Beira do Rio. ref 02.25.venc 01.04.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 18.103,72  •  🧾 NF: 004170997
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:01  •  📌 Talão processado
+
+📄 Talão 211 — 3385813-5. Fazenda L3. Beira do Rio. ref 03.25.venc 03.04.25.pdf
+🗓️ Venc.: 03/04/2025  •  💰 R$ 7.927,50  •  🧾 NF: 004366017
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:04  •  📌 Talão processado
+
+📄 Talão 212 — 3385813-5. Fazenda L3. Beira do Rio. ref 04.25.venc 01.06.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 8.180,23  •  🧾 NF: 004568475
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:08  •  📌 Talão processado
+
+📄 Talão 213 — 3385813-5. Fazenda L3. Beira do Rio. ref 05.25.venc 05.06.2025.pdf
+🗓️ Venc.: 05/06/2025  •  💰 R$ 9.744,95  •  🧾 NF: 004774104
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:12  •  📌 Talão processado
+
+📄 Talão 214 — 3385813-5. Fazenda L3. Beira do Rio. ref 06.25.venc 04.07.2025.pdf
+🗓️ Venc.: 04/07/2025  •  💰 R$ 35.730,00  •  🧾 NF: 004983790
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:15  •  📌 Talão processado
+
+📄 Talão 215 — 3385813-5. Fazenda L3. Beira do Rio. ref 07.25.venc 05.08.2025.pdf
+🗓️ Venc.: 05/08/2025  •  💰 R$ 37.873,00  •  🧾 NF: 005195352
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:18  •  📌 Talão processado
+
+📄 Talão 216 — 3385813-5. Fazenda L3. Beira do Rio. ref 08.25.venc 04.09.2025.pdf
+🗓️ Venc.: 04/09/2025  •  💰 R$ 5.335,71  •  🧾 NF: 005409267
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:22  •  📌 Talão processado
+
+📄 Talão 217 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 6.114,98  •  🧾 NF: 004317079
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:25  •  📌 Talão processado
+
+📄 Talão 218 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 01.07.25 ref 06.25.PDF
+🗓️ Venc.: 01/07/2025  •  💰 R$ 4.998,11  •  🧾 NF: 004926337
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:28  •  📌 Talão processado
+
+📄 Talão 219 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 107,59  •  🧾 NF: 005137196
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:33  •  📌 Talão processado
+
+📄 Talão 220 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 01.09.25 ref 08.2025.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 117,98  •  🧾 NF: 005350687
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:36  •  📌 Talão processado
+
+📄 Talão 221 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 02.05.25 ref 04.25.pdf
+🗓️ Venc.: 02/05/2025  •  💰 R$ 6.104,25  •  🧾 NF: 004513365
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:42  •  📌 Talão processado
+
+📄 Talão 222 — 3433973-9 Cleuber . Bomba de Drenagem Vera Cruz . Arrendamento. venc 02.06.25 ref 05.25.pdf
+🗓️ Venc.: 02/06/2025  •  💰 R$ 97,16  •  🧾 NF: 004716998
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:32:46  •  📌 Talão processado
+
+📄 Talão 223 — 3445485-0 . Fazenda L3. Nova. 01.25 venc 03.02.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 03/02/2025  •  💰 R$ 329,66  •  🧾 NF: 003934255
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:50  •  📌 Talão processado
+
+📄 Talão 224 — 3445485-0 . Fazenda L3. Nova. 02.25 venc 05.03.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 05/03/2025  •  💰 R$ 114,66  •  🧾 NF: 004133528
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:54  •  📌 Talão processado
+
+📄 Talão 225 — 3445485-0 . Fazenda L3. Nova. 03.25 venc 01.04.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 254,86  •  🧾 NF: 004333941
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:32:57  •  📌 Talão processado
+
+📄 Talão 226 — 3445485-0 . Fazenda L3. Nova. 04.25 venc 02.05.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 02/05/2025  •  💰 R$ 476,52  •  🧾 NF: 004535937
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:33:00  •  📌 Talão processado
+
+📄 Talão 227 — 3445485-0 . Fazenda L3. Nova. 05.25 venc 02.06.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 02/06/2025  •  💰 R$ 492,08  •  🧾 NF: 004740180
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:33:03  •  📌 Talão processado
+
+📄 Talão 228 — 3445485-0 . Fazenda L3. Nova. 06.25 venc 01.07.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 479,85  •  🧾 NF: 004955027
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:33:06  •  📌 Talão processado
+
+📄 Talão 229 — 3445485-0 . Fazenda L3. Nova. 07.25 venc 01.08.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 527,59  •  🧾 NF: 005161521
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:33:09  •  📌 Talão processado
+
+📄 Talão 230 — 3445485-0 . Fazenda L3. Nova. 08.25 venc 01.09.25.pdf. UC NOVA.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 442,18  •  🧾 NF: 005380522
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 003
+✅ OK 16:33:13  •  📌 Talão processado
+
+📄 Talão 231 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 527,61  •  🧾 NF: 003912258
+🏢 Fornecedor: Energisa Tocantins - Distribuidora de Energia S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:16  •  📌 Talão processado
+
+📄 Talão 232 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 454,41  •  🧾 NF: 004111249
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:21  •  📌 Talão processado
+
+📄 Talão 233 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/12/2025  •  💰 R$ 764,76  •  🧾 NF: 004317074
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:25  •  📌 Talão processado
+
+📄 Talão 234 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.05.25 ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 711,28  •  🧾 NF: 004513421
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:29  •  📌 Talão processado
+
+📄 Talão 235 — 576858-5. Fazenda Frutacc. Alojamento Rio 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 1.084,04  •  🧾 NF: 004717021
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:32  •  📌 Talão processado
+
+📄 Talão 236 — 576858-5. Fazenda Frutacc. Alojamento Rio. Venc 01.07.25 ref 06.25.PDF
+🗓️ Venc.: 01/07/2025  •  💰 R$ 1.284,51  •  🧾 NF: 004926369
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:36  •  📌 Talão processado
+
+📄 Talão 237 — 576858-5. Fazenda Frutacc. Alojamento Rio. Venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 545,50  •  🧾 NF: 005137275
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:39  •  📌 Talão processado
+
+📄 Talão 238 — 576858-5. Fazenda Frutacc. Alojamento Rio. Venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 348,14  •  🧾 NF: 005350711
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:42  •  📌 Talão processado
+
+📄 Talão 239 — 939059-2. Fazenda Ilha do Formoso Venc 09.04 ref 03.25.pdf
+🗓️ Venc.: 09/04/2025  •  💰 R$ 883,13  •  🧾 NF: 004437784
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:46  •  📌 Talão processado
+
+📄 Talão 240 — 939059-2. Fazenda Ilha do Formoso Venc 09.07.25 ref 06.25.PDF
+🗓️ Venc.: 09/07/2025  •  💰 R$ 20.099,13  •  🧾 NF: 005049053
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:50  •  📌 Talão processado
+
+📄 Talão 241 — 939059-2. Fazenda Ilha do Formoso Venc 10.06.25 ref 05.25.pdf
+🗓️ Venc.: 10/06/2025  •  💰 R$ 874,89  •  🧾 NF: 004848525
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:53  •  📌 Talão processado
+
+📄 Talão 242 — 939059-2. Fazenda Ilha do Formoso Venc 10.09.25 ref 08.25.pdf
+🗓️ Venc.: 10/10/2025  •  💰 R$ 20.318,30  •  🧾 NF: 005484673
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:33:57  •  📌 Talão processado
+
+📄 Talão 243 — 939059-2. Fazenda Ilha do Formoso Venc 11.02 ref 01.25.pdf
+🗓️ Venc.: 11/02/2025  •  💰 R$ 883,06  •  🧾 NF: 004037538
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:34:00  •  📌 Talão processado
+
+📄 Talão 244 — 939059-2. Fazenda Ilha do Formoso Venc 11.08.25 ref 07.25.PDF
+🗓️ Venc.: 11/08/2025  •  💰 R$ 30.155,90  •  🧾 NF: 005271170
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:34:04  •  📌 Talão processado
+
+📄 Talão 245 — 939059-2. Fazenda Ilha do Formoso Venc 12.05.25 ref 04.25.pdf
+🗓️ Venc.: 12/05/2025  •  💰 R$ 881,89  •  🧾 NF: 004640281
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:34:07  •  📌 Talão processado
+
+📄 Talão 246 — 939059-2. Fazenda Ilha do Formoso Venc 13.03 ref 02.25.PDF
+🗓️ Venc.: 13/03/2025  •  💰 R$ 878,17  •  🧾 NF: 004237402
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:34:10  •  📌 Talão processado
+
+📄 Talão 247 — 9670003276. Fazenda Estrela venc 10.06.25 ref 05.25.pdf
+🗓️ Venc.: 10/06/2025  •  💰 R$ 1.595,32  •  🧾 NF: 147820505
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:13  •  📌 Talão processado
+
+📄 Talão 248 — 9670003276. Fazenda Estrela venc 11.02.25 ref 01.25.pdf
+🗓️ Venc.: 11/02/2025  •  💰 R$ 838,06  •  🧾 NF: 132619679
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:16  •  📌 Talão processado
+
+📄 Talão 249 — 9670003276. Fazenda Estrela venc 11.04.25 ref 03.25.pdf
+🗓️ Venc.: 11/04/2025  •  💰 R$ 2.073,68  •  🧾 NF: 140231538
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:20  •  📌 Talão processado
+
+📄 Talão 250 — 9670003276. Fazenda Estrela venc 11.08.25 ref 07.25.pdf
+🗓️ Venc.: 11/08/2025  •  💰 R$ 1.612,73  •  🧾 NF: 155318252
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:23  •  📌 Talão processado
+
+📄 Talão 251 — 9670003276. Fazenda Estrela venc 12.09.25 ref 08.25.pdf
+🗓️ Venc.: 12/09/2025  •  💰 R$ 1.643,47  •  🧾 NF: 159167690
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:26  •  📌 Talão processado
+
+📄 Talão 252 — 9670003276. Fazenda Estrela venc 13.03.25 ref 02.25.pdf
+🗓️ Venc.: 13/03/2025  •  💰 R$ 410,86  •  🧾 NF: 136429657
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:30  •  📌 Talão processado
+
+📄 Talão 253 — 9670003276. Fazenda Estrela venc 14.05.25 ref 04.25.pdf
+🗓️ Venc.: 14/05/2025  •  💰 R$ 1.483,40  •  🧾 NF: 144057283
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:34  •  📌 Talão processado
+
+📄 Talão 254 — 9670003276. Fazenda Estrela venc 14.07.25 ref 06.25.pdf
+🗓️ Venc.: 14/07/2025  •  💰 R$ 972,45  •  🧾 NF: 151525732
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 008
+✅ OK 16:34:37  •  📌 Talão processado
+
+📄 Talão 255 — 9670003690. Fazenda Ilhéus venc 02.08.25 ref 07.25.pdf
+🗓️ Venc.: 02/08/2025  •  💰 R$ 2.193,27  •  🧾 NF: 154883943
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:34:43  •  📌 Talão processado
+
+📄 Talão 256 — 9670003690. Fazenda Ilhéus venc 03.02.25 ref 01.25.pdf
+🗓️ Venc.: 03/02/2025  •  💰 R$ 938,73  •  🧾 NF: 132072414
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:34:46  •  📌 Talão processado
+
+📄 Talão 257 — 9670003690. Fazenda Ilhéus venc 03.04.25 ref 03.25.pdf
+🗓️ Venc.: 03/04/2025  •  💰 R$ 1.994,64  •  🧾 NF: 139279837
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:34:50  •  📌 Talão processado
+
+📄 Talão 258 — 9670003690. Fazenda Ilhéus venc 03.06.25 ref 05.25.pdf
+🗓️ Venc.: 03/06/2025  •  💰 R$ 2.091,16  •  🧾 NF: 146993830
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:34:55  •  📌 Talão processado
+
+📄 Talão 259 — 9670003690. Fazenda Ilhéus venc 03.07.25 ref 06.25.pdf
+🗓️ Venc.: 03/07/2025  •  💰 R$ 2.150,51  •  🧾 NF: 150838644
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:00  •  📌 Talão processado
+
+📄 Talão 260 — 9670003690. Fazenda Ilhéus venc 04.09.25 ref 08.25.pdf
+🗓️ Venc.: 04/09/2025  •  💰 R$ 2.181,27  •  🧾 NF: 158708755
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:05  •  📌 Talão processado
+
+📄 Talão 261 — 9670003690. Fazenda Ilhéus venc 06.03.25 ref 02.25.pdf
+🗓️ Venc.: 06/03/2025  •  💰 R$ 581,69  •  🧾 NF: 135736114
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:12  •  📌 Talão processado
+
+📄 Talão 262 — 9670003690. Fazenda Ilhéus venc 07.05.25 ref 04.25.pdf
+🗓️ Venc.: 07/05/2025  •  💰 R$ 1.065,28  •  🧾 NF: 143096644
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:16  •  📌 Talão processado
+
+📄 Talão 263 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 29.05.25 ref 05.25.pdf
+🗓️ Venc.: 29/05/2025  •  💰 R$ 58,31  •  🧾 NF: 146584795
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:22  •  📌 Talão processado
+
+📄 Talão 264 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 29.08.25 ref 08.25.pdf
+🗓️ Venc.: 29/08/2025  •  💰 R$ 160,01  •  🧾 NF: 158435859
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:28  •  📌 Talão processado
+
+📄 Talão 265 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 30.04.25 ref 04.25.pdf
+🗓️ Venc.: 30/04/2025  •  💰 R$ 114,33  •  🧾 NF: 142818074
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:31  •  📌 Talão processado
+
+📄 Talão 266 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 30.06.25 ref 06.25.pdf
+🗓️ Venc.: 30/06/2025  •  💰 R$ 92,17  •  🧾 NF: 150397302
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:34  •  📌 Talão processado
+
+📄 Talão 267 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 31.03.25 ref 03.25.pdf
+🗓️ Venc.: 31/03/2025  •  💰 R$ 155,41  •  🧾 NF: 138868303
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:39  •  📌 Talão processado
+
+📄 Talão 268 — 9670010293. Fazenda Primavera. Zé Guerreiro venc 31.07.25 ref 07.25.pdf
+🗓️ Venc.: 31/07/2025  •  💰 R$ 173,31  •  🧾 NF: 154345497
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 004
+✅ OK 16:35:43  •  📌 Talão processado
+
+📄 Talão 269 — 9670010300 Sitio Boa Esperança venc 02.08.25 ref 07.25.pdf
+🗓️ Venc.: 02/08/2025  •  💰 R$ 31,13  •  🧾 NF: 154883940
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 007
+✅ OK 16:35:47  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 9670010300 Sitio Boa Esperança venc 03.02.25 ref 01.25.pdf; pulando.
+📄 Talão 271 — 9670010300 Sitio Boa Esperança venc 03.04.25 ref 03.25.pdf
+🗓️ Venc.: 03/04/2025  •  💰 R$ 33,66  •  🧾 NF: 139279836
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 007
+✅ OK 16:35:55  •  📌 Talão processado
+
+📄 Talão 272 — 9670010300 Sitio Boa Esperança venc 03.06.25 ref 05.25.pdf
+🗓️ Venc.: 03/06/2025  •  💰 R$ 34,22  •  🧾 NF: 146993829
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 007
+✅ OK 16:35:58  •  📌 Talão processado
+
+📄 Talão 273 — 9670010300 Sitio Boa Esperança venc 03.07.25 ref 06.25.pdf
+🗓️ Venc.: 03/07/2025  •  💰 R$ 30,92  •  🧾 NF: 150838641
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 007
+✅ OK 16:36:02  •  📌 Talão processado
+
+📄 Talão 274 — 9670010300 Sitio Boa Esperança venc 04.09.25 ref 08.25.pdf
+🗓️ Venc.: 04/09/2025  •  💰 R$ 27,88  •  🧾 NF: 158708752
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 007
+✅ OK 16:36:06  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 9670010300 Sitio Boa Esperança venc 07.05.25 ref 04.25.pdf; pulando.
+📄 Talão 276 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.02.25 ref 01.25.pdf
+🗓️ Venc.: 01/02/2025  •  💰 R$ 28.686,40  •  🧾 NF: 003898236
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:15  •  📌 Talão processado
+
+📄 Talão 277 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.03.25 ref 02.25.pdf
+🗓️ Venc.: 01/03/2025  •  💰 R$ 5.580,64  •  🧾 NF: 004107760
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:20  •  📌 Talão processado
+
+📄 Talão 278 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.04.25 ref 03.25.pdf
+🗓️ Venc.: 01/04/2025  •  💰 R$ 1.400,49  •  🧾 NF: 004319961
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:25  •  📌 Talão processado
+
+📄 Talão 279 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.05.25 ref 04.25.pdf
+🗓️ Venc.: 01/05/2025  •  💰 R$ 1.386,63  •  🧾 NF: 004499316
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:29  •  📌 Talão processado
+
+📄 Talão 280 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.06.25 ref 05.25.pdf
+🗓️ Venc.: 01/06/2025  •  💰 R$ 1.384,67  •  🧾 NF: 004713599
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:34  •  📌 Talão processado
+
+📄 Talão 281 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.07.25 ref 06.25.pdf
+🗓️ Venc.: 01/07/2025  •  💰 R$ 1.373,69  •  🧾 NF: 004911777
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:38  •  📌 Talão processado
+
+📄 Talão 282 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.08.25 ref 07.25.pdf
+🗓️ Venc.: 01/08/2025  •  💰 R$ 27.536,34  •  🧾 NF: 005109690
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:44  •  📌 Talão processado
+
+📄 Talão 283 — 975192-6. Fazenda Frutacc II. Irrigação do Trafo 01 venc 01.09.25 ref 08.25.pdf
+🗓️ Venc.: 01/09/2025  •  💰 R$ 27.023,60  •  🧾 NF: 005329512
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 001
+✅ OK 16:36:51  •  📌 Talão processado
+
+🗂️ TXT gerado: C:\Users\conta\OneDrive\Documentos\ENERGIA\TESTE\Cleuber.txt (16:36:51 | +1168s)
+💵 Subtotal Cleuber: R$ 1.475.674,76
+
+👤 Adriana  —  ⏱️ 57s (16:36:51 → 16:37:49)
+📄 Talão 1 — 3454411-4 . Fazenda L3. Transformador 300 kva Armazem L3. 01.2025 venc 21.01.2025.PDF
+🗓️ Venc.: 21/01/2025  •  💰 R$ 2.049,35  •  🧾 NF: 003898146
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:36:57  •  📌 Talão processado
+
+📄 Talão 2 — 3454411-4 . Fazenda L3. Transformador 300 kva Armazem L3. 02.2025 venc 20.02.2025.PDF
+🗓️ Venc.: 20/02/2025  •  💰 R$ 6.610,61  •  🧾 NF: 004107682
+🏢 Fornecedor: ENERGISA TOCANTINS - DISTRIBUIDORA DE ENERGIA S.A.
+🧩 Participante: 25086034000171  •  🏠 Imóvel: 002
+✅ OK 16:37:02  •  📌 Talão processado
+
+📄 Talão 3 — 967000386-0. Fazenda Barragem Grande ref 01.25 venc 03.02.25.pdf
+🗓️ Venc.: 03/02/2025  •  💰 R$ 231,22  •  🧾 NF: 132054714
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:06  •  📌 Talão processado
+
+📄 Talão 4 — 967000386-0. Fazenda Barragem Grande ref 02.25 venc 06.03.25.pdf
+🗓️ Venc.: 06/03/2025  •  💰 R$ 225,87  •  🧾 NF: 135751451
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:10  •  📌 Talão processado
+
+📄 Talão 5 — 967000386-0. Fazenda Barragem Grande ref 03.25 venc 03.04.25.pdf
+🗓️ Venc.: 03/04/2025  •  💰 R$ 213,53  •  🧾 NF: 139271944
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:14  •  📌 Talão processado
+
+📄 Talão 6 — 9670003860. Fazenda Barragem Grande ref 04.25 venc 07.05.25.pdf
+🗓️ Venc.: 07/05/2025  •  💰 R$ 250,22  •  🧾 NF: 143083566
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:16  •  📌 Talão processado
+
+📄 Talão 7 — 9670003860. Fazenda Barragem Grande ref 05.25 venc 03.06.25.pdf
+🗓️ Venc.: 03/06/2025  •  💰 R$ 542,08  •  🧾 NF: 146994956
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:19  •  📌 Talão processado
+
+📄 Talão 8 — 9670003860. Fazenda Barragem Grande ref 06.25 venc 03.07.25.pdf
+🗓️ Venc.: 03/07/2025  •  💰 R$ 681,04  •  🧾 NF: 150838891
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:22  •  📌 Talão processado
+
+📄 Talão 9 — 9670003860. Fazenda Barragem Grande ref 07.25 venc 02.08.25.pdf
+🗓️ Venc.: 02/08/2025  •  💰 R$ 563,49  •  🧾 NF: 154901921
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:25  •  📌 Talão processado
+
+📄 Talão 10 — 9670003860. Fazenda Barragem Grande ref 08.25 venc 04.09.25.pdf
+🗓️ Venc.: 04/09/2025  •  💰 R$ 553,65  •  🧾 NF: 158694378
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:27  •  📌 Talão processado
+
+📄 Talão 11 — 9670004554. Fazenda Pouso da Anta venc 04.04.25 Adriana ref 03.25.pdf
+🗓️ Venc.: 04/04/2025  •  💰 R$ 199,95  •  🧾 NF: 139367968
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:30  •  📌 Talão processado
+
+📄 Talão 12 — 9670004554. Fazenda Pouso da Anta venc 04.06.25 Adriana ref 05.25.pdf
+🗓️ Venc.: 04/06/2025  •  💰 R$ 84,64  •  🧾 NF: 147033313
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:33  •  📌 Talão processado
+
+📄 Talão 13 — 9670004554. Fazenda Pouso da Anta venc 04.07.25 Adriana ref 06.25.pdf
+🗓️ Venc.: 04/07/2025  •  💰 R$ 85,47  •  🧾 NF: 151260420
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:36  •  📌 Talão processado
+
+📄 Talão 14 — 9670004554. Fazenda Pouso da Anta venc 04.08.25 Adriana ref 07.25.pdf
+🗓️ Venc.: 04/08/2025  •  💰 R$ 193,51  •  🧾 NF: 155071938
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:39  •  📌 Talão processado
+
+📄 Talão 15 — 9670004554. Fazenda Pouso da Anta venc 05.09.25 Adriana ref 08.25.pdf
+🗓️ Venc.: 05/09/2025  •  💰 R$ 167,64  •  🧾 NF: 158874378
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:42  •  📌 Talão processado
+
+📄 Talão 16 — 9670004554. Fazenda Pouso da Anta venc 07.03.25 Adriana ref 02.25.pdf
+🗓️ Venc.: 07/03/2025  •  💰 R$ 171,68  •  🧾 NF: 135904213
+🏢 Fornecedor: EQUATORIAL GOIAS DISTRIBUIDORA DE ENERGIA S/A
+🧩 Participante: 01543032000104  •  🏠 Imóvel: 001
+✅ OK 16:37:46  •  📌 Talão processado
+
+⚠️ Valor zero detectado em 9670004554. Fazenda Pouso da Anta venc 07.05.25 Adriana ref 04.25.pdf; pulando.
+🗂️ TXT gerado: C:\Users\conta\OneDrive\Documentos\ENERGIA\TESTE\Adriana.txt (16:37:49 | +1226s)
+💵 Subtotal Adriana: R$ 12.823,95
+
+================================================================
+🏁 Resumo Final
+• 📦 PDFs processados: 300
+• 🧾 TXTs gerados: 2 (Cleuber, Adriana)
+• ⏱️ Tempo total: 1226s (16:17:23 → 16:37:49)
+• 💰 Valor total processado: R$ 1.488.498,71
+✅ Status: Concluído com sucesso.
+[16/10/2025 16:37:49] ✅Processo finalizado: Concluído
+[16/10/2025 16:43:39] ✅✅ Importado em: Cleuber Marcos (TEMP)
+[16/10/2025 16:43:39] ⚠️[Gilson] TXT não encontrado: C:\Users\conta\OneDrive\Documentos\ENERGIA\TESTE\Gilson.txt
+[16/10/2025 16:43:39] ⚠️[Lucas] TXT não encontrado: C:\Users\conta\OneDrive\Documentos\ENERGIA\TESTE\Lucas.txt
+[16/10/2025 16:58:25] ✅✅ Importado em: Adriana Lucia (TEMP)
+[16/10/2025 17:00:48] ✅✅ Nenhum duplicado detectado para ENERGIA.
