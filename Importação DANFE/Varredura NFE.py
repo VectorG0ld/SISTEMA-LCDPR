@@ -1321,24 +1321,7 @@ try:
                                     )
                             # --- FIM NOVO ---
 
-                            # --- NOVO: preparar filas (NOTAS RECEBIDAS) por PN e abrir workbook p/ gravar ---
-                            from collections import defaultdict, deque
-                            
-                            wb_nr = load_workbook(notas_recebidas_path) if OPENPYXL_AVAILABLE else None
-                            ws_nr = wb_nr.worksheets[0] if wb_nr else None
-                            
-                            # header=1 => cabeçalho na linha 2; dados começam na linha 3
-                            OFFSET_NR = 3
-                            # Coluna Excel (1-based) do "Valor" na planilha NOTAS RECEBIDAS:
-                            VALOR_COL_XL = df_r.columns.get_loc(col_valor_r) + 1
-                            
-                            # Fila por PN com (row_excel, valor_restante)
-                            filas_por_pn = defaultdict(deque)
-                            for i, r in df_r.reset_index(drop=True).iterrows():
-                                if float(r["__valor"]) > 0:
-                                    excel_row = OFFSET_NR + i
-                                    filas_por_pn[r["__pn_norm"]].append({"row": excel_row, "valor": float(r["__valor"])})
-                            
+                        
                             rows_receb_atualizados = set()
                             rows_receb_zerados = set()
                             green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid") if OPENPYXL_AVAILABLE else None
@@ -1351,17 +1334,6 @@ try:
                                 df_r['__data_r'] = pd.to_datetime(df_r[col_data_r], dayfirst=True, errors='coerce')
                             else:
                                 df_r['__data_r'] = pd.NaT
-
-                            # Fila por PN com (row_excel, valor_restante, data_receb)
-                            filas_por_pn = defaultdict(deque)
-                            for i, r in df_r.reset_index(drop=True).iterrows():
-                                if float(r["__valor"]) > 0:
-                                    excel_row = OFFSET_NR + i
-                                    filas_por_pn[r["__pn_norm"]].append({
-                                        "row": excel_row,
-                                        "valor": float(r["__valor"]),
-                                        "data": r["__data_r"]  # <- data do recebimento dessa linha
-                                    })
 
                             def saldo_total_pn(pn_norm: str) -> float:
                                 """Soma quanto ainda resta na fila desse PN em NOTAS RECEBIDAS."""
@@ -1392,8 +1364,8 @@ try:
                                         if saldo_total_pn(pn_norm) + 1e-9 >= valor_nf:
                                             # Consome da fila de NOTAS RECEBIDAS até cobrir o valor da NF
                                             restante = valor_nf
-                                            # inicializa variáveis que serão preenchidas ao consumir a fila
                                             conta_cod_usada = ""
+                                            conta_nome_usado = ""
                                             dt_receb_usada = pd.NaT
 
                                             while restante > 1e-9 and filas_por_pn[pn_norm]:
@@ -1404,6 +1376,7 @@ try:
 
                                                 if not conta_cod_usada:
                                                     conta_cod_usada = topo.get("conta_cod","")
+                                                    conta_nome_usado = topo.get("conta_nome","")
                                                 if pd.isna(dt_receb_usada):
                                                     dt_receb_usada = topo.get("data", pd.NaT)
                                                 # Atualiza o valor da célula de "Valor" na NOTAS RECEBIDAS (zerando parcial/total)
@@ -1424,20 +1397,6 @@ try:
                                             linhas_receitas_pagas_idx.append(idx)
 
                                             # ====== GERAR LINHA DO TXT (RECEBIMENTOS) ======
-                                            
-                                            # Data e conta do(s) recebimento(s) usados: pega do PRIMEIRO item realmente utilizado
-                                            dt_receb_usada = pd.NaT
-                                            conta_cod_usada, conta_nome_usado = "", ""
-                                            restante_tmp = valor_nf
-                                            for item in filas_por_pn[pn_norm]:
-                                                if restante_tmp <= 1e-9:
-                                                    break
-                                                usar = min(item["valor"], restante_tmp)
-                                                if usar > 1e-9 and pd.isna(dt_receb_usada):
-                                                    dt_receb_usada = item.get("data", pd.NaT)
-                                                    conta_cod_usada = item.get("conta_cod", "") or ""
-                                                    conta_nome_usado = item.get("conta_nome", "") or ""
-                                                restante_tmp -= usar
                                             
                                             if pd.isna(dt_receb_usada):
                                                 dt_receb_usada = pd.Timestamp.today()
@@ -1470,7 +1429,7 @@ try:
                                             linha = [
                                                 data_fmt,                 # 1  (data da NOTAS RECEBIDAS)
                                                 cod_faz,                  # 2
-                                                (conta_cod_usada or MAP_CONTAS.get("Não Mapeado","0000")),
+                                                (conta_cod_usada or _conta_codigo(conta_nome_usado) or MAP_CONTAS.get("Não Mapeado","0000")),
                                                 num_nf,                   # 4
                                                 "1",                      # 5
                                                 descricao,                # 6

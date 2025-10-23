@@ -121,22 +121,20 @@ FARM_MAPPING = {
 }
 
 CODIGOS_CIDADES = {
-    "Lagoa da Confusao": "Frutacc",
-    "Montividiu do Norte": "Barragem",
-    "Rialma": "Aliança",
-    "TROMBAS": "Primavera",
+    "Lagoa da Confusao": "Frutacc", "Montividiu do Norte": "Barragem",
+    "Rialma": "Aliança", "TROMBAS": "Primavera",
     "DUERE": "L3", "DUERÉ": "L3", "DUERE TO": "L3", "Duere": "L3",
     "Ceres": "Aliança", "Rianapolis": "Aliança", "NOVA GLORIA": "Aliança",
     "MONTIVIDIU": "Barragem", "MONTIVIDIU DO NORTE - GO": "Barragem",
-    "Nova Glória": "Aliança", "Nova Gloria": "Aliança", "Nova Giéria": "Aliança",
+    "Nova Glória": "Aliança", "Nova Glória - GO": "Aliança",
+    "Nova Giéria": "Aliança", "Montividiu": "Barragem", "Gurupi": "Frutacc",
     "Lagoa da Confusão": "Frutacc", "MONTIVIDIU DO NORTE": "Barragem",
     "LAGOA DA CONFUSAO": "Frutacc", "LAGOA DA CONFUSÃO": "Frutacc",
     "LAGOA CONFUSAO": "Frutacc", "LAGOA DA CONFUSAO - TO": "Frutacc",
     "RIALMA": "Aliança", "Trombas": "Primavera", "CERES": "Aliança",
     "Formoso do Araguaia": "União", "FORMOSO DO ARAGUAIA": "União",
-    "APARECIDA DO RIO NEGRO": "Primavera",
+    "APARECIDA DO RIO NEGRO": "Primavera", "Nova Gloria": "Aliança",
     "Tasso Fragoso": "Guara", "BALSAS": "Guara", "Balsas": "Guara",
-    "Montividiu": "Barragem",
 }
 
 # ===== NOVO: Mapeamento FAZENDA -> CÓDIGO (para planilha e TXT)
@@ -146,10 +144,10 @@ FAZENDA2COD_RAW = {
     "Fazenda Siganna":"001","Armazem Frutacc":"006","Lagoa da Confusão":"001",
     "Fazenda Primavera":"004","Fazenda Primaveira":"004","Fazenda Estrela":"008",
     "Fazenda Ilhéus":"004","Sitio Boa Esperança":"007","Fazenda Retiro":"004",
-    "Fazenda Barragem Grande":"007","Fazenda Ilha do Formoso":"001","Fazenda Pouso da Anta":"009",
+    "Fazenda Barragem Grande":"007","Fazenda Ilha do Formoso":"001",
     "Montividiu do Norte":"006","Nova Gloria":"005","Nova Glória":"005",
     "Formoso do Araguaia":"002","Duere":"003","Duerê":"003","Dueré":"003",
-    "Trombas":"004","Lagoa da Confusao":"001",
+    "Trombas":"004","Lagoa da Confusao":"001", "Fazenda Pouso da Anta":"009",
     "FAZENDA FRUTACC":"001","FAZENDA UNIÃO":"002","FAZENDA L3":"003",
     "FAZENDA PRIMAVERA":"004","FAZENDA ALIANÇA":"005","ARMAZEM PRIMAVERA":"006",
     "FAZENDA BARRAGEM GRANDE":"007","FAZENDA ESTRELA":"008","FAZENDA GUARA":"009",

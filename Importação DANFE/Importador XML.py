@@ -64,11 +64,11 @@ FARM_MAPPING = {
 }
 CODIGOS_CIDADES = {
     "Lagoa da Confusao": "Frutacc",
-    "Montividiu do Norte": "Barragem",
-    "Rialma": "Aliança",
-    "TROMBAS": "Primavera",
+    "Rialma - GO": "Aliança",
+    "Rialma": "Aliança", "Lizarda - TO": "Frutacc",
+    "TROMBAS": "Primavera", "Trombas - GO": "Primavera",
     "DUERE": "L3", "DUERÉ": "L3", "DUERE TO": "L3", "Duere": "L3",
-    "Ceres": "Aliança", "Rianapolis": "Aliança", "NOVA GLORIA": "Aliança",
+    "Ceres": "Aliança", "Ceres - GO": "Aliança", "Rianapolis": "Aliança", "NOVA GLORIA": "Aliança",
     "MONTIVIDIU": "Barragem", "MONTIVIDIU DO NORTE - GO": "Barragem",
     "Nova Glória": "Aliança", "Nova Gloria": "Aliança",
     "Lagoa da Confusão": "Frutacc", "MONTIVIDIU DO NORTE": "Barragem",
@@ -79,8 +79,62 @@ CODIGOS_CIDADES = {
     "APARECIDA DO RIO NEGRO": "Primavera", "Gurupi - TO": "Frutacc",
     "Goianésia - GO": "Aliança", "Palmas - TO": "Guara",
     "Tasso Fragoso": "Guara", "BALSAS": "Guara", "Balsas": "Guara",
-    "Montividiu": "Barragem",
+    "Montividiu": "Barragem", "Uruaçu - GO": "Aliança", 'Goianira - GO': "Aliança",
+
+    # --- Porangatu (GO) ---
+    "Porangatu - GO": "Primavera",
+    "PORANGATU - GO": "Primavera",
+    "Porangatu": "Primavera",
+    "PORANGATU": "Primavera",
+
+    # --- Montividiu do Norte (inclui variante com erro de digitação) ---
+    "Montivldiu do Norte - GO": "Barragem",
+    "Montividiu do Norte - GO": "Barragem",
+    "Montividiu do Norte": "Barragem",
+
+    # --- Cristalândia (TO) ---
+    "Cristalândia - TO": "Frutacc",
+    "Cristalandia - TO": "Frutacc",
+    "Cristalândia": "Frutacc",
+    "Cristalandia": "Frutacc",
+
+    # --- Paraíso do Tocantins (TO) ---
+    "Paraíso do Tocantins - TO": "Frutacc",
+    "Paraiso do Tocantins - TO": "Frutacc",
+    "Paraíso do Tocantins": "Frutacc",
+    "Paraiso do Tocantins": "Frutacc",
+
+    # --- Nova Crixás (GO) ---
+    "Nova Crixás - GO": "Aliança",
+    "Nova Crixas - GO": "Aliança",
+    "Nova Crixás": "Aliança",
+    "Nova Crixas": "Aliança",
+
 }
+
+# ===== Normalização de cidades / chaves para mapeamento =====
+import unicodedata
+import re
+
+def _norm_city_key(s: str) -> str:
+    """Remove acentos, normaliza hífens, comprime espaços e põe em UPPER p/ comparar chaves."""
+    if not s:
+        return ""
+    # troca hífens "estranhos" por "-"
+    s = re.sub(r"[–—−]", "-", s)          # EN DASH, EM DASH, MINUS
+    # remove acentos
+    s_noacc = unicodedata.normalize("NFKD", s)
+    s_noacc = "".join(ch for ch in s_noacc if not unicodedata.combining(ch))
+    # colapsa espaços
+    s_noacc = re.sub(r"\s+", " ", s_noacc)
+    # remove espaços ao redor de "-"
+    s_noacc = re.sub(r"\s*-\s*", " - ", s_noacc).strip()
+    return s_noacc.upper()
+
+# dicionário normalizado (não substitui o original — é complementar)
+CODIGOS_CIDADES_NORM = {_norm_city_key(k): v for k, v in CODIGOS_CIDADES.items()}
+
+
 CLEUBER_CPF = "42276950153"
 
 # -----------------------------
@@ -280,6 +334,7 @@ class RuralXmlImporter(QWidget):
         self._cancel_import = False       # cancela importação XML
         self.loading_window = None
         self.isento_keys = {}
+        self.key_xml = {}
         self.stat_total = 0
         self.stat_ok = 0
         self.stat_err = 0
@@ -1090,12 +1145,83 @@ class RuralXmlImporter(QWidget):
                     if farm_ie:
                         farm_name = FARM_MAPPING.get(farm_ie, 'ISENTO')
                     else:
-                        # fallback por cidade (xMun)
-                        xmun_node = (emit.find('n:enderEmit/n:xMun', ns) if cleuber_emit
-                                     else (dest.find('n:enderDest/n:xMun', ns) if cleuber_dest else None))
-                        xmun = (xmun_node.text.strip() if (xmun_node is not None and xmun_node.text) else '')
-                        farm_name = CODIGOS_CIDADES.get(xmun, 'ISENTO')
-                
+                        # Fallback por cidade – busca a UF também em enderNac/UF e dentro do DPS
+                        import unicodedata, re
+                        
+                        def _nfse_get_uf(root, infs, emit, toma, ns_nfse) -> str:
+                            # tenta em várias posições comuns da NFSe (Abrasf/SPED)
+                            xpaths = [
+                                's:UFIncid',                                   # no infNFSe
+                                './/s:ender/s:UF', './/s:enderNac/s:UF',       # emit/toma com ender OU enderNac
+                                './/s:prest//s:end//s:endNac/s:UF',
+                                './/s:prest//s:enderNac/s:UF',
+                                './/s:toma//s:end//s:endNac/s:UF',
+                                './/s:toma//s:enderNac/s:UF',
+                                './/s:emit//s:enderNac/s:UF',
+                                './/s:DPS//s:prest//s:end//s:endNac/s:UF',     # dentro do DPS
+                            ]
+                            # procura primeiro relativo a infNFSe (se fornecido), depois no documento todo
+                            for xp in xpaths:
+                                v = ''
+                                if infs is not None:
+                                    # infs pode não existir em NFe; proteja o acesso
+                                    try:
+                                        v = infs.findtext(xp, default='', namespaces=ns_nfse)
+                                    except Exception:
+                                        v = ''
+                                if not v:
+                                    v = root.findtext(xp, default='', namespaces=ns_nfse)
+                                if v:
+                                    return v.strip().upper()
+                            return ''
+                        
+                        def _normalize_no_accents(s: str) -> str:
+                            s = (s or '').strip()
+                            if not s:
+                                return ''
+                            s_noacc = unicodedata.normalize('NFKD', s)
+                            return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
+                        
+                        def _variants(city: str, uf: str):
+                            """Gera variações para casar com CODIGOS_CIDADES"""
+                            city = (city or '').strip()
+                            if not city:
+                                return []
+                            noacc = _normalize_no_accents(city)
+                            base_variants = [city, city.upper(), noacc, noacc.upper()]
+                            if uf:
+                                # também tenta "Cidade - UF" (muitos mapas estão assim)
+                                base = re.sub(r'\s*-\s*[A-Z]{2}$', '', noacc, flags=re.I).strip()
+                                if base:
+                                    base_variants += [f'{base} - {uf}', f'{base.upper()} - {uf}']
+                            return base_variants
+                        
+                        # tenta obter <infNFSe> do documento (pode não existir em NF-e)
+                        infs_local = root.find('.//s:infNFSe', ns_nfse)
+                        # toma não existe em NF-e; passe o nó de destino (dest) para as verificações de cidade/UF
+                        uf = _nfse_get_uf(root, infs_local, emit, dest, ns_nfse)
+                    
+                        # candidatos de cidade por ordem de preferência (NFSe padrão SPED)
+                        cand_raw = [
+                            (infs_local.findtext('s:xLocIncid', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
+                            (infs_local.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
+                            (infs_local.findtext('s:xLocEmi', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
+                            # endereços (alguns layouts trazem xMun)
+                            emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
+                            emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
+                            dest.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if dest is not None else '',
+                            dest.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if dest is not None else '',
+                        ]
+
+                        farm_name = 'ISENTO'
+                        for raw in cand_raw:
+                            for key_try in _variants(raw, uf):
+                                if key_try and key_try in CODIGOS_CIDADES:
+                                    farm_name = CODIGOS_CIDADES[key_try]
+                                    break
+                            if farm_name != 'ISENTO':
+                                break
+
                     # define contraparte e coluna do valor
                     if cleuber_emit:
                         final_name, final_id = dest_name, dest_id
@@ -1183,11 +1309,11 @@ class RuralXmlImporter(QWidget):
                     prod = (root.findtext('.//s:DPS//s:xDescServ', default='', namespaces=ns_nfse) or '')
                     cfop = ""  # NFSe não tem CFOP
                 
-                    # IE -> fazenda; se não houver IE, cair para cidade
+                    # IE -> fazenda; se não houver IE, cair para cidade (NFSe)
                     farm_ie = ''
                     farm_name = 'ISENTO'
 
-                    # 1) tentar IE (se houver em algum layout)
+                    # 1) tentar IE em emit/toma (quando houver)
                     ie_node = None
                     if emit is not None:
                         ie_node = emit.find('s:IE', ns_nfse)
@@ -1204,44 +1330,122 @@ class RuralXmlImporter(QWidget):
                     if farm_name == 'ISENTO':
                         import unicodedata, re
 
-                        def _variants(s: str):
+                        def _nfse_get_uf(root, infs, emit, toma, ns_nfse) -> str:
+                            # tenta em várias posições comuns da NFSe (Abrasf/SPED)
+                            xpaths = [
+                                's:UFIncid',                                   # no infNFSe
+                                './/s:ender/s:UF', './/s:enderNac/s:UF',       # emit/toma com ender OU enderNac
+                                './/s:prest//s:end//s:endNac/s:UF',
+                                './/s:prest//s:enderNac/s:UF',
+                                './/s:toma//s:end//s:endNac/s:UF',
+                                './/s:toma//s:enderNac/s:UF',
+                                './/s:emit//s:enderNac/s:UF',
+                                './/s:DPS//s:prest//s:end//s:endNac/s:UF',     # dentro do DPS
+                                './/s:DPS//s:toma//s:end//s:endNac/s:UF',   # TOMADOR dentro do DPS  ← NOVO
+                            ]
+                            for xp in xpaths:
+                                v = infs.findtext(xp, default='', namespaces=ns_nfse)
+                                if not v:
+                                    v = root.findtext(xp, default='', namespaces=ns_nfse)
+                                if v:
+                                    return v.strip().upper()
+                            return ''
+
+                        def _normalize_no_accents(s: str) -> str:
                             s = (s or '').strip()
                             if not s:
-                                return []
-                            # sem acento
+                                return ''
                             s_noacc = unicodedata.normalize('NFKD', s)
-                            s_noacc = ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
-                            # gerar variações
-                            cand = [s, s.upper(), s_noacc, s_noacc.upper()]
-                            # remover “- GO” se vier junto, e também testar com “ - GO”
-                            base = re.sub(r'\s*-\s*[A-Z]{2}$', '', s_noacc, flags=re.I).strip()
-                            uf_cand = []
-                            # tentar descobrir UF (se existir em algum ponto)
-                            uf = (infs.findtext('s:UFIncid', default='', namespaces=ns_nfse) or
-                                  emit.findtext('s:ender/s:UF', default='', namespaces=ns_nfse) if emit is not None else '' or
-                                  toma.findtext('s:ender/s:UF', default='', namespaces=ns_nfse) if toma is not None else '')
-                            uf = (uf or '').strip().upper()
-                            if base:
-                                uf_cand = [f'{base} - {uf}'] if uf else []
-                            return cand + uf_cand
+                            return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
 
-                        # ordem de preferência de cidade na NFSe
+                        def _variants(city: str, uf: str):
+                            """Gera variações para casar com CODIGOS_CIDADES"""
+                            city = (city or '').strip()
+                            if not city:
+                                return []
+                            noacc = _normalize_no_accents(city)
+                            base = re.sub(r'\s*-\s*[A-Z]{2}$', '', noacc, flags=re.I).strip()  # remove sufixo "- UF" se vier
+                            variants = [city, city.upper(), noacc, noacc.upper()]
+                            if uf and base:
+                                variants += [f'{base} - {uf}', f'{base.upper()} - {uf}']
+                            return variants
+
+                        uf = _nfse_get_uf(root, infs, emit, toma, ns_nfse)
+
+                        root.findtext('.//s:DPS//s:toma//s:end//s:endNac//s:xMun', default='', namespaces=ns_nfse) or '',
+
+                        # candidatos de cidade por ordem de preferência (NFSe padrão SPED)
                         cand_raw = [
                             infs.findtext('s:xLocIncid', default='', namespaces=ns_nfse) or '',
                             infs.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) or '',
                             infs.findtext('s:xLocEmi', default='', namespaces=ns_nfse) or '',
-                            # endereços (podem não existir, mas tentamos)
+                            # endereços (alguns layouts trazem xMun)
                             emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
+                            emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
                             toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma is not None else '',
+                            toma.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if toma is not None else '',
                         ]
 
+                        # --- NOVO (NFSe): priorizar TOMADOR usando códigos IBGE (cMun) quando não houver xMun ---
+                        IBGE_TO_CITY = {
+                            "5221452": "Trombas",              # GO
+                            "5201405": "Aparecida de Goiânia", # GO (prestador desse XML)
+                            "5218003": "Porangatu",            # GO
+                            "3170107": "Uberaba",              # MG
+                            "5213772": "Nova Crixás",   
+                            "5205406": "Ceres",
+                            "5208806": "Goianira",
+                            "5218607": "Rialma",
+                            "5214861": "Nova Glória",
+                        }
+                        def _uf_from_ibge(code: str) -> str:
+                            if not code or len(code) < 2: return ''
+                            return {
+                                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+                                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+                                "31":"MG","32":"ES","33":"RJ","35":"SP",
+                                "41":"PR","42":"SC","43":"RS",
+                                "50":"MS","51":"MT","52":"GO","53":"DF",
+                            }.get(code[:2], '')
+
+                        # 1) Tente cMun do TOMADOR primeiro
+                        candidatos_cod = []
+                        if toma is not None:
+                            candidatos_cod.append(toma.findtext('s:enderNac/s:cMun', default='', namespaces=ns_nfse) or '')
+                        # 2) Também considere códigos no infNFSe (incidência/prestação)
+                        candidatos_cod += [
+                            infs.findtext('s:cLocIncid', default='', namespaces=ns_nfse) or '',
+                            infs.findtext('s:cLocPrestacao', default='', namespaces=ns_nfse) or '',
+                        ]
+
+                        # 3) TOMADOR dentro do DPS (quando não vem em infNFSe)
+                        candidatos_cod.append(root.findtext('.//s:DPS//s:toma//s:end//s:endNac//s:cMun', default='', namespaces=ns_nfse) or '')
+
+
+                        # Converta códigos em "Cidade - UF" e coloque no início de cand_raw (maior prioridade)
+                        for cod in candidatos_cod:
+                            cod = (cod or '').strip()
+                            if not cod:
+                                continue
+                            nome = IBGE_TO_CITY.get(cod, '')
+                            if not nome:
+                                continue
+                            uf_cod = _uf_from_ibge(cod) or uf
+                            cand_raw.insert(0, f"{nome} - {uf_cod}" if uf_cod else nome)
+
                         for raw in cand_raw:
-                            for key_try in _variants(raw):
-                                if key_try and key_try in CODIGOS_CIDADES:
+                            for key_try in _variants(raw, uf):
+                                if not key_try:
+                                    continue
+                                # 1) tentativa direta
+                                if key_try in CODIGOS_CIDADES:
                                     farm_name = CODIGOS_CIDADES[key_try]
                                     break
-                            if farm_name != 'ISENTO':
-                                break
+                                # 2) tentativa normalizada (robusta a acento/hífen/caixa)
+                                k_norm = _norm_city_key(key_try)            # <= usa a função do item 1
+                                if k_norm in CODIGOS_CIDADES_NORM:          # <= usa o dicionário normalizado do item 1
+                                    farm_name = CODIGOS_CIDADES_NORM[k_norm]
+                                    break
                             
                     # define contraparte e coluna do valor (NFSe: serviço prestado/ tomado ≈ tpNF)
                     if cleuber_emit:
@@ -1272,6 +1476,9 @@ class RuralXmlImporter(QWidget):
                     # Chave da NFe (para marcação de ISENTO por chNFe)
                     key = (root.findtext('.//n:protNFe//n:chNFe', default='', namespaces=ns)
                            or root.findtext('.//n:infProt/n:chNFe', default='', namespaces=ns) or '')
+                    
+                    if key:
+                        self.key_xml[key] = xml_file
 
                 # --- NOVO (NFSe): normalizações para escrita na planilha ---
                 if is_nfse:
@@ -1284,7 +1491,10 @@ class RuralXmlImporter(QWidget):
                         key = re.sub(r'^\D+', '', nfse_id)
                     else:
                         key = nNF or ""
-                                    
+
+                    if key:
+                        self.key_xml[key] = xml_file
+
                 dups = root.findall('.//n:dup', ns)
                 if dups:
                     self.log_msg(f"Nota fiscal {nNF} possui {len(dups)} parcela(s)", "info")
@@ -1368,6 +1578,151 @@ class RuralXmlImporter(QWidget):
                 self.log_msg(f"Erro durante o processamento do arquivo: {traceback.format_exc()}", "error")
                 self.log_msg("--------------------------------", "divider")
 
+            # ====== CORREÇÃO PÓS-LOOP — REVER APENAS NOTAS ISENTAS PELA CIDADE DO PRESTADOR ======
+            try:
+                if self.isento_keys:
+                    self.log_msg(f"Revisando {len(self.isento_keys)} nota(s) ISENTA(s) pela cidade do prestador…", "info")
+            
+                for key, linhas in self.isento_keys.items():
+                    xml_path = self.key_xml.get(key, "")
+                    if not xml_path or not os.path.exists(xml_path):
+                        continue
+                    
+                    try:
+                        tree_fix = ET.parse(xml_path)
+                        root_fix = tree_fix.getroot()
+                        ns_nfe  = {'n': 'http://www.portalfiscal.inf.br/nfe'}
+                        ns_nfse = {'s': 'http://www.sped.fazenda.gov.br/nfse'}
+            
+                        # Detecta tipo
+                        is_nfse_fix = root_fix.find('.//s:infNFSe', ns_nfse) is not None
+            
+                        def _normalize_no_accents(s: str) -> str:
+                            import unicodedata
+                            s = (s or '').strip()
+                            if not s:
+                                return ''
+                            s_noacc = unicodedata.normalize('NFKD', s)
+                            return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
+            
+                        def _variants(city: str, uf: str):
+                            import re
+                            city = (city or '').strip()
+                            if not city:
+                                return []
+                            noacc = _normalize_no_accents(city)
+                            base  = re.sub(r'\s*-\s*[A-Z]{2}$', '', noacc, flags=re.I).strip()
+                            out = [city, city.upper(), noacc, noacc.upper()]
+                            if uf and base:
+                                out += [f"{base} - {uf}", f"{base.upper()} - {uf}"]
+                            return out
+            
+                        def _nfse_get_uf(root, infs, emit, toma) -> str:
+                            xps = [
+                                's:UFIncid',
+                                './/s:ender/s:UF', './/s:enderNac/s:UF',
+                                './/s:prest//s:end//s:endNac/s:UF',
+                                './/s:prest//s:enderNac/s:UF',
+                                './/s:toma//s:end//s:endNac/s:UF',
+                                './/s:toma//s:enderNac/s:UF',
+                                './/s:emit//s:enderNac/s:UF',
+                                './/s:DPS//s:prest//s:end//s:endNac/s:UF',
+                            ]
+                            for xp in xps:
+                                v = infs.findtext(xp, default='', namespaces=ns_nfse) if infs is not None else ''
+                                if not v:
+                                    v = root.findtext(xp, default='', namespaces=ns_nfse)
+                                if v:
+                                    return v.strip().upper()
+                            return ''
+            
+                        # 1) Cidade/UF do PRESTADOR
+                        city_candidates = []
+                        uf = ""
+            
+                        if not is_nfse_fix:
+                            # NF-e: prestador = emit
+                            emit = root_fix.find('.//n:emit', ns_nfe)
+                            if emit is not None:
+                                city_candidates += [emit.findtext('n:enderEmit/n:xMun', default='', namespaces=ns_nfe) or '']
+                                uf_txt = emit.findtext('n:enderEmit/n:UF', default='', namespaces=ns_nfe)
+                                if uf_txt:
+                                    uf = uf_txt.strip().upper()
+                        else:
+                            # NFSe: vamos tentar PRIMEIRO o TOMADOR, depois o PRESTADOR (emit)
+                            infs = root_fix.find('.//s:infNFSe', ns_nfse)
+                            emit = infs.find('.//s:emit', ns_nfse) if infs is not None else None
+                            toma = infs.find('.//s:toma', ns_nfse) if infs is not None else None
+
+                            # cidade/UF: primeiro tomador (se houver), depois prestador
+                            city_candidates = [
+                                # fontes do TOMADOR
+                                (infs.findtext('s:xLocIncid', default='', namespaces=ns_nfse) or ''),  # muitos municípios usam incidência = local do serviço/tomador
+                                (toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma is not None else ''),
+                                (toma.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if toma is not None else ''),
+                                # fontes do PRESTADOR (fallback)
+                                (infs.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) if infs is not None else ''),
+                                (infs.findtext('s:xLocEmi', default='', namespaces=ns_nfse) if infs is not None else ''),
+                                (emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else ''),
+                                (emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else ''),
+                            ]
+
+                            # UF cobrindo ender/enderNac/DPS (mantém sua função utilitária)
+                            uf = _nfse_get_uf(root_fix, infs, emit, toma)
+            
+                            # --- NOVO: cMun do TOMADOR (IBGE) quando xMun não vier
+                            IBGE_TO_CITY = {
+                                "5221452": "Trombas",
+                                "5201405": "Aparecida de Goiânia",
+                                "5218003": "Porangatu",
+                                "3170107": "Uberaba",
+                            }
+                            def _uf_from_ibge(code: str) -> str:
+                                if not code or len(code) < 2: return ''
+                                return {"11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
+                                        "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
+                                        "31":"MG","32":"ES","33":"RJ","35":"SP",
+                                        "41":"PR","42":"SC","43":"RS",
+                                        "50":"MS","51":"MT","52":"GO","53":"DF"}.get(code[:2], '')
+
+                            if toma is not None:
+                                cmun_tom = (toma.findtext('s:enderNac/s:cMun', default='', namespaces=ns_nfse) or '').strip()
+                                if cmun_tom and IBGE_TO_CITY.get(cmun_tom):
+                                    uf_cod = _uf_from_ibge(cmun_tom) or uf
+                                    city_candidates.insert(0, f"{IBGE_TO_CITY[cmun_tom]} - {uf_cod}" if uf_cod else IBGE_TO_CITY[cmun_tom])
+
+
+                        # 2) Tenta mapear no CODIGOS_CIDADES
+                        farm_name_new = None
+                        for raw in city_candidates:
+                            for key_try in _variants(raw, uf):
+                                if not key_try:
+                                    continue
+                                # 1) direto
+                                if key_try in CODIGOS_CIDADES:
+                                    farm_name_new = CODIGOS_CIDADES[key_try]
+                                    break
+                                # 2) normalizado
+                                k_norm = _norm_city_key(key_try)
+                                if k_norm in CODIGOS_CIDADES_NORM:
+                                    farm_name_new = CODIGOS_CIDADES_NORM[k_norm]
+                                    break
+                            if farm_name_new:
+                                break
+                            
+                        # 3) Se achou, atualiza as linhas dessa nota (coluna 9 = FAZENDA)
+                        if farm_name_new:
+                            for lin in linhas:
+                                ws.cell(lin, 9, farm_name_new)
+                            self.log_msg(f"ISENTO corrigido via cidade do prestador (key {key} → {farm_name_new})", "success")
+            
+                    except Exception as inner_e:
+                        self.log_msg(f"Falha ao revisar key {key}: {inner_e}", "error")
+            
+            except Exception as _e:
+                self.log_msg(f"Falha na correção pós-loop de ISENTOS: {_e}", "error")
+            # ====== FIM DA CORREÇÃO PÓS-LOOP ======
+            
         if last >= start:
             self.extend_table(ws, header, last)
 
