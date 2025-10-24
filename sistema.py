@@ -6647,60 +6647,154 @@ class MainWindow(QMainWindow):
         import re
         from datetime import datetime
 
-        # --- helpers Folha ---
+        # ------------------ helpers ------------------
         _ref_re = re.compile(r"REF\.\s*(\d{2}/\d{4})", re.IGNORECASE)
+
         def _extract_ref(h: str) -> str:
             if not h:
                 return ""
             m = _ref_re.search(h)
             return (m.group(1) or "").strip() if m else ""
 
-        sb = self.db.sb
-        now = datetime.now().strftime("%d/%m/%Y %H:%M")
-        usuario_ts = f"{CURRENT_USER} dia {now}"
-
         def _parse_cent(v: str) -> float:
-            s = re.sub(r'\D', '', (v or ''))
+            s = re.sub(r"\D", "", (v or ""))
             return (int(s) / 100.0) if s else 0.0
 
         def _norms(code: str):
-            s = (code or '').strip()
+            s = (code or "").strip()
             if not s:
                 return []
             out = [s]
             if s.isdigit():
-                out += [s.zfill(3), (s.lstrip('0') or '0')]
+                out += [s.zfill(3), (s.lstrip("0") or "0")]
             return list(dict.fromkeys(out))
 
-        # ---- contagem de linhas para progresso ----
-        with open(path, encoding='utf-8') as _f:
-            total = sum(1 for _ in _f)
+        # ------------------ estados/caches ------------------
+        sb = self.db.sb
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        usuario_ts = f"{CURRENT_USER} dia {now}"
 
-        # ---- caches ----
-        im_cache = {}      # cod_imovel_normalizado -> id_imovel
-        ct_cache = {}      # cod_conta_normalizado  -> id_conta
-        part_cache = {}    # cpf_cnpj_digits        -> id_participante
-        saldos = {}        # id_conta -> saldo atual (considerando natureza)
+        im_cache = {}       # cod_imovel_normalizado -> id_imovel
+        ct_cache = {}       # cod_conta_normalizado  -> id_conta
+        part_cache = {}     # cpf_cnpj_digits        -> id_participante
+        partnum_cache = {}  # (id_participante,num_doc_n) -> {'exists': bool, 'rows': [...]}
+        saldos = {}         # id_conta -> saldo atual (considerando natureza)
 
-        errors: list[str] = []
+        dup_msgs = []       # mensagens de duplicidade (todas as regras)
+        other_errs = []     # falhas diversas / bloqueios por índice do banco
         ok_count = 0
 
+        # ------------------ contagem de linhas p/ progresso ------------------
+        with open(path, encoding="utf-8") as _f:
+            total = sum(1 for _ in _f)
+
+        # ------------------ buscas auxiliares ------------------
+        def _ensure_participante_by_digits(digits: str, historico: str):
+            if digits in part_cache:
+                return part_cache[digits]
+            row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+            pid = row[0] if row else self._ensure_participante(digits, historico or "")
+            part_cache[digits] = pid
+            return pid
+
+        def _part_numdoc_exists(pid: int, num_doc_n: str, data_iso: str | None):
+            """
+            Checa existência por participante+num_doc (com prioridade para a MESMA DATA).
+            Não consideramos conta em hipótese alguma.
+            Usa cache para evitar re-hits no banco.
+            """
+            if not pid or not num_doc_n:
+                return False, []
+
+            key = (pid, num_doc_n)
+            if key in partnum_cache:
+                info = partnum_cache[key]
+                # Se pediram match na mesma data e já temos rows, priorize os com data igual
+                if data_iso and info.get("rows"):
+                    same = [r for r in info["rows"] if (r.get("data") == data_iso)]
+                    if same:
+                        return True, same
+                return info["exists"], info.get("rows", [])
+
+            rows_any = []
+            try:
+                q = (
+                    sb.table("lancamento")
+                    .select(
+                        "id,data,num_doc,id_participante,cod_conta,cod_imovel,valor_entrada,valor_saida"
+                    )
+                    .eq("id_participante", pid)
+                    .eq("num_doc", num_doc_n)
+                    .order("id", desc=True)
+                    .limit(20)
+                )
+                rows_any = (q.execute().data) or []
+            except Exception:
+                rows_any = []
+
+            exists = bool(rows_any)
+            partnum_cache[key] = {"exists": exists, "rows": rows_any}
+            if data_iso and rows_any:
+                same = [r for r in rows_any if (r.get("data") == data_iso)]
+                if same:
+                    return True, same
+            return exists, rows_any
+
+        def _date_part_val_exists(pid: int, data_iso: str, valor_abs: float):
+            """
+            Checa existência por data + participante + valor absoluto (entrada ou saída).
+            Não considera conta. Retorna (exists, rows).
+            """
+            if not pid or not data_iso or not valor_abs:
+                return False, []
+
+            try:
+                rows = (
+                    sb.table("lancamento")
+                    .select("id,data,id_participante,num_doc,valor_entrada,valor_saida")
+                    .eq("id_participante", pid)
+                    .eq("data", data_iso)
+                    .or_(f"valor_entrada.eq.{valor_abs},valor_saida.eq.{valor_abs}")
+                    .order("id", desc=True)
+                    .limit(5)
+                    .execute()
+                    .data
+                ) or []
+                if rows:
+                    return True, rows
+            except Exception:
+                pass
+            return False, []
+
+        # ------------------ importação ------------------
         GlobalProgress.begin("Importando lançamentos (TXT)…", maximo=total, parent=self.window())
         try:
             with self.db.bulk():
-                with open(path, encoding='utf-8') as f:
+                with open(path, encoding="utf-8") as f:
                     for lineno, line in enumerate(f, 1):
                         parts = line.strip().split("|")
 
-                        # Layout 1 (11 colunas) -> YYYY-MM-DD ...
+                        # --------- parsing (dois layouts suportados) ----------
+                        # Layout 1 (11 colunas): YYYY-MM-DD|...
                         if len(parts) == 11 and re.match(r"\d{4}-\d{2}-\d{2}$", parts[0]):
-                            (data_iso, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                             participante_raw, tipo_lanc_raw, raw_ent, raw_sai, _) = parts
+                            (
+                                data_iso,
+                                cod_imovel,
+                                cod_conta,
+                                num_doc,
+                                raw_tipo_doc,
+                                historico,
+                                participante_raw,
+                                tipo_lanc_raw,
+                                raw_ent,
+                                raw_sai,
+                                _,
+                            ) = parts
 
                             y, m, d = data_iso.split("-")
-                            data_iso = f"{y}-{m}-{d}"         # ISO (já está), só mantenha
-                            data_str = f"{d}/{m}/{y}"         # BR
-                            data_ord = int(f"{y}{m}{d}")      # AAAAMMDD
+                            data_iso = f"{y}-{m}-{d}"
+                            data_str = f"{d}/{m}/{y}"
+                            data_ord = int(f"{y}{m}{d}")
                             tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
                             ent = float(raw_ent.replace(",", ".")) if raw_ent else 0.0
                             sai = float(raw_sai.replace(",", ".")) if raw_sai else 0.0
@@ -6709,203 +6803,230 @@ class MainWindow(QMainWindow):
                             id_participante = None
                             digits = re.sub(r"\D", "", participante_raw or "")
                             if digits and len(digits) in (11, 14):
-                                if digits in part_cache:
-                                    id_participante = part_cache[digits]
-                                else:
-                                    # garante auto-cadastro
-                                    pid = self._ensure_participante(digits, historico or "")
-                                    part_cache[digits] = pid
-                                    id_participante = pid
-                            elif (participante_raw or "").isdigit():
-                                id_participante = int(participante_raw)
+                                id_participante = _ensure_participante_by_digits(
+                                    digits, historico or ""
+                                )
+                            elif (participante_raw or "").strip().isdigit():
+                                id_participante = int(participante_raw or 0) or None
 
-                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
+                            tipo_lanc = (
+                                int(tipo_lanc_raw)
+                                if (tipo_lanc_raw or "").isdigit()
+                                else (1 if sai > 0 else 2)
+                            )
 
+                        # Layout 2 (12 colunas): DD-MM-AAAA|...
                         elif len(parts) == 12 and re.match(r"\d{2}-\d{2}-\d{4}$", parts[0]):
-                            (data_br, cod_imovel, cod_conta, num_doc, raw_tipo_doc, historico,
-                             cpf_cnpj_raw, tipo_lanc_raw, cent_ent, cent_sai, _cent_saldo, _nat_raw) = parts
-                        
-                            # ✅ define primeiro d,m,y e só então monta as variações
-                            d, m, y = data_br.split("-")                  # DD-MM-AAAA
-                            # vindo do TXT: "DD-MM-AAAA"
-                            d, m, y = data_br.split("-")
-                            data_iso = f"{y}-{m}-{d}"      # -> "AAAA-MM-DD" (para o banco)
-                            data_str = f"{d}/{m}/{y}"      # -> "DD/MM/AAAA" (apenas logs/UI)
-                            data_ord = int(f"{y}{m}{d}")                 # AAAAMMDD (inteiro para filtros)
-                        
+                            (
+                                data_br,
+                                cod_imovel,
+                                cod_conta,
+                                num_doc,
+                                raw_tipo_doc,
+                                historico,
+                                cpf_cnpj_raw,
+                                tipo_lanc_raw,
+                                cent_ent,
+                                cent_sai,
+                                _cent_saldo,
+                                _nat_raw,
+                            ) = parts
+
+                            d, m, y = data_br.split("-")  # DD-MM-AAAA
+                            data_iso = f"{y}-{m}-{d}"
+                            data_str = f"{d}/{m}/{y}"
+                            data_ord = int(f"{y}{m}{d}")
                             tipo_doc = int(raw_tipo_doc) if (raw_tipo_doc or "").strip().isdigit() else 4
                             ent = _parse_cent(cent_ent)
                             sai = _parse_cent(cent_sai)
-                        
+
                             id_participante = None
                             digits = re.sub(r"\D", "", cpf_cnpj_raw or "")
-                            if digits and len(digits) in (11, 14):
-                                if digits in part_cache:
-                                    id_participante = part_cache[digits]
-                                else:
-                                    row = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                                    id_participante = row[0] if row else self._ensure_participante(digits, historico)
-                                    part_cache[digits] = id_participante
-                        
-                            tipo_lanc = int(tipo_lanc_raw) if (tipo_lanc_raw or "").isdigit() else (1 if sai > 0 else 2)
-                        
+                            if digits:
+                                id_participante = _ensure_participante_by_digits(
+                                    digits, historico or ""
+                                )
+
+                            tipo_lanc = (
+                                int(tipo_lanc_raw)
+                                if (tipo_lanc_raw or "").isdigit()
+                                else (1 if sai > 0 else 2)
+                            )
 
                         else:
-                            errors.append(f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)")
+                            other_errs.append(
+                                f"Linha {lineno}: formato não reconhecido ({len(parts)} colunas)"
+                            )
                             continue
-                        
 
-                        # Heurísticas de tipo_doc/categoria
+                        # --------- heurísticas simples ----------
                         categoria = None
-                        desc = (historico or "").upper()
-                        if any(k in desc for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
-                            tipo_doc = 5; categoria = "Folha"
-                        elif any(k in desc for k in ("TALAO", "TALÃO", "ENERGIA")):
-                            tipo_doc = 4; categoria = "Fatura"
+                        desc_up = (historico or "").upper()
+                        if any(k in desc_up for k in ("FOLHA DE PAGAMENTO", "IRRF", "FGTS", "INSS", "FOLHA")):
+                            tipo_doc = 5
+                            categoria = "Folha"
+                        elif any(k in desc_up for k in ("TALAO", "TALÃO", "ENERGIA")):
+                            tipo_doc = 4
+                            categoria = "Fatura"
 
-                        # FK imóvel (normalização 1/01/001) com cache ***FILTRADO POR PERFIL***
+                        # --------- FK imóvel (com cache; filtrado por perfil) ----------
                         id_imovel = None
                         perfil_id = getattr(self.db, "perfil_id", None)
-
                         for c in _norms(cod_imovel):
                             if c in im_cache:
                                 id_imovel = im_cache[c]
                                 break
-
-                            # consulta com escopo do perfil
-                            if perfil_id:
-                                row = self.db.fetch_one(
-                                    "SELECT id FROM imovel_rural WHERE cod_imovel=? AND perfil_id=?",
-                                    (c, perfil_id),
-                                )
-                            else:
-                                row = self.db.fetch_one(
-                                    "SELECT id FROM imovel_rural WHERE cod_imovel=?",
-                                    (c,),
-                                )
-
+                            row = self.db.fetch_one(
+                                "SELECT id FROM imovel_rural WHERE cod_imovel=? AND (? IS NULL OR perfil_id=?)",
+                                (c, perfil_id, perfil_id),
+                            )
                             if row:
                                 id_imovel = row[0]
                                 for alt in _norms(cod_imovel):
                                     im_cache[alt] = id_imovel
                                 break
-
                         if not id_imovel:
-                            # 'num_doc' e 'digits' (CPF/CNPJ) já foram extraídos acima nos layouts
-                            errors.append(f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado no perfil atual | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')}")
+                            other_errs.append(
+                                f"Linha {lineno}: imóvel '{cod_imovel}' não encontrado | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')}"
+                            )
                             continue
 
-
-
-                        # FK conta (normalização 1/01/001) com cache ***FILTRADO POR PERFIL***
+                        # --------- FK conta (com cache; filtrado por perfil) ----------
                         id_conta = None
-                        perfil_id = getattr(self.db, "perfil_id", None)
-
                         for c in _norms(cod_conta):
                             if c in ct_cache:
                                 id_conta = ct_cache[c]
                                 break
-                            
-                            # consulta com escopo do perfil
-                            if perfil_id:
-                                row = self.db.fetch_one(
-                                    "SELECT id FROM conta_bancaria WHERE cod_conta=? AND perfil_id=?",
-                                    (c, perfil_id),
-                                )
-                            else:
-                                row = self.db.fetch_one(
-                                    "SELECT id FROM conta_bancaria WHERE cod_conta=?",
-                                    (c,),
-                                )
-
+                            row = self.db.fetch_one(
+                                "SELECT id FROM conta_bancaria WHERE cod_conta=? AND (? IS NULL OR perfil_id=?)",
+                                (c, perfil_id, perfil_id),
+                            )
                             if row:
                                 id_conta = row[0]
                                 for alt in _norms(cod_conta):
                                     ct_cache[alt] = id_conta
                                 break
-                            
                         if not id_conta:
-                            raise ValueError(f"Linha {lineno}: conta '{cod_conta}' não encontrada no perfil atual")
+                            other_errs.append(f"Linha {lineno}: conta '{cod_conta}' não encontrada")
+                            continue
 
-
-                        # Saldo/natureza por conta (pega último saldo do BD uma única vez)
+                        # --------- saldo/natureza por conta (apenas 1x por conta no começo) ----------
                         if id_conta not in saldos:
-                            last = (sb.table("lancamento")
-                                      .select("saldo_final,natureza_saldo,id")
-                                      .eq("cod_conta", id_conta)
-                                      .order("id", desc=True)
-                                      .limit(1).execute().data)
+                            try:
+                                last = (
+                                    sb.table("lancamento")
+                                    .select("saldo_final,natureza_saldo,id")
+                                    .eq("cod_conta", id_conta)
+                                    .order("id", desc=True)
+                                    .limit(1)
+                                    .execute()
+                                    .data
+                                )
+                            except Exception:
+                                last = None
                             if last:
-                                base = float(last[0].get("saldo_final") or 0.0)
-                                nat  = (last[0].get("natureza_saldo") or "P").upper()
-                                saldos[id_conta] = base if nat == "P" else -base
+                                base = float((last[0] or {}).get("saldo_final") or 0.0)
+                                nat0 = ((last[0] or {}).get("natureza_saldo") or "P").upper()
+                                saldos[id_conta] = base if nat0 == "P" else -base
                             else:
                                 saldos[id_conta] = 0.0
 
                         saldo_ant = saldos[id_conta]
-                        saldo_f = saldo_ant + (ent or 0.0) - (sai or 0.0)
+                        saldo_f = saldo_ant + float(ent or 0.0) - float(sai or 0.0)
                         saldos[id_conta] = saldo_f
-                        nat = 'P' if saldo_f >= 0 else 'N'
+                        nat = "P" if saldo_f >= 0 else "N"
 
-                        # --- DEDUPE condicional ---
-                        num_doc_n = (num_doc or "").replace(" ", "")
-                        
-                        is_folha = (str(tipo_doc).strip() == "5") or (str(historico or "").strip().upper().startswith("FOLHA"))
-                        
-                        if is_folha and id_participante:
-                            # Folha: dup se MESMA data + MESMO valor + MESMA REF (e opc: mesmo imóvel)
-                            alvo = float(sai or 0.0) if (sai or 0.0) > 0 else float(ent or 0.0)
-                            # candidatos no mesmo dia
-                            q = (sb.table("lancamento")
-                                    .select("id,data,tipo_doc,historico,valor_entrada,valor_saida,cod_imovel")
-                                    .eq("id_participante", id_participante)
-                                    .eq("data", data_iso))   # <<-- use ISO: AAAA-MM-DD
-                            # opcional: se sua tabela tiver 'cod_imovel', restringe para ficar à prova de colisão
-                            try:
-                                q = q.eq("cod_imovel", id_imovel)
-                            except Exception:
-                                pass
-                            cand = (q.order("id", desc=True).limit(200).execute().data) or []
-                        
-                            ref_lin = _extract_ref(historico)
-                            exists = False
-                            for c in cand:
-                                tdoc = int(c.get("tipo_doc") or 0)
-                                ve   = float(c.get("valor_entrada") or 0.0)
-                                vs   = float(c.get("valor_saida") or 0.0)
-                                vcand = vs if vs > 0 else ve
-                        
-                                hist_db = (c.get("historico") or "").strip().upper()
-                                ref_db  = _extract_ref(hist_db)
-                                same_ref = (ref_lin and ref_db and ref_lin == ref_db) or (not ref_lin and not ref_db and hist_db == (historico or "").strip().upper())
-                        
-                                if (tdoc == 5 or hist_db.startswith("FOLHA")) and abs(vcand - alvo) < 0.01 and same_ref:
-                                    exists = True
-                                    break
-                                
-                            if exists:
-                                if lineno % 200 == 0:
-                                    GlobalProgress.set_value(lineno)
-                                continue
+                        # --------- normalizações finais ----------
+                        num_doc_n = (num_doc or "").strip().replace(" ", "")
+                        if num_doc_n.upper() == "N":
+                            num_doc_n = ""
+                        # OBS: dedupe só ocorre quando TEM participante E TEM num_doc_n (quando aplicável)
+                        has_pid = bool(id_participante)
+                        has_nfd = bool(num_doc_n)
+
+                        # Se o histórico indicar PARCELA, diferencie no num_doc para evitar colisão (part+num_doc)
+                        m_parc = re.search(r"\(PARCELA\s+(\d+)\)", (historico or ""), flags=re.I)
+                        if m_parc and num_doc_n:
+                            num_doc_n = f"{num_doc_n}-{m_parc.group(1)}"
+                            has_nfd = True  # garantimos que passe no critério
                             
-                        else:
-                            # Outros tipos (NF, fatura etc.): dup por participante + num_doc (mas ignorar "N"/vazio)
-                            if id_participante:
-                                if num_doc_n.upper() == "N":
-                                    num_doc_n = ""
-                                if num_doc_n:
-                                    dup = (sb.table("lancamento")
-                                             .select("id")
-                                             .eq("id_participante", id_participante)
-                                             .eq("num_doc", num_doc_n)
-                                             .limit(1).execute().data)
-                                    if dup:
-                                        if lineno % 200 == 0:
-                                            GlobalProgress.set_value(lineno)
-                                        continue
-                                    
+                        # --------- de-para / REF opcional ----------
+                        # ref = _extract_ref(historico or "")
 
-                        # Insert
+                        # --------- DEDUPE PRÉ-INSERÇÃO (condicional por histórico) ----------
+                        desc = (historico or "").strip().upper()
+                        starts_pag_tal_rec = (
+                            desc.startswith("PAGAMENTO")
+                            or desc.startswith("TALAO")
+                            or desc.startswith("TALÃO")
+                            or desc.startswith("RECEBIMENTO")
+                        )
+                        is_folha = ("FOLHA" in desc)
+
+                        # valor absoluto (independe de receita/entrada ou despesa/saída)
+                        valor_abs = float(ent or 0.0) if (ent or 0.0) > 0 else float(sai or 0.0)
+                        valor_abs = abs(valor_abs)
+
+                        dedupe_hit = False
+
+                        if is_folha and has_pid:
+                            # Regra especial para FOLHA: data + participante + valor
+                            exists, rows = _date_part_val_exists(id_participante, data_iso, valor_abs)
+                            if exists:
+                                previews = "; ".join(
+                                    [
+                                        f"id={r.get('id')} data={r.get('data')} num_doc={r.get('num_doc') or '-'} part={r.get('id_participante') or '-'}"
+                                        for r in rows[:3]
+                                    ]
+                                )
+                                dup_msgs.append(
+                                    f"Linha {lineno}: DUP — (data+part+valor) data={data_str} | valor={valor_abs:.2f} | part={(digits or id_participante or '-')}"
+                                    f" — existentes: {previews}"
+                                )
+                                dedupe_hit = True
+
+                        elif starts_pag_tal_rec and has_pid and has_nfd:
+                            # Para PAGAMENTO / TALAO / RECEBIMENTO: somente participante + num_doc
+                            exists, rows = _part_numdoc_exists(id_participante, num_doc_n, data_iso)
+                            if exists:
+                                same = [r for r in rows if (r.get("data") == data_iso)]
+                                previews = "; ".join(
+                                    [
+                                        f"id={r.get('id')} data={r.get('data')} num_doc={r.get('num_doc') or '-'} part={r.get('id_participante') or '-'}"
+                                        for r in (same if same else rows)[:3]
+                                    ]
+                                )
+                                dup_msgs.append(
+                                    f"Linha {lineno}: DUP — (part+num_doc) data={data_str} | num_doc={(num_doc_n or '-')}"
+                                    f" | part={(digits or id_participante or '-')} | valor={valor_abs:.2f}"
+                                    f" — existentes: {previews}"
+                                )
+                                dedupe_hit = True
+
+                        else:
+                            # Comportamento padrão atual (part+num_doc quando possível)
+                            if has_pid and has_nfd:
+                                exists, rows = _part_numdoc_exists(id_participante, num_doc_n, data_iso)
+                                if exists:
+                                    same = [r for r in rows if (r.get("data") == data_iso)]
+                                    previews = "; ".join(
+                                        [
+                                            f"id={r.get('id')} data={r.get('data')} num_doc={r.get('num_doc') or '-'} part={r.get('id_participante') or '-'}"
+                                            for r in (same if same else rows)[:3]
+                                        ]
+                                    )
+                                    dup_msgs.append(
+                                        f"Linha {lineno}: DUP — (part+num_doc) data={data_str} | num_doc={(num_doc_n or '-')}"
+                                        f" | part={(digits or id_participante or '-')} | valor={valor_abs:.2f}"
+                                        f" — existentes: {previews}"
+                                    )
+                                    dedupe_hit = True
+
+                        if dedupe_hit:
+                            # NÃO insere
+                            continue
+
+                        # ---------- montar payload ----------
                         payload = {
                             "data": data_iso,
                             "data_ord": data_ord,
@@ -6923,7 +7044,85 @@ class MainWindow(QMainWindow):
                             "usuario": usuario_ts,
                             "categoria": categoria,
                         }
-                        sb.table("lancamento").insert(payload).execute()
+
+                        # --- garantir perfil_id no payload (igual à rota SQL existente) ---
+                        if getattr(self.db, "perfil_id", None):
+                            payload["perfil_id"] = self.db.perfil_id
+                        else:
+                            # inferir por conta -> imovel (se existir no seu schema)
+                            inferred = None
+                            if id_conta:
+                                crow = (
+                                    sb.table("conta_bancaria")
+                                    .select("perfil_id")
+                                    .eq("id", id_conta)
+                                    .limit(1)
+                                    .execute()
+                                    .data
+                                    or []
+                                )
+                                if crow and crow[0].get("perfil_id"):
+                                    inferred = crow[0]["perfil_id"]
+                            if (not inferred) and id_imovel:
+                                irow = (
+                                    sb.table("imovel_rural")
+                                    .select("perfil_id")
+                                    .eq("id", id_imovel)
+                                    .limit(1)
+                                    .execute()
+                                    .data
+                                    or []
+                                )
+                                if irow and irow[0].get("perfil_id"):
+                                    inferred = irow[0]["perfil_id"]
+                            if inferred:
+                                payload["perfil_id"] = inferred
+
+                        # --- tentar inserir com fallback para colisão do PK (lancamento_pkey) ---
+                        try:
+                            sb.table("lancamento").insert(payload).execute()
+                            ok_count += 1
+                        except Exception as e:
+                            msg = str(e)
+                            if "23505" in msg and "lancamento_pkey" in msg:
+                                # gera um id novo por perfil e re-tenta
+                                try:
+                                    new_id = self.db._next_id("lancamento", per_profile=True)
+                                    payload_retry = dict(payload)
+                                    payload_retry["id"] = new_id
+                                    sb.table("lancamento").insert(payload_retry).execute()
+                                    ok_count += 1
+                                except Exception as e2:
+                                    other_errs.append(
+                                        f"Linha {lineno}: FALHA AO RECRIAR ID (PK). Detalhe: {str(e2).splitlines()[0]}"
+                                    )
+                                    continue
+                            else:
+                                # registra como 'índice do banco' apenas para UNIQUEs diferentes de PK
+                                previews = ""
+                                try:
+                                    rows_help = (
+                                        sb.table("lancamento")
+                                        .select("id,data,num_doc,id_participante,cod_conta")
+                                        .eq("num_doc", num_doc_n or "")
+                                        .order("id", desc=True)
+                                        .limit(5)
+                                        .execute()
+                                        .data
+                                    ) or []
+                                    if rows_help:
+                                        previews = " — candidatos: " + "; ".join(
+                                            f"id={r.get('id')} data={r.get('data')} num_doc={r.get('num_doc') or '-'} "
+                                            f"part={r.get('id_participante') or '-'} conta={r.get('cod_conta') or '-'}"
+                                            for r in rows_help
+                                        )
+                                except Exception:
+                                    pass
+                                other_errs.append(
+                                    f"Linha {lineno}: BLOQUEADO POR UNIQUE DO BANCO (≠ nossa regra part+num_doc). "
+                                    f"NF:{num_doc_n or '-'} | part:{(digits or id_participante or '-')} | detalhe: {msg.splitlines()[0]}{previews}"
+                                )
+                                continue
 
                         if lineno % 200 == 0:
                             GlobalProgress.set_value(lineno)
@@ -6932,28 +7131,86 @@ class MainWindow(QMainWindow):
         finally:
             GlobalProgress.end()
 
+        # ------------------ diálogo de resumo ------------------
+        resumo = (
+            f"Importação concluída. Sucesso: {ok_count} | DUP (regras): {len(dup_msgs)} | "
+            f"Outros/bloqueios: {len(other_errs)}"
+        )
+
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QLabel,
+            QTextEdit,
+            QPushButton,
+            QHBoxLayout,
+            QSizePolicy,
+        )
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Importação de Lançamentos (TXT)")
+        dlg.resize(1000, 600)
+
+        lay = QVBoxLayout(dlg)
+
+        lab = QLabel(resumo)
+        lab.setWordWrap(True)
+        lay.addWidget(lab)
+
+        def _add_block(title: str, lines: list[str]):
+            if not lines:
+                return
+            titulo = QLabel(f"<b>{title}</b>")
+            lay.addWidget(titulo)
+            box = QTextEdit()
+            box.setReadOnly(True)
+            box.setLineWrapMode(QTextEdit.NoWrap)
+            box.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            box.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            box.setMinimumHeight(200)
+            box.setPlainText("\n".join(lines))
+            lay.addWidget(box, 1)
+
+        _add_block("DUPLICADOS (regras de deduplicidade)", dup_msgs)
+        _add_block("OUTROS ERROS / BLOQUEIOS DE ÍNDICE", other_errs)
+
+        btns = QHBoxLayout()
+        btn_ok = QPushButton("OK")
+        btn_ok.clicked.connect(dlg.accept)
+        btns.addStretch(1)
+        btns.addWidget(btn_ok)
+        lay.addLayout(btns)
+
+        dlg.exec()
+
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
 
+    
     def _import_lancamentos_excel(self, path):
         import re
+        from datetime import datetime
+        from PySide6.QtWidgets import QMessageBox
+    
         df = pd.read_excel(path, dtype=str)
-
+    
         required = ['data','cod_imovel','cod_conta','num_doc','tipo_doc','historico','tipo_lanc','valor_entrada','valor_saida','categoria']
         missing = [c for c in required if c not in df.columns]
         if missing:
             raise ValueError(f"Colunas faltando no Excel: {', '.join(missing)}")
-
+    
         has_pid = 'id_participante' in df.columns
         has_doc = 'cpf_cnpj' in df.columns
         if not (has_pid or has_doc):
             raise ValueError("Planilha deve ter 'id_participante' ou 'cpf_cnpj'.")
-
+    
         df.fillna('', inplace=True)
-
+    
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
         usuario_ts = f"{CURRENT_USER} dia {now}"
-
+    
         def _norms(code: str):
             s = (code or '').strip()
             if not s:
@@ -6962,53 +7219,48 @@ class MainWindow(QMainWindow):
             if s.isdigit():
                 out += [s.zfill(3), (s.lstrip('0') or '0')]
             return list(dict.fromkeys(out))
-
+    
+        def _to_float(v):
+            s = str(v).strip()
+            if s == '':
+                return 0.0
+            # aceita "1.234,56" ou "1234.56"
+            s = s.replace('.', '').replace(',', '.')
+            try:
+                return float(s)
+            except Exception:
+                return 0.0
+    
         total = len(df.index)
-
+    
         # ---- caches e saldos por conta (mesma lógica do TXT) ----
         im_cache = {}
         ct_cache = {}
         part_cache = {}
         saldos = {}
-
+    
         errors: list[str] = []
         ok_count = 0
-
+    
         GlobalProgress.begin("Importando lançamentos (Excel)…", maximo=total, parent=self.window())
         try:
             with self.db.bulk():
                 for lineno, row in enumerate(df.itertuples(index=False), start=2):
-                    # FK Imóvel (com cache)
-                    id_imovel = None
-                    for c in _norms(getattr(row, 'cod_imovel', '')):
-                        if c in im_cache:
-                            id_imovel = im_cache[c]; break
-                        r = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (c,))
-                        if r:
-                            id_imovel = r[0]
-                            for alt in _norms(getattr(row, 'cod_imovel', '')):
-                                im_cache[alt] = id_imovel
-                            break
-                    if not id_imovel:
-                        raise ValueError(f"Linha {lineno}: imóvel '{row.cod_imovel}' não encontrado")
-
-                    # FK Conta (com cache)
-                    id_conta = None
-                    for c in _norms(getattr(row, 'cod_conta', '')):
-                        if c in ct_cache:
-                            id_conta = ct_cache[c]; break
-                        r = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (c,))
-                        if r:
-                            id_conta = r[0]
-                            for alt in _norms(getattr(row, 'cod_conta', '')):
-                                ct_cache[alt] = id_conta
-                            break
-                    if not id_conta:
-                        errors.append(f"Linha {lineno}: conta '{row.cod_conta}' não encontrada | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')}")
-                        continue
-
-                    # Participante
+                    # ===== Campos da linha =====
+                    data_str      = str(getattr(row, 'data', '')).strip()              # DD/MM/AAAA
+                    cod_imovel_s  = str(getattr(row, 'cod_imovel', '')).strip()
+                    cod_conta_s   = str(getattr(row, 'cod_conta', '')).strip()
+                    num_doc_n     = str(getattr(row, 'num_doc', '')).strip() or None
+                    tipo_doc_raw  = str(getattr(row, 'tipo_doc', '')).strip()
+                    historico     = str(getattr(row, 'historico', '')).strip()
+                    tipo_lanc_raw = str(getattr(row, 'tipo_lanc', '')).strip()
+                    ent           = _to_float(getattr(row, 'valor_entrada', '0'))
+                    sai           = _to_float(getattr(row, 'valor_saida', '0'))
+                    categoria     = str(getattr(row, 'categoria', '')).strip()
+    
+                    # Participante (por id ou cpf_cnpj)
                     pid = None
+                    digits = '-'
                     if has_pid and str(getattr(row, 'id_participante', '')).strip().isdigit():
                         pid = int(getattr(row, 'id_participante'))
                     elif has_doc:
@@ -7018,15 +7270,52 @@ class MainWindow(QMainWindow):
                                 pid = part_cache[digits]
                             else:
                                 r = self.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-                                pid = r[0] if r else self._ensure_participante(digits, getattr(row, 'historico', ''))
+                                pid = r[0] if r else self._ensure_participante(digits, historico)
                                 part_cache[digits] = pid
-
-                    # Valores
-                    ent = float(row.valor_entrada or 0)
-                    sai = float(row.valor_saida or 0)
-                    tipo_doc = int(row.tipo_doc) if str(row.tipo_doc).strip().isdigit() else 4
-                    tipo_lanc = int(row.tipo_lanc) if str(row.tipo_lanc).strip().isdigit() else (1 if ent > 0 else 2)
-
+    
+                    # FK Imóvel (com cache)
+                    id_imovel = None
+                    for c in _norms(cod_imovel_s):
+                        if c in im_cache:
+                            id_imovel = im_cache[c]; break
+                        r = self.db.fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (c,))
+                        if r:
+                            id_imovel = r[0]
+                            for alt in _norms(cod_imovel_s):
+                                im_cache[alt] = id_imovel
+                            break
+                    if not id_imovel:
+                        errors.append(f"Linha {lineno}: imóvel '{cod_imovel_s}' não encontrado | NF:{num_doc_n or '-'} | CPF/CNPJ:{digits}")
+                        continue
+                    
+                    # FK Conta (com cache)
+                    id_conta = None
+                    for c in _norms(cod_conta_s):
+                        if c in ct_cache:
+                            id_conta = ct_cache[c]; break
+                        r = self.db.fetch_one("SELECT id FROM conta_bancaria WHERE cod_conta=?", (c,))
+                        if r:
+                            id_conta = r[0]
+                            for alt in _norms(cod_conta_s):
+                                ct_cache[alt] = id_conta
+                            break
+                    if not id_conta:
+                        errors.append(f"Linha {lineno}: conta '{cod_conta_s}' não encontrada | NF:{num_doc_n or '-'} | CPF/CNPJ:{digits}")
+                        continue
+                    
+                    # Tipos
+                    tipo_doc = int(tipo_doc_raw) if tipo_doc_raw.isdigit() else 4
+                    tipo_lanc = int(tipo_lanc_raw) if tipo_lanc_raw.isdigit() else (1 if ent > 0 else 2)
+    
+                    # Datas
+                    try:
+                        dd, mm, yyyy = data_str.split("/")
+                        data_ord = int(f"{yyyy}{mm}{dd}")  # AAAAMMDD
+                        data_iso = f"{yyyy}-{mm}-{dd}"     # AAAA-MM-DD
+                    except Exception:
+                        errors.append(f"Linha {lineno}: data inválida '{data_str}' | NF:{num_doc_n or '-'} | CPF/CNPJ:{digits}")
+                        continue
+                    
                     # Saldo/natureza por conta (consulta 1x e mantém acumulado)
                     if id_conta not in saldos:
                         last = self.db.fetch_one(
@@ -7035,15 +7324,13 @@ class MainWindow(QMainWindow):
                             (id_conta,)
                         )
                         saldos[id_conta] = last[0] if last and last[0] is not None else 0.0
-
+    
                     saldo_ant = saldos[id_conta]
                     saldo_f = saldo_ant + ent - sai
                     saldos[id_conta] = saldo_f
                     nat = 'P' if saldo_f >= 0 else 'N'
-                    # row.data no formato DD/MM/AAAA
-                    dd, mm, yyyy = str(row.data).split("/")
-                    data_ord = int(f"{yyyy}{mm}{dd}")  # AAAAMMDD
-
+    
+                    # ===== INSERT com tratamento de duplicados (23505 / duplicate key) =====
                     try:
                         self.db.execute_query(
                             """INSERT INTO lancamento (
@@ -7051,35 +7338,44 @@ class MainWindow(QMainWindow):
                                    id_participante, tipo_lanc, valor_entrada, valor_saida,
                                    saldo_final, natureza_saldo, usuario, categoria, data_ord
                                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                            [data_iso, id_imovel, id_conta, ((num_doc or '').strip() or None), tipo_doc, historico,
-                             id_participante, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
+                            [data_iso, id_imovel, id_conta, num_doc_n, tipo_doc, historico,
+                             pid, int(tipo_lanc), ent, sai, abs(saldo_f), nat, usuario_ts, categoria, data_ord]
                         )
                         ok_count += 1
                     except Exception as e:
-                        errors.append(f"Linha {lineno}: falha ao inserir lançamento | NF:{(num_doc or '').strip()} | CPF/CNPJ:{(digits or '-')} | {e}")
-                        continue
-                    
-
+                        msg = str(e)
+                        # Trata duplicidade e segue importando o restante
+                        if ("23505" in msg) or ("duplicate key" in msg.lower()) or ("unique constraint" in msg.lower()) or ("lancamento_pkey" in msg):
+                            errors.append(
+                                f"Linha {lineno}: DUPLICADO — "
+                                f"data={data_str}; conta={cod_conta_s}; imovel={cod_imovel_s}; "
+                                f"num_doc={num_doc_n or '-'}; participante_id={pid or '-'}; "
+                                f"entrada={ent}; saida={sai}; nat={nat}; data_ord={data_ord}"
+                            )
+                            continue
+                        else:
+                            errors.append(f"Linha {lineno}: ERRO ao inserir — {msg} | NF:{num_doc_n or '-'} | CPF/CNPJ:{digits}")
+                            continue
+                        
                     if (lineno - 1) % 200 == 0:
                         GlobalProgress.set_value(lineno - 1)
-
+    
             GlobalProgress.set_value(total)
         finally:
             GlobalProgress.end()
-
-        resumo = f"Importação concluída.\nSucesso: {ok_count}\nErros: {len(errors)}"
+    
+        resumo = f"Importação concluída.\nSucesso: {ok_count}\nPulados (duplicados/erros): {len(errors)}"
         if errors:
-            # mostra as primeiras 50 linhas para não estourar a caixa
             detalhes = "\n- " + "\n- ".join(errors[:50])
             if len(errors) > 50:
                 detalhes += f"\n... (+{len(errors)-50} restantes)"
-            QMessageBox.warning(self, "Importação de Lançamentos (TXT)", resumo + "\n\nOcorrências:" + detalhes)
+            QMessageBox.warning(self, "Importação de Lançamentos (Excel)", resumo + "\n\nOcorrências:\n" + detalhes)
         else:
-            QMessageBox.information(self, "Importação de Lançamentos (TXT)", resumo)
-        
+            QMessageBox.information(self, "Importação de Lançamentos (Excel)", resumo)
+    
         # terminou: atualiza listas/combos de participantes nas janelas abertas
         self._broadcast_participantes_changed()
-
+    
     # =====================
     # Importação (modal)
     # =====================

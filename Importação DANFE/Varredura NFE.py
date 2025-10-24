@@ -87,6 +87,34 @@ XML_DIRS = [
 ]
 SIMILARIDADE_MIN_NOME = 0.80  # 80%
 
+# ======== ANTI-ERRO: constantes de segurança ========
+from datetime import timedelta
+
+DATE_WINDOW_DAYS_BEFORE = 10   # janela mínima antes da data da nota
+DATE_WINDOW_DAYS_AFTER  = 45   # janela máxima depois da data da nota
+TOL_ATOL = 0.01                # tolerância absoluta de centavos
+TOL_REL  = 0.001               # tolerância relativa (0.1%)
+SIMILARIDADE_MIN_NOME_STRICT = 0.90  # quando CNPJ divergir
+# Tolerância de valor: menos de R$ 1 (centavos)
+VAL_TOL = 0.10  # R$ 0,10
+
+# Extrai nº NF do texto (ex.: "PAGAMENTO NF 14") ou de chave NFe (44 dígitos)
+_nf_re = re.compile(r'NF\D*(\d+)', re.IGNORECASE)
+_chave44_re = re.compile(r'\b(\d{44})\b')
+
+def _extract_nf_num(texto: str) -> str | None:
+    if not texto:
+        return None
+    m = _nf_re.search(texto)
+    if m:
+        return m.group(1).lstrip("0") or "0"
+    m2 = _chave44_re.search(texto)
+    if m2:
+        # nNF costuma vir nos dígitos 36-43; ajuste se você já tem util próprio
+        chave = m2.group(1)
+        return chave[35:44].lstrip("0") or "0"
+    return None
+
 def _norm_txt(s: str) -> str:
     s = str(s or "").upper().strip()
     s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("ASCII")
@@ -228,6 +256,33 @@ def _xml_menciona_nf_do_mesmo_fornecedor(cnpj_emit: str, nnf_procurada: str, xml
         if alvo and alvo in (re.sub(r"\D", "", ch) or ""):
             return True
     return False
+
+def _buscar_valor_devolucao_relacionada(nota: dict) -> float | None:
+    """
+    Procura, entre os XMLs nas pastas definidas em XML_DIRS, um documento do mesmo CNPJ
+    que mencione a NF indicada na linha 'nota' (num_nf_busca) e retorna o vNF desse XML
+    (valor da nota referenciante). Retorna None se não encontrar.
+    """
+    try:
+        cnpj = str(nota.get('cnpj_busca', '')).strip()
+        nnf = str(nota.get('num_nf_busca', '')).strip()
+        if not cnpj or not nnf:
+            return None
+
+        # Varre os XMLs disponíveis (lazy generator já definido)
+        for xml_info in _iter_xmls(XML_DIRS):
+            try:
+                if _xml_menciona_nf_do_mesmo_fornecedor(cnpj, nnf, xml_info):
+                    v = xml_info.get('vnf')
+                    if v is None:
+                        continue
+                    return float(v)
+            except Exception:
+                # Protege contra XMLs malformados/infos inesperadas
+                continue
+    except Exception:
+        return None
+    return None
 
 base_dados_path, testes_path = _resolve_paths()
 
@@ -595,10 +650,12 @@ for i, nota in df_to_process.iterrows():
     # >>> PATCH: preparar normalizações/valores de referência para as guardas
     nome_nota_norm = _norm_txt(nota.get('fornecedor', ''))
     valor_nota = float(nota.get('valor_busca') or 0.0)
+    num_nf_nota = str(nota.get('num_nf_busca', '')).strip()
+    cnpj_nota   = str(nota.get('cnpj_busca', '')).strip()
 
     def _tolerancia_valor_para_cnpj_diferente(v):
         # tolerância dinâmica: max(R$10, 10% do valor da nota)
-        return max(40.0, 0.40 * max(v, 0.0))
+        return max(10.0, 0.10 * max(v, 0.0))
 
 
     parcela_encontrada = None
@@ -620,7 +677,298 @@ for i, nota in df_to_process.iterrows():
         )
         if primarios_cancelados:
             cands = cands.loc[~cands['num_primario'].astype(str).isin(primarios_cancelados)].copy()
+
+    # ================== INÍCIO: BLOCO MULTI-PARCELAS (cole antes da seleção única) ==================
+    if not cands.empty:
+        cands = cands.copy()
+
+        # Normalizações/garantias de tipo
+        cands['valor'] = cands['valor'].astype(float)
+        cands['data_pagamento'] = pd.to_datetime(cands['data_pagamento'], errors='coerce')
+        cands['data_vencimento'] = pd.to_datetime(cands.get('data_vencimento', pd.NaT), errors='coerce')
+
+        # Janela de datas (data_nota -10d, +45d)
+        if not pd.isna(data_nota):
+            dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
+            dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
+            cands = cands[(cands['data_pagamento'] >= dmin) & (cands['data_pagamento'] < dmax)]
+
+        # ---- Ranqueamento (mesmos sinais que você já usa) ----
+        import numpy as np
+        cands['score'] = 0.0
+        cands['score'] += (cands['cnpj'].astype(str) == str(nota.get('cnpj_busca', ''))).astype(float) * 2.0
+        if not pd.isna(data_nota):
+            cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
+        cands['diff_val'] = (cands['valor'] - float(nota.get('valor_busca', 0.0))).abs()
+        cands['score'] += np.isclose(cands['valor'], float(nota.get('valor_busca', 0.0)), atol=VAL_TOL).astype(float) * 1.0
+        cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
+        cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
+
+        cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'], ascending=[False, True, False])
+
+        # ---- Consumo de parcelas até fechar o valor da NF ----
+        parcelas_escolhidas = []
+        saldo = float(nota.get('valor_busca', 0.0) or 0.0)
+
+        for idx_sel, row in cands.iterrows():
+            v = float(row.get('valor', 0.0) or 0.0)
+
+            # Segurança por CNPJ/nome (se houver similaridade disponível)
+            if str(row.get('cnpj', '')) != str(nota.get('cnpj_busca', '')):
+                sim = row.get('sim_nome', None)
+                if sim is not None:
+                    try:
+                        if float(sim) < SIMILARIDADE_MIN_NOME:
+                            continue
+                    except Exception:
+                        pass
+
+            # Pega enquanto couber no saldo (com tolerância de centavos)
+            if v <= saldo + VAL_TOL:
+                parcelas_escolhidas.append((idx_sel, row))
+                saldo -= v
+                try:
+                    df_base.at[idx_sel, 'associada'] = True
+                except Exception:
+                    pass
+
+            if abs(saldo) <= VAL_TOL:
+                break
+
+        if parcelas_escolhidas:
+            # ---- Emissão de 1 linha TXT por parcela ----
+            num_nf = str(nota.get('num_nf_busca', '')).strip()
+            cnpj_nf = str(nota.get('cnpj_busca', '')).strip()
+            cod_faz = str(nota.get('cod_fazenda', '') or '').zfill(3)
+
+            for k, (idx_sel, parcela) in enumerate(parcelas_escolhidas, start=1):
+                data_pgto = parcela.get('data_pagamento')
+                usa_data_nota = _should_use_data_nota(nota, data_pgto)
+                data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
+                data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
+                cod_banco = _conta_codigo(str(parcela.get('banco', '')).strip()) or '001'
+                valor = float(parcela.get('valor', 0.0) or 0.0)
+                valor_cent = str(int(round(valor * 100)))
+
+                # dentro do loop das parcelas_escolhidas:
+                descricao = f"PAGAMENTO NF {num_nf} (PARCELA {k} de {len(parcelas_escolhidas)})"
+                txt_lines.append("|".join([
+                    data_fmt,
+                    cod_faz,
+                    cod_banco,
+                    f"{num_nf}-{k}",        # num_doc com sufixo da parcela (EVITA DEDUPE)
+                    str(k),                 # número da parcela
+                    descricao,              # historico -> deixa claro a NF e a parcela
+                    cnpj_nf,
+                    "2", "000",
+                    valor_cent, valor_cent,
+                    "N"
+                ]))
+
+                pagamentos_associados += 1
+                try:
+                    linhas_pagas_idx.append(nota.name)
+                except Exception:
+                    pass
+
+            # ---- Atualiza a linha de resultado para planilha (após gerar as linhas TXT das parcelas) ----
+            ult = parcelas_escolhidas[-1][1]
+            data_pgto = ult.get('data_pagamento')
+            usa_data_nota = _should_use_data_nota(nota, data_pgto)
+            data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
+            
+            # saldo final após consumir as parcelas
+            valor_nota = float(nota.get('valor_busca', 0.0) or 0.0)
+            saldo_final = valor_nota - sum(float(p[1].get('valor', 0.0) or 0.0) for p in parcelas_escolhidas)
+            
+            if abs(saldo_final) <= VAL_TOL:
+                # ✅ fechou a NF: marca como Pago e ENCERRA esta nota
+                result_row.update({
+                    'Status Nota': 'Ativa',
+                    'Status Pagamento': 'Pago',
+                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or '',
+                    'Data Pagamento': (pd.to_datetime(data_base).strftime('%d%m%Y') if not pd.isna(data_base) else ''),
+                    'Observações': f'Pagto fracionado: {len(parcelas_escolhidas)} parcela(s)'
+                })
+                results.append(result_row)
+                continue  # <-- continue SOMENTE quando fechou a NF
+            else:
+                # 🔶 ainda falta valor: NÃO dá continue (deixa seguir para o abatimento por devolução)
+                result_row.update({
+                    'Status Nota': 'Ativa',
+                    'Status Pagamento': 'Parcial',
+                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or '',
+                    'Data Pagamento': (pd.to_datetime(data_base).strftime('%d%m%Y') if not pd.isna(data_base) else ''),
+                    'Observações': f'Parcial: {len(parcelas_escolhidas)} parcela(s); falta R$ {saldo_final:.2f}'
+                })
+                # Não dar results.append aqui; se o abatimento completar, o append é feito lá.
+            
+
+
+    # ======== ABATIMENTO POR DEVOLUÇÃO/REFATURAMENTO (RODAR SEMPRE) ========
+    # saldo_remanescente = valor da NF - soma do que já foi associado nesta iteração
+    try:
+        valor_aceito = 0.0
+        if 'parcelas_escolhidas' in locals() and parcelas_escolhidas:
+            valor_aceito = float(sum(float(p[1].get('valor', 0.0) or 0.0) for p in parcelas_escolhidas))
+        saldo_remanescente = max(0.0, valor_nota - valor_aceito)
+    except Exception:
+        saldo_remanescente = valor_nota
+        
+    if saldo_remanescente > VAL_TOL:
+        # 1) buscar em XMLs uma NFe que referencie a NF original (refNFe/nº NF) do mesmo CNPJ
+        #    -> obtenha valor_devolucao (vnf_dev)
+        vnf_dev = _buscar_valor_devolucao_relacionada(nota)  # <- se já tiver helper, use-o
+
+        if vnf_dev and vnf_dev > 0:
+            diff = abs(vnf_dev - saldo_remanescente)
+            if diff <= VAL_TOL:
+                # 2) procurar um pagamento solto com exatamente o valor da diferença
+                cands_diff = df_base[
+                    (df_base['associada'] != True) &
+                    (df_base['pagamento_cancelado'].astype(str).str.upper() != 'SIM') &
+                    (df_base['cnpj'].astype(str) == cnpj_nota) &
+                    np.isclose(df_base['valor'].astype(float), saldo_remanescente, atol=VAL_TOL)
+                ].copy()
+
+                # opcional: aplicar mesma janela de datas
+                if not pd.isna(data_nota):
+                    dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
+                    dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
+                    cands_diff['data_pagamento'] = pd.to_datetime(cands_diff['data_pagamento'], errors='coerce')
+                    cands_diff = cands_diff[(cands_diff['data_pagamento'] >= dmin) & (cands_diff['data_pagamento'] < dmax)]
+
+                if not cands_diff.empty:
+                    # gerar UMA linha TXT correspondente ao abatimento por devolução (parcela extra)
+                    parcela_k = 1
+                    if 'parcelas_escolhidas' in locals() and parcelas_escolhidas:
+                        parcela_k = len(parcelas_escolhidas) + 1
+
+                    row = cands_diff.sort_values('data_pagamento').iloc[0]
+                    data_pgto = pd.to_datetime(row.get('data_pagamento'), errors='coerce')
+                    usa_data_nota = _should_use_data_nota(nota, data_pgto)
+                    data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
+                    data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
+                    cod_banco = _conta_codigo(str(row.get('banco', '')).strip()) or '001'
+                    valor_cent = str(int(round(float(saldo_remanescente) * 100)))
+                    num_nf = num_nf_nota
+
+                    descricao = f"PAGAMENTO NF {num_nf} (ABATE DEVOLUÇÃO)"
+
+                    txt_lines.append("|".join([
+                        data_fmt,
+                        str(nota.get('cod_fazenda')).zfill(3),
+                        cod_banco,
+                        f"{num_nf}-{parcela_k}",
+                        str(parcela_k),
+                        descricao,
+                        cnpj_nota,
+                        "2", "000",
+                        valor_cent, valor_cent,
+                        "N"
+                    ]))
+
+                    # marca associado e atualiza resultado
+                    try:
+                        idx_sel = row.name
+                        df_base.at[idx_sel, 'associada'] = True
+                    except Exception:
+                        pass
+
+                    result_row.update({
+                        'Status Nota': 'Ativa',
+                        'Status Pagamento': 'Pago',
+                        'Banco': cod_banco,
+                        'Data Pagamento': (pd.to_datetime(data_base).strftime('%d%m%Y') if not pd.isna(data_base) else ''),
+                        'Observações': (result_row.get('Observações') or '') + f" | Abate por devolução: {saldo_remanescente:.2f}"
+                    })
+                    results.append(result_row)
+                    # (não precisa continue aqui; já estamos no final do bloco por nota)
+                    continue
+
+
+    # ======== CAMADA 1: candidatos com mesmo CNPJ E mesmo nº NF ========
+    num_nf_nota = str(nota.get('num_nf_busca', '')).strip()
+    cnpj_nota   = str(nota.get('cnpj_busca', '')).strip()
+
+    if 'num_nf' not in cands.columns:
+        cands['num_nf'] = None
+    if 'historico' in cands.columns:
+        cands.loc[cands['num_nf'].isna(), 'num_nf'] = (
+            cands.loc[cands['num_nf'].isna(), 'historico']
+                 .astype(str).apply(_extract_nf_num)
+        )
+
+    cands_layer1 = cands[
+        (cands['cnpj'].astype(str) == cnpj_nota) &
+        (cands['num_nf'].astype(str) == num_nf_nota)
+    ]
+
+    if not cands_layer1.empty:
+        cands = cands_layer1.copy()
+    else:
+        # ======== FALLBACK: sem nº NF, ficar bem restrito ========
+        # 1) CNPJ igual (preferência forte)
+        cands = cands[(cands['cnpj'].astype(str) == cnpj_nota)].copy()
+
+        # Se mesmo assim não houver, permitir CNPJ ≠ porém com nome MUITO parecido
+        if cands.empty and 'sim_nome' in df_base.columns:
+            cands = df_base[
+                (df_base['associada'] != True) &
+                (df_base['pagamento_cancelado'].astype(str).str.upper() != 'SIM') &
+                (df_base['sim_nome'].astype(float) >= SIMILARIDADE_MIN_NOME_STRICT)
+            ].copy()
+
+        # Proibir candidatos com nº NF diferente quando ambos existem
+        if 'num_nf' in cands.columns:
+            cands = cands[
+                (cands['num_nf'].isna()) |
+                (cands['num_nf'].astype(str) == '') |
+                (num_nf_nota == '') |
+                (cands['num_nf'].astype(str) == num_nf_nota)
+            ]
+
+    # ======== JANELA DE DATAS: [data_nota -10d, +45d] ========
+    data_nota = pd.to_datetime(nota.get('data_nota'), errors='coerce')
+    if not pd.isna(data_nota) and not cands.empty:
+        dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
+        dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
+        cands['data_pagamento'] = pd.to_datetime(cands['data_pagamento'], errors='coerce')
+        cands = cands[(cands['data_pagamento'] >= dmin) & (cands['data_pagamento'] < dmax)]
     
+    # ======== RANQUEAMENTO + TOLERÂNCIAS ========
+    import numpy as np
+    cands = cands.copy()
+    cands['valor'] = cands['valor'].astype(float)
+    cands['score'] = 0.0
+    cands['score'] += (cands['cnpj'].astype(str) == cnpj_nota).astype(float) * 2.0
+    if not pd.isna(data_nota) and 'data_vencimento' in cands.columns:
+        cands['data_vencimento'] = pd.to_datetime(cands['data_vencimento'], errors='coerce')
+        cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
+    
+    valor_nf = float(nota.get('valor_busca', 0.0) or 0.0)
+    cands['diff_val'] = (cands['valor'] - valor_nf).abs()
+    
+    # tolerância absoluta e relativa
+    cands['isclose_val'] = np.isclose(cands['valor'], valor_nf, atol=VAL_TOL)
+    cands['score'] += cands['isclose_val'].astype(float) * 1.0
+    cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
+    # Pontua ter 'banco' preenchido (se a coluna existir)
+    if 'banco' in cands.columns:
+        cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
+
+    
+    # CNPJ divergente: exigir similaridade alta (se houver) e proibir nº NF conflitante
+    if 'sim_nome' in cands.columns and num_nf_nota:
+        cands = cands[
+            (cands['cnpj'].astype(str) == cnpj_nota) |
+            (
+                (cands['sim_nome'].astype(float) >= SIMILARIDADE_MIN_NOME_STRICT) &
+                ((cands['num_nf'].isna()) | (cands['num_nf'].astype(str) == '') | (cands['num_nf'].astype(str) == num_nf_nota))
+            )
+        ]
+    
+    cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'], ascending=[False, True, False])
     
     # CAMADA 2: mesma NF (ignorando CNPJ) + não cancelado + não associada,
     #           MAS agora exigindo semelhança de nome e coerência de valor/data.
@@ -706,7 +1054,7 @@ for i, nota in df_to_process.iterrows():
             cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
         # Aproximação por valor
         cands['diff_val'] = (cands['valor'] - float(nota['valor_busca'])).abs()
-        cands['score'] += (np.isclose(cands['valor'], nota['valor_busca'], atol=0.01)).astype(float) * 1.0
+        cands['score'] += np.isclose(cands['valor'], nota['valor_busca'], atol=VAL_TOL).astype(float) * 1.0
         cands['score'] -= (cands['diff_val'] > 5.0).astype(float) * 0.5
         # Similaridade de nome (se existir)
         if 'sim_nome' in cands.columns:
@@ -974,7 +1322,7 @@ for i, nota in df_to_process.iterrows():
 
     # diferença entre a NF original e a NF 'referenciante'
     diferenca = round(abs(valor_nf - float(achado['vnf'])), 2)
-    if diferenca <= 0.01:
+    if diferenca <= VAL_TOL:
         continue
 
     # procurar um pagamento NÃO associado com exatamente esse valor (tolerância centavos)
@@ -982,7 +1330,7 @@ for i, nota in df_to_process.iterrows():
     cand = df_base.loc[
         (~df_base['associada']) &
         (df_base['pagamento_cancelado'] != 'SIM') &
-        (np.isclose(df_base['valor'], diferenca, atol=0.01))
+        np.isclose(df_base['valor'], diferenca, atol=VAL_TOL)
     ].copy()
 
     if cand.empty:
