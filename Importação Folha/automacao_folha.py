@@ -154,6 +154,7 @@ IMOVEL_MAP = {
     },
     "ADRIANA": {
         "FAZENDA POUSO DA ANTA": "001",
+        "FAZENDA PRIMAVERA III": "002",
     },
     "GILSON": {
         "FAZENDA FORMIGA": "001",
@@ -1145,7 +1146,23 @@ class AutomacaoFolhaUI(QWidget):
             "• Escolha o período (MM/AAAA → MM/AAAA).\n"
             "• A: imóvel/fazenda; B: CPF; C: Funcionário; D: Líquido; F3/G3/H3: INSS/IRRF/FGTS.\n"
             "• Funcionários no 5º dia útil; tributos no 20º dia útil; valores sem pontuação.\n"
-            "• Você pode CANCELAR durante a geração."
+            "• Você pode CANCELAR durante a geração.\n\n"
+            "FAZENDAS DOMÍNIO:\n\n"
+            "CLEUBER:\n"
+            "  4  - FAZ ALIANÇA\n"
+            "  5  - FAZ PRIMAVERA\n"
+            "  6  - ARMAZEM PRIMA\n"
+            "  7  - FAZ FORMOSO\n"
+            "  8  - FAZ L3\n"
+            "  9  - FAZ FRUTACC\n"
+            " 10  - FAZ GUARA\n\n"
+            "GILSON:\n"
+            " 14  - FAZ FORMIGA\n\n"
+            "LUCAS:\n"
+            " 11  - FAZ ALIANÇA 2\n\n"
+            "ADRIANA:\n"
+            " 12  - FAZ POUSO DA ANTA\n"
+            " 13  - FAZ FRUTACC 3\n"
         ))
         btn_cfg = QToolButton(); btn_cfg.setText("⚙️ Configurar")
         btn_cfg.clicked.connect(self._open_config)
