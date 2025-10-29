@@ -283,14 +283,23 @@ APP_ICON    = os.path.join(ICONS_DIR, 'agro_icon.png')
 LOCK_ICON   = os.path.join(ICONS_DIR, 'lock.png')
 
 # Perfil dinâmico
-CURRENT_PROFILE = "Cleuber Marcos"
+CURRENT_PROFILE = os.environ.get("CURRENT_PROFILE", "Cleuber Marcos")
 
 # Usuário que fez login
 CURRENT_USER = None
 
-def get_profile_db_filename():
-    # legado removido (não há mais SQLite local)
-    return ""
+def get_current_profile() -> str:
+    return CURRENT_PROFILE
+
+def set_current_profile(profile: str) -> None:
+    """
+    Atualiza o perfil atual em memória e sincroniza com variável de ambiente,
+    para que outros módulos tenham a mesma visão.
+    """
+    global CURRENT_PROFILE
+    CURRENT_PROFILE = (profile or "").strip()
+    os.environ["CURRENT_PROFILE"] = CURRENT_PROFILE
+
 
 # ── (1) Login 100% Supabase ─────────────────────────────────────────
 # Tabela esperada: public.app_users (username text PK, password text, role text)
@@ -5713,16 +5722,14 @@ class MainWindow(QMainWindow):
         self._profile_banner.setText(f"Perfil: {CURRENT_PROFILE}  |  Usuário: {user}")
 
     def switch_profile(self, profile: str):
-        global CURRENT_PROFILE
-        if profile == CURRENT_PROFILE:
-            return
-        CURRENT_PROFILE = profile
+        # mantém variável global e variável de ambiente sempre em sincronia
+        set_current_profile(profile)
         self._update_profile_banner()
-
-        # reabrir conexões
+        
+        # reabrir conexões já com o novo perfil
         self.db.set_profile(profile)
         self.dashboard.db.set_profile(profile)
-
+        
         # menor/maior data do novo perfil
         row = self.db.fetch_one("SELECT MIN(data_ord), MAX(data_ord) FROM lancamento WHERE data_ord IS NOT NULL")
         if row and row[0] and row[1]:
@@ -5731,22 +5738,23 @@ class MainWindow(QMainWindow):
         else:
             _ini = QDate.currentDate().addMonths(-1)
             _fim = QDate.currentDate()
-
+        
         # aplica datas nos filtros do dashboard e lançamentos
         self.dashboard.dt_dash_ini.setDate(_ini); self.dashboard.dt_dash_fim.setDate(_fim)
         self.dt_ini.setDate(_ini); self.dt_fim.setDate(_fim)
-
+        
         # recarrega telas
         self.dashboard.load_data()
         self.carregar_lancamentos()
         self.carregar_planejamento()
-
+        
         # reatualiza cadastros
         im_w = self.cadw.widget(0); im_w.db.set_profile(profile); im_w.carregar_imoveis()
         ct_w = self.cadw.widget(1); ct_w.db.set_profile(profile); ct_w.carregar_contas()
-
+        
         QMessageBox.information(self, "Perfil alterado", f"Perfil Trocado para: '{profile}'.")
-
+    
+    
     def arquivo_lcdpr(self):
         dlg = QDialog(self)
         dlg.setWindowTitle("Arquivo LCDPR")
