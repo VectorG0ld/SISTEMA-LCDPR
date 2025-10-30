@@ -1,17 +1,20 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import sys
-# --- NOVOS IMPORTS ---
 from difflib import SequenceMatcher
 import unicodedata
 import xml.etree.ElementTree as ET
 import re
 from glob import glob
 from collections import defaultdict, deque
+from pathlib import Path
+import json
 
-# --- Força stdout/stderr em UTF-8, independente da code page do Windows ---
+# ─────────────────────────────────────────────────────────────
+# Força stdout/stderr em UTF-8 (Windows não dá mole…)
+# ─────────────────────────────────────────────────────────────
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -19,13 +22,9 @@ except Exception:
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-# --------------------------------------------------------------------------
-
-from pathlib import Path  # NOVO
-import json               # NOVO
 
 # =====================================================================
-# CONFIGURAÇÕES INICIAIS
+# TENTAR OPENPYXL
 # =====================================================================
 try:
     from openpyxl import Workbook, load_workbook
@@ -38,41 +37,73 @@ except ImportError:
     print("⚠️ Aviso: openpyxl não instalado. Formatação de tabelas não estará disponível.")
     print("Instale com: pip install openpyxl")
 
+# =====================================================================
+# CONFIG / PERFIL
+# =====================================================================
 def _load_json_config():
-    """Tenta ler json/config.json no mesmo diretório do script e retorna (base, testes)."""
+    """
+    Lê json/config.json (mesma pasta do script) e devolve:
+    - base_dados_path
+    - testes_path
+    - active_owner (CLEUBER, GILSON, ADRIANA, LUCAS)
+    """
     try:
         cfg_path = Path(__file__).parent / "json" / "config.json"
         if cfg_path.exists():
             with open(cfg_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-            return cfg.get("base_dados_path"), cfg.get("testes_path")
+            base_dados_path = cfg.get("base_dados_path")
+            testes_path = cfg.get("testes_path")
+            active_owner = (cfg.get("active_owner") or "CLEUBER").strip().upper()
+            return base_dados_path, testes_path, active_owner
     except Exception as e:
         print(f"⚠️ Aviso: falha ao ler config.json: {e}")
-    return None, None
+    # fallback
+    return None, None, "CLEUBER"
 
-def _resolve_paths():
-    if len(sys.argv) >= 3:
-        return sys.argv[1], sys.argv[2]
-    base_json, testes_json = _load_json_config()
-    if base_json and testes_json:
-        return base_json, testes_json
-    return (r"\\rilkler\LIVRO CAIXA\TESTE\BASE DE DADOS.xlsx",
-            r"\\rilkler\LIVRO CAIXA\TESTE\TESTES.xlsx")
+def _resolve_paths_and_owner():
+    """
+    Ordem de prioridade:
+      1) python script.py BASE TESTES DONO [NOTAS]
+      2) python script.py BASE TESTES [NOTAS]  -> DONO vem do config
+      3) nada na linha de comando -> tudo do config ou fallback
+    """
+    cfg_base, cfg_testes, cfg_owner = _load_json_config()
+
+    base = cfg_base or r"\\rilkler\\LIVRO CAIXA\\TESTE\\BASE DE DADOS.xlsx"
+    testes = cfg_testes or r"\\rilkler\\LIVRO CAIXA\\TESTE\\TESTES.xlsx"
+    owner = (cfg_owner or "CLEUBER").strip().upper()
+
+    argc = len(sys.argv)
+
+    if argc >= 2:
+        base = sys.argv[1]
+    if argc >= 3:
+        testes = sys.argv[2]
+    if argc >= 4:
+        cand = sys.argv[3].strip()
+        # 👇 se o 3º argumento for um caminho de arquivo, NÃO é dono
+        if cand.lower().endswith(".xlsx") or "\\" in cand or "/" in cand:
+            # ignora como dono, mantém o do config
+            pass
+        else:
+            owner = cand.upper()
+
+    return base, testes, owner
 
 def _resolve_notas_recebidas_path(testes_path: str) -> str | None:
     """
     Tenta obter o caminho do arquivo 'NOTAS RECEBIDAS.xlsx'.
-    Prioridade:
-      1) Se foi passado como 3º argumento na linha de comando.
-      2) Se existir um arquivo com esse nome na MESMA pasta do RELATÓRIO (testes_path).
+    Ordem:
+      1) 4º argumento do script
+      2) mesmo diretório do testes_path
     """
     try:
-        if len(sys.argv) >= 4 and os.path.exists(sys.argv[3]):
-            return sys.argv[3]
+        if len(sys.argv) >= 5 and os.path.exists(sys.argv[4]):
+            return sys.argv[4]
     except Exception:
         pass
     try:
-        from pathlib import Path
         cand = Path(testes_path).parent / "NOTAS RECEBIDAS.xlsx"
         if cand.exists():
             return str(cand)
@@ -80,225 +111,11 @@ def _resolve_notas_recebidas_path(testes_path: str) -> str | None:
         pass
     return None
 
-# Pastas onde estão os XMLs (ajuste/adicione caminhos conforme sua estrutura)
-XML_DIRS = [
-    r"\\rilkler\LIVRO CAIXA\ISENTOS",         # <— exemplo
-    r"\\rilkler\LIVRO CAIXA\OUTROS_XMLS"      # <— adicione mais se precisar
-]
-SIMILARIDADE_MIN_NOME = 0.80  # 80%
-
-# ======== ANTI-ERRO: constantes de segurança ========
-from datetime import timedelta
-
-DATE_WINDOW_DAYS_BEFORE = 10   # janela mínima antes da data da nota
-DATE_WINDOW_DAYS_AFTER  = 45   # janela máxima depois da data da nota
-TOL_ATOL = 0.01                # tolerância absoluta de centavos
-TOL_REL  = 0.001               # tolerância relativa (0.1%)
-SIMILARIDADE_MIN_NOME_STRICT = 0.90  # quando CNPJ divergir
-# Tolerância de valor: menos de R$ 1 (centavos)
-VAL_TOL = 0.10  # R$ 0,10
-
-# Extrai nº NF do texto (ex.: "PAGAMENTO NF 14") ou de chave NFe (44 dígitos)
-_nf_re = re.compile(r'NF\D*(\d+)', re.IGNORECASE)
-_chave44_re = re.compile(r'\b(\d{44})\b')
-
-def _extract_nf_num(texto: str) -> str | None:
-    if not texto:
-        return None
-    m = _nf_re.search(texto)
-    if m:
-        return m.group(1).lstrip("0") or "0"
-    m2 = _chave44_re.search(texto)
-    if m2:
-        # nNF costuma vir nos dígitos 36-43; ajuste se você já tem util próprio
-        chave = m2.group(1)
-        return chave[35:44].lstrip("0") or "0"
-    return None
-
-def _norm_txt(s: str) -> str:
-    s = str(s or "").upper().strip()
-    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("ASCII")
-    s = re.sub(r"\s+", " ", s)
-    return s
-
-def _sim(a: str, b: str) -> float:
-    return SequenceMatcher(None, _norm_txt(a), _norm_txt(b)).ratio()
-
-NS_NFE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
-
-def _parse_xml_info(xml_path: str):
-    """
-    Retorna dict com:
-        cnpj_emit, xnome_emit, nnf, vnf (float), infcpl (str), ref_list (list[str])
-    Ignora/retorna None se algo der muito errado.
-    """
-    try:
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
-        # atende nfeProc/NFe/infNFe
-        inf = root.find(".//nfe:infNFe", NS_NFE)
-
-        # se não for NFe, tente NFSe (padrão nacional)
-        if inf is None:
-            NS_NFSE = {"nfse": "http://www.sped.fazenda.gov.br/nfse"}
-            infs = root.find(".//nfse:infNFSe", NS_NFSE)
-            if infs is not None:
-                # campos básicos no bloco infNFSe
-                cnpj_emit = (infs.findtext(".//nfse:emit/nfse:CNPJ", default="", namespaces=NS_NFSE) or "").strip()
-                xnome_emit = infs.findtext(".//nfse:emit/nfse:xNome", default="", namespaces=NS_NFSE) or ""
-
-                # número da nota de serviço: prefira nNFSe; se não houver, caia para nDFSe
-                nnf = (infs.findtext(".//nfse:nNFSe", default="", namespaces=NS_NFSE) or "").strip()
-                if not nnf:
-                    nnf = (infs.findtext(".//nfse:nDFSe", default="", namespaces=NS_NFSE) or "").strip()
-
-                # valor: alguns municípios usam <valores><vLiq>, outros somente no DPS
-                vliq_txt = infs.findtext(".//nfse:valores/nfse:vLiq", default="", namespaces=NS_NFSE) or ""
-                if vliq_txt:
-                    vnf = float(str(vliq_txt).replace(",", "."))
-                else:
-                    vserv_txt = root.findtext(".//nfse:DPS//nfse:valores//nfse:vServ", default="0", namespaces=NS_NFSE) or "0"
-                    vnf = float(str(vserv_txt).replace(",", "."))
-
-                # descrição do serviço costuma vir no DPS
-                infcpl = root.findtext(".//nfse:DPS//nfse:xDescServ", default="", namespaces=NS_NFSE) or ""
-
-                # NFSe pode referenciar NF-e em chaves (normalmente não vem); mantemos a lista vazia
-                ref_list = []
-
-                return {
-                    "cnpj_emit": re.sub(r"\D", "", cnpj_emit).zfill(14),
-                    "xnome_emit": xnome_emit,
-                    "nnf": nnf,
-                    "vnf": vnf,
-                    "infcpl": infcpl,
-                    "ref_list": ref_list,
-                    "path": xml_path,
-                }
-            # se não achou nem NFe nem NFSe, siga para o return None atual
-
-        if inf is None:
-            return None
-
-        cnpj_emit = (inf.findtext(".//nfe:emit/nfe:CNPJ", default="", namespaces=NS_NFE) or "").strip()
-        xnome_emit = inf.findtext(".//nfe:emit/nfe:xNome", default="", namespaces=NS_NFE) or ""
-        nnf = (inf.findtext(".//nfe:ide/nfe:nNF", default="", namespaces=NS_NFE) or "").strip()
-        vnf_txt = inf.findtext(".//nfe:total/nfe:ICMSTot/nfe:vNF", default="0", namespaces=NS_NFE) or "0"
-        vnf = float(str(vnf_txt).replace(",", "."))
-        infcpl = inf.findtext(".//nfe:infAdic/nfe:infCpl", default="", namespaces=NS_NFE) or ""
-
-        ref_list = []
-        for r in inf.findall(".//nfe:NFref/nfe:refNFe", NS_NFE):
-            if r is not None and r.text:
-                ref_list.append(r.text.strip())
-
-        return {
-            "cnpj_emit": re.sub(r"\D", "", cnpj_emit).zfill(14),
-            "xnome_emit": xnome_emit,
-            "nnf": nnf,
-            "vnf": vnf,
-            "infcpl": infcpl,
-            "ref_list": ref_list,
-            "path": xml_path,
-        }
-    except Exception:
-        return None
-
-def _iter_xmls(dirs):
-    for d in dirs:
-        p = Path(d)
-        if not p.exists():
-            continue
-        for xmlf in p.rglob("*.xml"):
-            info = _parse_xml_info(str(xmlf))
-            if info:
-                yield info
-
-def _should_use_data_nota(nota_row, data_pagamento):
-    """
-    Retorna True se devemos usar a data da NOTA (planilha) em vez da data de pagamento (base),
-    quando o pagamento é do ANO ANTERIOR ao ano de referência do processamento.
-    - Ano de referência: coluna 'ANO' da planilha, se existir; caso contrário, ano de data_nota.
-    """
-    try:
-        # 1) tenta a coluna ANO da planilha
-        alvo = nota_row.get('ANO', None)
-        if pd.notna(alvo):
-            alvo = int(str(alvo).strip())
-        else:
-            alvo = None
-    except Exception:
-        alvo = None
-
-    # 2) fallback: ano da própria data da nota
-    if alvo is None and pd.notna(nota_row.get('data_nota', pd.NaT)):
-        alvo = int(nota_row['data_nota'].year)
-
-    # 3) decide
-    if alvo is not None and pd.notna(data_pagamento):
-        return int(data_pagamento.year) < int(alvo)
-
-    return False
-
-def _xml_menciona_nf_do_mesmo_fornecedor(cnpj_emit: str, nnf_procurada: str, xml_info: dict) -> bool:
-    """
-    Verdadeiro se o XML é do mesmo fornecedor e 'menciona' a NF procurada:
-    - mesmo CNPJ do emitente
-    - e a sequência/numero da NF alvo aparece em infCpl OU consta em NFref (chave tem a NF original).
-    """
-    if xml_info["cnpj_emit"] != cnpj_emit:
-        return False
-    alvo = re.sub(r"\D", "", str(nnf_procurada))
-    infcpl = xml_info.get("infcpl", "") or ""
-    if alvo and alvo in re.sub(r"\D", "", infcpl):
-        return True
-    for ch in xml_info.get("ref_list", []):
-        if alvo and alvo in (re.sub(r"\D", "", ch) or ""):
-            return True
-    return False
-
-def _buscar_valor_devolucao_relacionada(nota: dict) -> float | None:
-    """
-    Procura, entre os XMLs nas pastas definidas em XML_DIRS, um documento do mesmo CNPJ
-    que mencione a NF indicada na linha 'nota' (num_nf_busca) e retorna o vNF desse XML
-    (valor da nota referenciante). Retorna None se não encontrar.
-    """
-    try:
-        cnpj = str(nota.get('cnpj_busca', '')).strip()
-        nnf = str(nota.get('num_nf_busca', '')).strip()
-        if not cnpj or not nnf:
-            return None
-
-        # Varre os XMLs disponíveis (lazy generator já definido)
-        for xml_info in _iter_xmls(XML_DIRS):
-            try:
-                if _xml_menciona_nf_do_mesmo_fornecedor(cnpj, nnf, xml_info):
-                    v = xml_info.get('vnf')
-                    if v is None:
-                        continue
-                    return float(v)
-            except Exception:
-                # Protege contra XMLs malformados/infos inesperadas
-                continue
-    except Exception:
-        return None
-    return None
-
-base_dados_path, testes_path = _resolve_paths()
-
-# (Opcional) Validação imediata:
-if not os.path.exists(base_dados_path):
-    print(f"❌ Base de dados não encontrada: {base_dados_path}")
-    sys.exit(1)
-if not os.path.exists(testes_path):
-    print(f"❌ Planilha de testes/relatório não encontrada: {testes_path}")
-    sys.exit(1)
-
-print("")
-print(f"🗂️  base_dados_path = {base_dados_path}")
-print(f"🗂️  testes_path     = {testes_path}")
-
-MAP_CONTAS = {
+# =====================================================================
+# MAPEAMENTOS DE CONTAS SEPARADOS POR PRODUTOR
+# =====================================================================
+# CLEUBER
+MAP_CONTAS_CLEUBER = {
     "Caixa Geral": "001",
     "Cheques a Compensar": "001",
     "Fundo Fixo - Gildevan": "001",
@@ -326,7 +143,6 @@ MAP_CONTAS = {
     "Fundo Fixo - Cida": "001",
     "Caixa Dobrado - Cobrança": "001",
     "Fundo Fixo - Neto": "001",
-    "Conta Rotative Gilson": "001",
     "Fundo Fixo - Osvaldo": "001",
     "Fundo Fixo - Cleto Zanatta": "001",
     "Fundo Fixo - Edison": "001",
@@ -343,31 +159,527 @@ MAP_CONTAS = {
     "Caixa Contábil": "001",
     "Banco Sicoob_Frutacc_597": "001",
     "Banco Bradesco_Frutacc_28.751": "001",
-    "Banco do Brasil_Gilson_21252": "001",
+    # contas de CLEUBER:
     "Banco do Brasil_Cleuber_24585": "004",
     "Banco da Amazonia_Cleuber_34472": "001",
     "Caixa Economica_Cleuber_20573": "001",
-    "Caixa Economica_Adriana_20590": "001",
     "Banco Bradesco_Cleuber_22102": "003",
-    "Banco Bradesco_Gilson_27014": "001",
-    "Banco Bradesco_Adriana_29260": "001",
-    "Banco Bradesco_Lucas 29620": "001",
-    "Banco Itau_Gilson_26059": "001",
     "Banco Sicoob_Cleuber_052": "002",
-    "Banco Sicoob_Gilson_781": "001",
     "Caixa Economica_Cleuber_25766": "001",
     "Banco Santander_Cleuber_1008472": "001",
     "Banco Sicredi_Cleuber_36120": "001",
-    "Banco Sicredi_Gilson_39644": "001",
     "Banco Itau_Cleuber_63206": "001",
     "Banco Sicoob_Cleuber_81934": "002",
     "Caixa Economica_Cleuber_20177": "001",
+    # contas “gerais”
     "Banco Itau_Frutacc_16900": "001",
     "Banco Sicredi_Anne_27012": "001",
-    "Não Mapeado": "0000"
+
+    # (as que estavam só no GILSON)
+    "Conta Rotative Gilson": "001",
+    "Banco Itau_Gilson_26059": "001",
+    "Banco do Brasil_Gilson_21252": "001",
+    "Banco Bradesco_Gilson_27014": "001",
+    "Banco Sicoob_Gilson_781": "001",
+    "Banco Sicredi_Gilson_39644": "001",
+
+    # (as que estavam só na ADRIANA)
+    "Caixa Economica_Adriana_20590": "001",
+    "Banco Bradesco_Adriana_29260": "001",
+
+    # (a que estava só no LUCAS)
+    "Banco Bradesco_Lucas 29620": "001",
+
+    # fallback
+    "Não Mapeado": "0000",
 }
 
-# Mapeamento de fazendas para códigos
+# GILSON
+MAP_CONTAS_GILSON = {
+    "Caixa Geral": "001",
+    "Cheques a Compensar": "001",
+    "Fundo Fixo - Gildevan": "001",
+    "Fundo Fixo - Cleidson Alves": "001",
+    "Fundo Fixo - Rodrigo": "001",
+    "Fundo Fixo - Wandres": "001",
+    "Fundo Fixo - Cezar Dias": "001",
+    "Fundo Fixo - Geraldo": "001",
+    "Fundo Fixo - Daniel": "001",
+    "Fundo Fixo - Hadlaim": "001",
+    "Fundo Fixo - Lourival": "001",
+    "Fundo Fixo - Rogeris": "001",
+    "Fundo Fixo - Joaquim": "001",
+    "Caixa Dobrado": "001",
+    "Fundo Fxo - Douglas": "001",
+    "Fundo Fixo - Samuel": "001",
+    "Fundo Fixo - Adarildo": "001",
+    "Fundo Fixo - Fabricio": "001",
+    "Fundo Fixo - Fernando": "001",
+    "Fundo Fixo - Orivan": "001",
+    "Fundo Fixo - Saimon": "001",
+    "Fundo Fxo - Eduardo": "001",
+    "Fundo Fixo - Melquiades": "001",
+    "Fundo Fixo - Anivaldo": "001",
+    "Fundo Fixo - Cida": "001",
+    "Caixa Dobrado - Cobrança": "001",
+    "Fundo Fixo - Neto": "001",
+    "Fundo Fixo - Osvaldo": "001",
+    "Fundo Fixo - Cleto Zanatta": "001",
+    "Fundo Fixo - Edison": "001",
+    "Fundo Fixo - Phelipe": "001",
+    "Caixa Deposito": "001",
+    "Fundo Fixo - Valdivino": "001",
+    "Fundo Fixo - Jose Domingos": "001",
+    "Fudo Fixo - Stenyo": "001",
+    "Fundo Fixo - Marcos": "001",
+    "Fundo Fixo - ONR": "001",
+    "Fundo Fixo - Marcelo Dutra": "001",
+    "Fundo Fixo - Gustavo": "001",
+    "Fundo Fixo - Delimar": "001",
+    "Caixa Contábil": "001",
+    "Banco Sicoob_Frutacc_597": "001",
+    "Banco Bradesco_Frutacc_28.751": "001",
+    # contas de CLEUBER:
+    "Banco do Brasil_Cleuber_24585": "001",
+    "Banco da Amazonia_Cleuber_34472": "001",
+    "Caixa Economica_Cleuber_20573": "001",
+    "Banco Bradesco_Cleuber_22102": "001",
+    "Banco Sicoob_Cleuber_052": "001",
+    "Caixa Economica_Cleuber_25766": "001",
+    "Banco Santander_Cleuber_1008472": "001",
+    "Banco Sicredi_Cleuber_36120": "001",
+    "Banco Itau_Cleuber_63206": "001",
+    "Banco Sicoob_Cleuber_81934": "001",
+    "Caixa Economica_Cleuber_20177": "001",
+    # contas “gerais”
+    "Banco Itau_Frutacc_16900": "001",
+    "Banco Sicredi_Anne_27012": "001",
+
+    # (as que estavam só no GILSON)
+    "Conta Rotative Gilson": "001",
+    "Banco Itau_Gilson_26059": "002",
+    "Banco do Brasil_Gilson_21252": "001",
+    "Banco Bradesco_Gilson_27014": "005",
+    "Banco Sicoob_Gilson_781": "003",
+    "Banco Sicredi_Gilson_39644": "004",
+
+    # (as que estavam só na ADRIANA)
+    "Caixa Economica_Adriana_20590": "001",
+    "Banco Bradesco_Adriana_29260": "001",
+
+    # (a que estava só no LUCAS)
+    "Banco Bradesco_Lucas 29620": "001",
+
+    # fallback
+    "Não Mapeado": "0000",
+}
+
+# ADRIANA
+MAP_CONTAS_ADRIANA = {
+    "Caixa Geral": "001",
+    "Cheques a Compensar": "001",
+    "Fundo Fixo - Gildevan": "001",
+    "Fundo Fixo - Cleidson Alves": "001",
+    "Fundo Fixo - Rodrigo": "001",
+    "Fundo Fixo - Wandres": "001",
+    "Fundo Fixo - Cezar Dias": "001",
+    "Fundo Fixo - Geraldo": "001",
+    "Fundo Fixo - Daniel": "001",
+    "Fundo Fixo - Hadlaim": "001",
+    "Fundo Fixo - Lourival": "001",
+    "Fundo Fixo - Rogeris": "001",
+    "Fundo Fixo - Joaquim": "001",
+    "Caixa Dobrado": "001",
+    "Fundo Fxo - Douglas": "001",
+    "Fundo Fixo - Samuel": "001",
+    "Fundo Fixo - Adarildo": "001",
+    "Fundo Fixo - Fabricio": "001",
+    "Fundo Fixo - Fernando": "001",
+    "Fundo Fixo - Orivan": "001",
+    "Fundo Fixo - Saimon": "001",
+    "Fundo Fxo - Eduardo": "001",
+    "Fundo Fixo - Melquiades": "001",
+    "Fundo Fixo - Anivaldo": "001",
+    "Fundo Fixo - Cida": "001",
+    "Caixa Dobrado - Cobrança": "001",
+    "Fundo Fixo - Neto": "001",
+    "Fundo Fixo - Osvaldo": "001",
+    "Fundo Fixo - Cleto Zanatta": "001",
+    "Fundo Fixo - Edison": "001",
+    "Fundo Fixo - Phelipe": "001",
+    "Caixa Deposito": "001",
+    "Fundo Fixo - Valdivino": "001",
+    "Fundo Fixo - Jose Domingos": "001",
+    "Fundo Fixo - Stenyo": "001",
+    "Fundo Fixo - Marcos": "001",
+    "Fundo Fixo - ONR": "001",
+    "Fundo Fixo - Marcelo Dutra": "001",
+    "Fundo Fixo - Gustavo": "001",
+    "Fundo Fixo - Delimar": "001",
+    "Caixa Contábil": "001",
+    "Banco Sicoob_Frutacc_597": "001",
+    "Banco Bradesco_Frutacc_28.751": "001",
+    # contas de CLEUBER:
+    "Banco do Brasil_Cleuber_24585": "001",
+    "Banco da Amazonia_Cleuber_34472": "001",
+    "Caixa Economica_Cleuber_20573": "001",
+    "Banco Bradesco_Cleuber_22102": "001",
+    "Banco Sicoob_Cleuber_052": "001",
+    "Caixa Economica_Cleuber_25766": "001",
+    "Banco Santander_Cleuber_1008472": "001",
+    "Banco Sicredi_Cleuber_36120": "001",
+    "Banco Itau_Cleuber_63206": "001",
+    "Banco Sicoob_Cleuber_81934": "001",
+    "Caixa Economica_Cleuber_20177": "001",
+    # contas “gerais”
+    "Banco Itau_Frutacc_16900": "001",
+    "Banco Sicredi_Anne_27012": "001",
+
+    # (as que estavam só no GILSON)
+    "Conta Rotative Gilson": "001",
+    "Banco Itau_Gilson_26059": "001",
+    "Banco do Brasil_Gilson_21252": "001",
+    "Banco Bradesco_Gilson_27014": "001",
+    "Banco Sicoob_Gilson_781": "001",
+    "Banco Sicredi_Gilson_39644": "001",
+
+    # (as que estavam só na ADRIANA)
+    "Caixa Economica_Adriana_20590": "001",
+    "Banco Bradesco_Adriana_29260": "002",
+
+    # (a que estava só no LUCAS)
+    "Banco Bradesco_Lucas 29620": "001",
+
+    # fallback
+    "Não Mapeado": "0000",
+}
+
+# LUCAS
+MAP_CONTAS_LUCAS = {
+    "Caixa Geral": "001",
+    "Cheques a Compensar": "001",
+    "Fundo Fixo - Gildevan": "001",
+    "Fundo Fixo - Cleidson Alves": "001",
+    "Fundo Fixo - Rodrigo": "001",
+    "Fundo Fixo - Wandres": "001",
+    "Fundo Fixo - Cezar Dias": "001",
+    "Fundo Fixo - Geraldo": "001",
+    "Fundo Fixo - Daniel": "001",
+    "Fundo Fixo - Hadlaim": "001",
+    "Fundo Fixo - Lourival": "001",
+    "Fundo Fixo - Rogeris": "001",
+    "Fundo Fixo - Joaquim": "001",
+    "Caixa Dobrado": "001",
+    "Fundo Fxo - Douglas": "001",
+    "Fundo Fixo - Samuel": "001",
+    "Fundo Fixo - Adarildo": "001",
+    "Fundo Fixo - Fabricio": "001",
+    "Fundo Fixo - Fernando": "001",
+    "Fundo Fixo - Orivan": "001",
+    "Fundo Fixo - Saimon": "001",
+    "Fundo Fxo - Eduardo": "001",
+    "Fundo Fixo - Melquiades": "001",
+    "Fundo Fixo - Anivaldo": "001",
+    "Fundo Fixo - Cida": "001",
+    "Caixa Dobrado - Cobrança": "001",
+    "Fundo Fixo - Neto": "001",
+    "Fundo Fixo - Osvaldo": "001",
+    "Fundo Fixo - Cleto Zanatta": "001",
+    "Fundo Fixo - Edison": "001",
+    "Fundo Fixo - Phelipe": "001",
+    "Caixa Deposito": "001",
+    "Fundo Fixo - Valdivino": "001",
+    "Fundo Fixo - Jose Domingos": "001",
+    "Fudo Fixo - Stenyo": "001",
+    "Fundo Fixo - Marcos": "001",
+    "Fundo Fixo - ONR": "001",
+    "Fundo Fixo - Marcelo Dutra": "001",
+    "Fundo Fixo - Gustavo": "001",
+    "Fundo Fixo - Delimar": "001",
+    "Caixa Contábil": "001",
+    "Banco Sicoob_Frutacc_597": "001",
+    "Banco Bradesco_Frutacc_28.751": "001",
+    # contas de CLEUBER:
+    "Banco do Brasil_Cleuber_24585": "001",
+    "Banco da Amazonia_Cleuber_34472": "001",
+    "Caixa Economica_Cleuber_20573": "001",
+    "Banco Bradesco_Cleuber_22102": "001",
+    "Banco Sicoob_Cleuber_052": "001",
+    "Caixa Economica_Cleuber_25766": "001",
+    "Banco Santander_Cleuber_1008472": "001",
+    "Banco Sicredi_Cleuber_36120": "001",
+    "Banco Itau_Cleuber_63206": "001",
+    "Banco Sicoob_Cleuber_81934": "001",
+    "Caixa Economica_Cleuber_20177": "001",
+    # contas “gerais”
+    "Banco Itau_Frutacc_16900": "001",
+    "Banco Sicredi_Anne_27012": "001",
+
+    # (as que estavam só no GILSON)
+    "Conta Rotative Gilson": "001",
+    "Banco Itau_Gilson_26059": "001",
+    "Banco do Brasil_Gilson_21252": "001",
+    "Banco Bradesco_Gilson_27014": "001",
+    "Banco Sicoob_Gilson_781": "001",
+    "Banco Sicredi_Gilson_39644": "001",
+
+    # (as que estavam só na ADRIANA)
+    "Caixa Economica_Adriana_20590": "001",
+    "Banco Bradesco_Adriana_29260": "001",
+
+    # (a que estava só no LUCAS)
+    "Banco Bradesco_Lucas 29620": "002",
+
+    # fallback
+    "Não Mapeado": "0000",
+}
+
+def _select_map_contas_by_owner(owner: str) -> dict:
+    owner = (owner or "CLEUBER").upper()
+    if owner == "GILSON":
+        return MAP_CONTAS_GILSON
+    elif owner == "ADRIANA":
+        return MAP_CONTAS_ADRIANA
+    elif owner == "LUCAS":
+        return MAP_CONTAS_LUCAS
+    # default / desconhecido → CLEUBER
+    return MAP_CONTAS_CLEUBER
+
+# =====================================================================
+# CONSTANTES E FUNÇÕES DE APOIO
+# =====================================================================
+XML_DIRS = [
+    r"\\rilkler\LIVRO CAIXA\ISENTOS",
+    r"\\rilkler\LIVRO CAIXA\OUTROS_XMLS"
+]
+
+SIMILARIDADE_MIN_NOME = 0.80
+SIMILARIDADE_MIN_NOME_STRICT = 0.90
+VAL_TOL = 0.10  # tolerância para valor
+DATE_WINDOW_DAYS_BEFORE = 10
+DATE_WINDOW_DAYS_AFTER = 45
+
+_nf_re = re.compile(r'NF\D*(\d+)', re.IGNORECASE)
+_chave44_re = re.compile(r'\b(\d{44})\b')
+
+NS_NFE = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
+
+def _extract_nf_num(texto: str) -> str | None:
+    if not texto:
+        return None
+    m = _nf_re.search(texto)
+    if m:
+        return m.group(1).lstrip("0") or "0"
+    m2 = _chave44_re.search(texto)
+    if m2:
+        chave = m2.group(1)
+        return chave[35:44].lstrip("0") or "0"
+    return None
+
+def _norm_txt(s: str) -> str:
+    s = str(s or "").upper().strip()
+    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("ASCII")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+def _sim(a: str, b: str) -> float:
+    return SequenceMatcher(None, _norm_txt(a), _norm_txt(b)).ratio()
+
+def _parse_xml_info(xml_path: str):
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        inf = root.find(".//nfe:infNFe", NS_NFE)
+
+        # tenta NFSe nacional
+        if inf is None:
+            NS_NFSE = {"nfse": "http://www.sped.fazenda.gov.br/nfse"}
+            infs = root.find(".//nfse:infNFSe", NS_NFSE)
+            if infs is not None:
+                cnpj_emit = (infs.findtext(".//nfse:emit/nfse:CNPJ", default="", namespaces=NS_NFSE) or "").strip()
+                xnome_emit = infs.findtext(".//nfse:emit/nfse:xNome", default="", namespaces=NS_NFSE) or ""
+                nnf = (infs.findtext(".//nfse:nNFSe", default="", namespaces=NS_NFSE) or "").strip()
+                if not nnf:
+                    nnf = (infs.findtext(".//nfse:nDFSe", default="", namespaces=NS_NFSE) or "").strip()
+                vliq_txt = infs.findtext(".//nfse:valores/nfse:vLiq", default="", namespaces=NS_NFSE) or ""
+                if vliq_txt:
+                    vnf = float(str(vliq_txt).replace(",", "."))
+                else:
+                    vserv_txt = root.findtext(".//nfse:DPS//nfse:valores//nfse:vServ", default="0", namespaces=NS_NFSE) or "0"
+                    vnf = float(str(vserv_txt).replace(",", "."))
+                infcpl = root.findtext(".//nfse:DPS//nfse:xDescServ", default="", namespaces=NS_NFSE) or ""
+                return {
+                    "cnpj_emit": re.sub(r"\D", "", cnpj_emit).zfill(14),
+                    "xnome_emit": xnome_emit,
+                    "nnf": nnf,
+                    "vnf": vnf,
+                    "infcpl": infcpl,
+                    "ref_list": [],
+                    "path": xml_path,
+                }
+
+        if inf is None:
+            return None
+
+        cnpj_emit = (inf.findtext(".//nfe:emit/nfe:CNPJ", default="", namespaces=NS_NFE) or "").strip()
+        xnome_emit = inf.findtext(".//nfe:emit/nfe:xNome", default="", namespaces=NS_NFE) or ""
+        nnf = (inf.findtext(".//nfe:ide/nfe:nNF", default="", namespaces=NS_NFE) or "").strip()
+        vnf_txt = inf.findtext(".//nfe:total/nfe:ICMSTot/nfe:vNF", default="0", namespaces=NS_NFE) or "0"
+        vnf = float(str(vnf_txt).replace(",", "."))
+        infcpl = inf.findtext(".//nfe:infAdic/nfe:infCpl", default="", namespaces=NS_NFE) or ""
+        ref_list = []
+        for r in inf.findall(".//nfe:NFref/nfe:refNFe", NS_NFE):
+            if r is not None and r.text:
+                ref_list.append(r.text.strip())
+
+        return {
+            "cnpj_emit": re.sub(r"\D", "", cnpj_emit).zfill(14),
+            "xnome_emit": xnome_emit,
+            "nnf": nnf,
+            "vnf": vnf,
+            "infcpl": infcpl,
+            "ref_list": ref_list,
+            "path": xml_path,
+        }
+    except Exception:
+        return None
+
+def _iter_xmls(dirs):
+    for d in dirs:
+        p = Path(d)
+        if not p.exists():
+            continue
+        for xmlf in p.rglob("*.xml"):
+            info = _parse_xml_info(str(xmlf))
+            if info:
+                yield info
+
+def _xml_menciona_nf_do_mesmo_fornecedor(cnpj_emit: str, nnf_procurada: str, xml_info: dict) -> bool:
+    if xml_info["cnpj_emit"] != cnpj_emit:
+        return False
+    alvo = re.sub(r"\D", "", str(nnf_procurada))
+    infcpl = xml_info.get("infcpl", "") or ""
+    if alvo and alvo in re.sub(r"\D", "", infcpl):
+        return True
+    for ch in xml_info.get("ref_list", []):
+        if alvo and alvo in (re.sub(r"\D", "", ch) or ""):
+            return True
+    return False
+
+def _buscar_valor_devolucao_relacionada(nota: dict) -> float | None:
+    try:
+        cnpj = str(nota.get('cnpj_busca', '')).strip()
+        nnf = str(nota.get('num_nf_busca', '')).strip()
+        if not cnpj or not nnf:
+            return None
+        for xml_info in _iter_xmls(XML_DIRS):
+            try:
+                if _xml_menciona_nf_do_mesmo_fornecedor(cnpj, nnf, xml_info):
+                    v = xml_info.get('vnf')
+                    if v is None:
+                        continue
+                    return float(v)
+            except Exception:
+                continue
+    except Exception:
+        return None
+    return None
+
+def _should_use_data_nota(nota_row, data_pagamento):
+    try:
+        alvo = nota_row.get('ANO', None)
+        if pd.notna(alvo):
+            alvo = int(str(alvo).strip())
+        else:
+            alvo = None
+    except Exception:
+        alvo = None
+    if alvo is None and pd.notna(nota_row.get('data_nota', pd.NaT)):
+        alvo = int(nota_row['data_nota'].year)
+    if alvo is not None and pd.notna(data_pagamento):
+        return int(data_pagamento.year) < int(alvo)
+    return False
+
+def _tolerancia_valor_para_cnpj_diferente(v):
+    return max(10.0, 0.10 * max(v, 0.0))
+
+# =====================================================================
+# CARREGAR PATHS E PERFIL
+# =====================================================================
+base_dados_path, testes_path, ACTIVE_OWNER = _resolve_paths_and_owner()
+ACTIVE_MAP_CONTAS = _select_map_contas_by_owner(ACTIVE_OWNER)
+notas_recebidas_path = _resolve_notas_recebidas_path(testes_path)
+
+print("")
+print(f"🗂️  base_dados_path = {base_dados_path}")
+print(f"🗂️  testes_path     = {testes_path}")
+print(f"👤  perfil ativo     = {ACTIVE_OWNER}")
+print(f"📄  notas recebidas  = {notas_recebidas_path or '— não encontrado —'}")
+
+if not os.path.exists(base_dados_path):
+    print(f"❌ Base de dados não encontrada: {base_dados_path}")
+    sys.exit(1)
+if not os.path.exists(testes_path):
+    print(f"❌ Planilha de testes/relatório não encontrada: {testes_path}")
+    sys.exit(1)
+
+# =====================================================================
+# FUNÇÕES DE CONTA (AGORA USANDO O PERFIL ATIVO)
+# =====================================================================
+def _norm_simple(s: str) -> str:
+    return unicodedata.normalize("NFKD", str(s or "")).encode("ASCII", "ignore").decode("ASCII").upper().strip()
+
+def _build_norm_map_from(active_map: dict) -> dict:
+    return {
+        unicodedata.normalize("NFKD", k).encode("ASCII","ignore").decode("ASCII").upper().strip(): v
+        for k, v in active_map.items()
+    }
+
+_ACTIVE_MAP_CONTAS_NORM = _build_norm_map_from(ACTIVE_MAP_CONTAS)
+
+def _conta_codigo(nome: str) -> str:
+    """
+    Faz o lookup de conta dentro do MAPEAMENTO DO PERFIL ATIVO.
+    1) match exato normalizado
+    2) "contém"
+    3) similaridade
+    4) devolve "Não Mapeado" do perfil
+    """
+    if not nome:
+        return ACTIVE_MAP_CONTAS.get("Não Mapeado", "0000")
+    n = _norm_simple(nome)
+    # 1) exato
+    if n in _ACTIVE_MAP_CONTAS_NORM:
+        return _ACTIVE_MAP_CONTAS_NORM[n]
+    # 2) contém
+    for k_norm, cod in _ACTIVE_MAP_CONTAS_NORM.items():
+        if n in k_norm or k_norm in n:
+            return cod
+    # 3) similaridade
+    best_cod, best_sc = None, 0.0
+    for k_norm, cod in _ACTIVE_MAP_CONTAS_NORM.items():
+        sc = SequenceMatcher(None, n, k_norm).ratio()
+        if sc > best_sc:
+            best_sc, best_cod = sc, cod
+    if best_sc >= 0.85 and best_cod:
+        return best_cod
+    # 4) fallback
+    return ACTIVE_MAP_CONTAS.get("Não Mapeado", "0000")
+
+# 🔹 Helper p/ banco padrão por perfil (Caixa Geral -> código do perfil)
+DEFAULT_CONTA_NOME = "Caixa Geral"
+def _banco_padrao_cod() -> str:
+    try:
+        cod = _conta_codigo(DEFAULT_CONTA_NOME)
+        if cod and cod.strip():
+            return cod
+    except Exception:
+        pass
+    return ACTIVE_MAP_CONTAS.get("Não Mapeado", "0000")
+
+# =====================================================================
+# MAPEAMENTO DE FAZENDAS
+# =====================================================================
 MAP_FAZENDAS = {
     "Frutacc": "1",
     "União": "2",
@@ -378,129 +690,88 @@ MAP_FAZENDAS = {
     "Estrela": "7",
     "Barragem": "8",
     "Guara": "9",
-    "B. Grande": "8",  # Mapeado para o mesmo código que Barragem
-    "Frutacc III": "1",  # Mapeado para o mesmo código que Frutacc
-    "Primavera Retiro": "4",  # Mapeado para o mesmo código que Primavera
-    "Siganna": "1"  # Mapeado para o mesmo código que Frutacc
+    "B. Grande": "8",
+    "Frutacc III": "1",
+    "Primavera Retiro": "4",
+    "Siganna": "1",
+    "Formiga": "1",
+    "Gabriela": "2",
+    "Pouso da Anta": "1",
+    "Aliança 2": "1",
+    "Primavera Retiro lucas": "1",
 }
 
-# Lista de produtos especiais (combustíveis e lubrificantes) - busca por substring
-PRODUTOS_ESPECIAIS = ["GASOLINA COMUM", "GASOLINA C-COMUM", "GASOLINA ADITIVADA",
-                      "GASOLINA C COMUM", "BC:03- GASOLINA C ADITIVADA",
-                      "OLEO DIESEL", "DIESEL", "ETANOL", "MOBILGREASE"]
-
-# --- MAPEA CONTAS por nome -> código (usa normalização e tolerância) ---
-_MAP_CONTAS_NORM = { 
-    # chave normalizada -> código
-    unicodedata.normalize("NFKD", k).encode("ASCII","ignore").decode("ASCII").upper().strip(): v
-    for k, v in MAP_CONTAS.items()
-}
-def _norm_simple(s:str)->str:
-    return unicodedata.normalize("NFKD", str(s or "")).encode("ASCII","ignore").decode("ASCII").upper().strip()
-
-def _conta_codigo(nome:str)->str:
-    """Retorna código da conta em MAP_CONTAS. Tenta: (1) match exato normalizado;
-       (2) 'contém' nos dois sentidos; (3) similaridade >= 0.85; (4) 'Não Mapeado'/0000."""
-    if not nome:
-        return MAP_CONTAS.get("Não Mapeado", "0000")
-    n = _norm_simple(nome)
-    # 1) exato
-    if n in _MAP_CONTAS_NORM:
-        return _MAP_CONTAS_NORM[n]
-    # 2) contém/contido
-    for k_norm, cod in _MAP_CONTAS_NORM.items():
-        if n in k_norm or k_norm in n:
-            return cod
-    # 3) similaridade
-    best_cod, best_sc = None, 0.0
-    for k_norm, cod in _MAP_CONTAS_NORM.items():
-        sc = SequenceMatcher(None, n, k_norm).ratio()
-        if sc > best_sc:
-            best_sc, best_cod = sc, cod
-    if best_sc >= 0.85 and best_cod:
-        return best_cod
-    # 4) fallback
-    return MAP_CONTAS.get("Não Mapeado", "0000")
+PRODUTOS_ESPECIAIS = [
+    "GASOLINA COMUM",
+    "GASOLINA C-COMUM",
+    "GASOLINA ADITIVADA",
+    "GASOLINA C COMUM",
+    "BC:03- GASOLINA C ADITIVADA",
+    "OLEO DIESEL",
+    "DIESEL",
+    "ETANOL",
+    "MOBILGREASE",
+]
 
 # =====================================================================
-# LEITURA DA PLANILHA DE NOTAS
+# LEITURA DA PLANILHA (DESPESAS)
 # =====================================================================
 try:
     print("Processando planilha de notas...")
     df_notas = pd.read_excel(testes_path, sheet_name='RELATORIO', header=5)
     df_despesas = df_notas[df_notas['DESPESAS'].notna()].copy()
-    
-    # Criar colunas auxiliares
-    df_despesas['num_nf_busca'] = df_despesas['Nº NF'].astype(str).str.strip().str.replace(' ', '').str.replace('.', '').str.upper()
-    # CNPJ com fallback (se a coluna CNPJ vier vazia/IE, extrai da Chave de Acesso - XML)
+
+    # colunas auxiliares
+    df_despesas['num_nf_busca'] = (
+        df_despesas['Nº NF'].astype(str)
+        .str.strip()
+        .str.replace(' ', '')
+        .str.replace('.', '')
+        .str.upper()
+    )
+
     def _cnpj_from_row(row):
-        # 1) tenta a coluna CNPJ
         cnpj = re.sub(r'\D', '', str(row.get('CNPJ', '')))
         if len(cnpj) == 14 and cnpj != '0'*14:
             return cnpj
-
-        # 2) tenta extrair da CHAVE DE ACESSO (44 dígitos) na coluna 'XML'
-        #    CNPJ do emitente = posições 7–20 (1-based) => fatia [6:20] (0-based)
         chave = re.sub(r'\D', '', str(row.get('XML', '')))
         if len(chave) == 44:
             cnpj_xml = chave[6:20]
             if len(cnpj_xml) == 14:
                 return cnpj_xml
-
-        # 3) varre a linha inteira procurando algum bloco de 14 dígitos (ex.: colunas auxiliares)
         for v in row.values:
             s = re.sub(r'\D', '', str(v))
             m = re.search(r'(?<!\d)(\d{14})(?!\d)', s)
             if m:
                 return m.group(1)
-
-        # 4) último recurso: zero-fill
         return cnpj.zfill(14)
 
     df_despesas['cnpj_busca'] = df_despesas.apply(_cnpj_from_row, axis=1)
-
     df_despesas['valor_busca'] = pd.to_numeric(df_despesas['DESPESAS'], errors='coerce')
-    
-    # Converter data da nota com formato DD/MM/AAAA
-    df_despesas['data_nota'] = pd.to_datetime(
-        df_despesas['DATA'], 
-        dayfirst=True,
-        errors='coerce'
-    )
-    
-    # Obter nome do fornecedor (coluna EMITENTE)
+    df_despesas['data_nota'] = pd.to_datetime(df_despesas['DATA'], dayfirst=True, errors='coerce')
     df_despesas['fornecedor'] = df_despesas['EMITENTE'].astype(str).str.strip()
-
     df_despesas['fornecedor_norm'] = df_despesas['fornecedor'].apply(_norm_txt)
-
-    # Obter código da fazenda
     df_despesas['cod_fazenda'] = df_despesas['FAZENDA'].map(MAP_FAZENDAS).fillna('0')
-    
-    # Verificar produtos especiais (busca por substring em qualquer parte do texto)
     df_despesas['produto_upper'] = df_despesas['PRODUTO'].astype(str).str.upper()
     df_despesas['produto_especial'] = df_despesas['produto_upper'].apply(
         lambda x: any(produto in x for produto in PRODUTOS_ESPECIAIS)
     )
 
-    # === NOVO: pular linhas já marcadas de verde (pagas) na aba RELATORIO ===
-    df_to_process = df_despesas  # fallback
-
+    # pular linhas já marcadas de verde
+    df_to_process = df_despesas
     try:
         if OPENPYXL_AVAILABLE:
             wb_chk = load_workbook(testes_path, data_only=True)
             ws_chk = wb_chk['RELATORIO']
-
-            deslocamento = 7          # mesmo usado para marcar (C-Q)
+            deslocamento = 7
             col_inicio, col_fim = 3, 17
             HEX_VERDE = "C6EFCE"
-
             verdes_idx = set()
             for idx in df_despesas.index:
                 row_excel = deslocamento + idx
                 is_green = False
                 for col in range(col_inicio, col_fim + 1):
                     cell = ws_chk.cell(row=row_excel, column=col)
-                    # tenta em start_color / fgColor; aceita 'FFC6EFCE' ou '00C6EFCE' etc.
                     rgb = (
                         getattr(cell.fill.start_color, "rgb", None)
                         or getattr(cell.fill.fgColor, "rgb", None)
@@ -511,19 +782,17 @@ try:
                         break
                 if is_green:
                     verdes_idx.add(idx)
-
             if verdes_idx:
                 print(f"ℹ️ Pulando {len(verdes_idx)} notas já marcadas em verde (pagas).")
             df_to_process = df_despesas.loc[~df_despesas.index.isin(verdes_idx)]
-
             if df_to_process.empty:
                 print("✅ Todas as notas já possuem pagamento associado (marcadas em verde). Nada a processar agora.")
         else:
-            print("⚠️ openpyxl indisponível — não foi possível detectar linhas verdes; processando todas.")
+            print("⚠️ openpyxl indisponível — processando todas.")
     except Exception as e:
         print(f"⚠️ Não foi possível verificar marcações verdes: {e}")
         df_to_process = df_despesas
-    
+
     print(f"✅ {len(df_despesas)} despesas encontradas | ➡️ a processar: {len(df_to_process)}")
 
 except Exception as e:
@@ -535,20 +804,16 @@ except Exception as e:
 try:
     print("\nProcessando base de pagamentos...")
     df_base = pd.read_excel(base_dados_path, sheet_name='Planilha1', header=None)
-    
     header_row = None
     for idx, row in df_base.iterrows():
         if 'Nº NF' in row.values:
             header_row = idx
             break
-    
     if header_row is None:
         raise ValueError("Cabeçalho não encontrado na planilha")
-    
     df_base = pd.read_excel(base_dados_path, sheet_name='Planilha1', header=header_row)
     df_base = df_base.dropna(subset=['Nº NF']).reset_index(drop=True)
-    
-    # Mapear colunas (renomeia apenas as que existirem; não faz subset!)
+
     col_map = {
         'Nº NF': 'num_nf',
         'CPF/CNPJ': 'cnpj',
@@ -562,15 +827,11 @@ try:
     presentes = {k: v for k, v in col_map.items() if k in df_base.columns}
     df_base.rename(columns=presentes, inplace=True)
 
-    # === NOVO: colunas auxiliares para regras pedidas ===
-
-    # (a) N° Primário → identifica o mesmo pagamento, mesmo se houver linhas múltiplas
     if 'N° Primário' in df_base.columns:
         df_base.rename(columns={'N° Primário': 'num_primario'}, inplace=True)
     else:
-        df_base['num_primario'] = np.nan  # se a coluna não existir
+        df_base['num_primario'] = np.nan
 
-    # (b) Nome do fornecedor na base (títulos variam—pegamos o que houver)
     col_for = None
     for cand in ['Fornecedor', 'Favorecido', 'Razão Social', 'Emitente', 'Nome Fornecedor']:
         if cand in df_base.columns:
@@ -580,44 +841,29 @@ try:
         df_base['fornecedor_base'] = ''
     else:
         df_base.rename(columns={col_for: 'fornecedor_base'}, inplace=True)
-
-    # normalização do nome (para similaridade)
     df_base['fornecedor_base_norm'] = df_base['fornecedor_base'].apply(_norm_txt)
 
-    # Normalização
-    df_base['num_nf'] = df_base['num_nf'].astype(str).str.strip().str.replace(' ', '').str.replace('.', '').str.upper()
+    df_base['num_nf'] = (
+        df_base['num_nf']
+        .astype(str)
+        .str.strip()
+        .str.replace(' ', '')
+        .str.replace('.', '')
+        .str.upper()
+    )
     df_base['cnpj'] = df_base['cnpj'].astype(str).apply(
         lambda x: ''.join(filter(str.isdigit, x)).zfill(14)
     )
     df_base['valor'] = pd.to_numeric(df_base['valor'], errors='coerce')
-    
-    # Converter datas com formato DD/MM/AAAA
-    df_base['data_pagamento'] = pd.to_datetime(
-        df_base['data_pagamento'], 
-        dayfirst=True,
-        errors='coerce'
-    )
-    df_base['data_vencimento'] = pd.to_datetime(
-        df_base['data_vencimento'], 
-        dayfirst=True,
-        errors='coerce'
-    )
-    
-    # Normalizar coluna de cancelamento
+    df_base['data_pagamento'] = pd.to_datetime(df_base['data_pagamento'], dayfirst=True, errors='coerce')
+    df_base['data_vencimento'] = pd.to_datetime(df_base['data_vencimento'], dayfirst=True, errors='coerce')
     df_base['pagamento_cancelado'] = df_base['pagamento_cancelado'].astype(str).str.strip().str.upper()
     df_base['nota_cancelada'] = df_base['nota_cancelada'].astype(str).str.strip().str.upper()
-    
-    # Adicionar coluna de associação
     df_base['associada'] = False
-    
-    # Calcular total de parcelas por NF
     df_base['total_parcelas'] = df_base.groupby(['num_nf', 'cnpj'])['num_nf'].transform('size')
-
-    # Ordem da parcela por NF + CNPJ (prioriza data de pagamento; fallback: vencimento; depois valor/primário)
     df_base['_ord_data'] = df_base['data_pagamento'].fillna(df_base['data_vencimento'])
     df_base.sort_values(['num_nf', 'cnpj', '_ord_data', 'valor', 'num_primario'], inplace=True, na_position='last')
     df_base['parcela_idx'] = df_base.groupby(['num_nf', 'cnpj']).cumcount() + 1
-
 
     print(f"✅ {len(df_base)} pagamentos encontrados")
 
@@ -626,7 +872,7 @@ except Exception as e:
     raise ValueError(f"❌ Erro em pagamentos: {str(e)}")
 
 # =====================================================================
-# PROCESSAMENTO COM COMPARAÇÃO DE DATAS DE VENCIMENTO
+# PROCESSAMENTO
 # =====================================================================
 results = []
 txt_lines = []
@@ -634,32 +880,22 @@ pagamentos_associados = 0
 parcelas_nao_pagas = 0
 produtos_especiais = 0
 produtos_especiais_cancelados = 0
-linhas_pagas_idx = []  # Índices das linhas pagas na planilha original
-# NOVO: índices das linhas de RECEITA (coluna RECEITAS) que foram “pagas” pelos recebimentos
+linhas_pagas_idx = []
 linhas_receitas_pagas_idx = []
 
 print("\nAssociando pagamentos usando datas de vencimento...")
-for i, nota in df_to_process.iterrows():
-    # Criar cópia da linha original
-    result_row = nota.to_dict()
-    
-    # === [SUBSTITUIR TODO O BLOCO A PARTIR DAQUI] ===
-    # CAMADA 1: NF + CNPJ + não cancelado + não associada
-    data_nota = nota['data_nota']
 
-    # >>> PATCH: preparar normalizações/valores de referência para as guardas
+for i, nota in df_to_process.iterrows():
+    result_row = nota.to_dict()
+    data_nota = nota['data_nota']
     nome_nota_norm = _norm_txt(nota.get('fornecedor', ''))
     valor_nota = float(nota.get('valor_busca') or 0.0)
     num_nf_nota = str(nota.get('num_nf_busca', '')).strip()
-    cnpj_nota   = str(nota.get('cnpj_busca', '')).strip()
-
-    def _tolerancia_valor_para_cnpj_diferente(v):
-        # tolerância dinâmica: max(R$10, 10% do valor da nota)
-        return max(10.0, 0.10 * max(v, 0.0))
-
+    cnpj_nota = str(nota.get('cnpj_busca', '')).strip()
 
     parcela_encontrada = None
-    
+
+    # CAMADA inicial: NF + CNPJ + não associado + não cancelado
     mask1 = (
         (df_base['num_nf'] == nota['num_nf_busca']) &
         (df_base['cnpj'] == nota['cnpj_busca']) &
@@ -668,7 +904,7 @@ for i, nota in df_to_process.iterrows():
     )
     cands = df_base[mask1].copy()
 
-    # Excluir candidatos cujo N° Primário conste como cancelado para essa NF
+    # tirar primários cancelados
     if 'num_primario' in df_base.columns and not cands.empty:
         grupo_nf = df_base.loc[(df_base['num_nf'] == nota['num_nf_busca'])].copy()
         primarios_cancelados = set(
@@ -678,43 +914,34 @@ for i, nota in df_to_process.iterrows():
         if primarios_cancelados:
             cands = cands.loc[~cands['num_primario'].astype(str).isin(primarios_cancelados)].copy()
 
-    # ================== INÍCIO: BLOCO MULTI-PARCELAS (cole antes da seleção única) ==================
+    # ================== BLOCO DE MULTIPLAS PARCELAS ==================
     if not cands.empty:
         cands = cands.copy()
-
-        # Normalizações/garantias de tipo
         cands['valor'] = cands['valor'].astype(float)
         cands['data_pagamento'] = pd.to_datetime(cands['data_pagamento'], errors='coerce')
         cands['data_vencimento'] = pd.to_datetime(cands.get('data_vencimento', pd.NaT), errors='coerce')
 
-        # Janela de datas (data_nota -10d, +45d)
         if not pd.isna(data_nota):
             dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
             dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
             cands = cands[(cands['data_pagamento'] >= dmin) & (cands['data_pagamento'] < dmax)]
 
-        # ---- Ranqueamento (mesmos sinais que você já usa) ----
-        import numpy as np
         cands['score'] = 0.0
-        cands['score'] += (cands['cnpj'].astype(str) == str(nota.get('cnpj_busca', ''))).astype(float) * 2.0
+        cands['score'] += (cands['cnpj'].astype(str) == cnpj_nota).astype(float) * 2.0
         if not pd.isna(data_nota):
             cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
-        cands['diff_val'] = (cands['valor'] - float(nota.get('valor_busca', 0.0))).abs()
-        cands['score'] += np.isclose(cands['valor'], float(nota.get('valor_busca', 0.0)), atol=VAL_TOL).astype(float) * 1.0
+        cands['diff_val'] = (cands['valor'] - valor_nota).abs()
+        cands['score'] += np.isclose(cands['valor'], valor_nota, atol=VAL_TOL).astype(float) * 1.0
         cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
         cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
-
         cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'], ascending=[False, True, False])
 
-        # ---- Consumo de parcelas até fechar o valor da NF ----
         parcelas_escolhidas = []
-        saldo = float(nota.get('valor_busca', 0.0) or 0.0)
+        saldo = valor_nota
 
         for idx_sel, row in cands.iterrows():
             v = float(row.get('valor', 0.0) or 0.0)
-
-            # Segurança por CNPJ/nome (se houver similaridade disponível)
-            if str(row.get('cnpj', '')) != str(nota.get('cnpj_busca', '')):
+            if str(row.get('cnpj', '')) != cnpj_nota:
                 sim = row.get('sim_nome', None)
                 if sim is not None:
                     try:
@@ -722,91 +949,67 @@ for i, nota in df_to_process.iterrows():
                             continue
                     except Exception:
                         pass
-
-            # Pega enquanto couber no saldo (com tolerância de centavos)
             if v <= saldo + VAL_TOL:
                 parcelas_escolhidas.append((idx_sel, row))
                 saldo -= v
-                try:
-                    df_base.at[idx_sel, 'associada'] = True
-                except Exception:
-                    pass
-
+                df_base.at[idx_sel, 'associada'] = True
             if abs(saldo) <= VAL_TOL:
                 break
 
         if parcelas_escolhidas:
-            # ---- Emissão de 1 linha TXT por parcela ----
-            num_nf = str(nota.get('num_nf_busca', '')).strip()
-            cnpj_nf = str(nota.get('cnpj_busca', '')).strip()
+            num_nf = num_nf_nota
             cod_faz = str(nota.get('cod_fazenda', '') or '').zfill(3)
-
             for k, (idx_sel, parcela) in enumerate(parcelas_escolhidas, start=1):
                 data_pgto = parcela.get('data_pagamento')
                 usa_data_nota = _should_use_data_nota(nota, data_pgto)
                 data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
                 data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
-                cod_banco = _conta_codigo(str(parcela.get('banco', '')).strip()) or '001'
+                cod_banco = _conta_codigo(str(parcela.get('banco', '')).strip()) or _banco_padrao_cod()
                 valor = float(parcela.get('valor', 0.0) or 0.0)
                 valor_cent = str(int(round(valor * 100)))
-
-                # dentro do loop das parcelas_escolhidas:
                 descricao = f"PAGAMENTO NF {num_nf} (PARCELA {k} de {len(parcelas_escolhidas)})"
                 txt_lines.append("|".join([
                     data_fmt,
                     cod_faz,
                     cod_banco,
-                    f"{num_nf}-{k}",        # num_doc com sufixo da parcela (EVITA DEDUPE)
-                    str(k),                 # número da parcela
-                    descricao,              # historico -> deixa claro a NF e a parcela
-                    cnpj_nf,
+                    f"{num_nf}-{k}",
+                    str(k),
+                    descricao,
+                    cnpj_nota,
                     "2", "000",
                     valor_cent, valor_cent,
                     "N"
                 ]))
-
                 pagamentos_associados += 1
-                try:
-                    linhas_pagas_idx.append(nota.name)
-                except Exception:
-                    pass
+                linhas_pagas_idx.append(nota.name)
 
-            # ---- Atualiza a linha de resultado para planilha (após gerar as linhas TXT das parcelas) ----
             ult = parcelas_escolhidas[-1][1]
             data_pgto = ult.get('data_pagamento')
             usa_data_nota = _should_use_data_nota(nota, data_pgto)
             data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
-            
-            # saldo final após consumir as parcelas
-            valor_nota = float(nota.get('valor_busca', 0.0) or 0.0)
-            saldo_final = valor_nota - sum(float(p[1].get('valor', 0.0) or 0.0) for p in parcelas_escolhidas)
-            
+            valor_aceito = sum(float(p[1].get('valor', 0.0) or 0.0) for p in parcelas_escolhidas)
+            saldo_final = valor_nota - valor_aceito
+
             if abs(saldo_final) <= VAL_TOL:
-                # ✅ fechou a NF: marca como Pago e ENCERRA esta nota
                 result_row.update({
                     'Status Nota': 'Ativa',
                     'Status Pagamento': 'Pago',
-                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or '',
+                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or _banco_padrao_cod(),
                     'Data Pagamento': (pd.to_datetime(data_base).strftime('%d%m%Y') if not pd.isna(data_base) else ''),
                     'Observações': f'Pagto fracionado: {len(parcelas_escolhidas)} parcela(s)'
                 })
                 results.append(result_row)
-                continue  # <-- continue SOMENTE quando fechou a NF
+                continue
             else:
-                # 🔶 ainda falta valor: NÃO dá continue (deixa seguir para o abatimento por devolução)
                 result_row.update({
                     'Status Nota': 'Ativa',
                     'Status Pagamento': 'Parcial',
-                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or '',
+                    'Banco': _conta_codigo(str(ult.get('banco', '')).strip()) or _banco_padrao_cod(),
                     'Data Pagamento': (pd.to_datetime(data_base).strftime('%d%m%Y') if not pd.isna(data_base) else ''),
                     'Observações': f'Parcial: {len(parcelas_escolhidas)} parcela(s); falta R$ {saldo_final:.2f}'
                 })
-                # Não dar results.append aqui; se o abatimento completar, o append é feito lá.
-            
 
-
-    # ======== ABATIMENTO POR DEVOLUÇÃO/REFATURAMENTO (RODAR SEMPRE) ========
-    # saldo_remanescente = valor da NF - soma do que já foi associado nesta iteração
+    # ======== ABATE POR DEVOLUÇÃO ========
     try:
         valor_aceito = 0.0
         if 'parcelas_escolhidas' in locals() and parcelas_escolhidas:
@@ -814,52 +1017,40 @@ for i, nota in df_to_process.iterrows():
         saldo_remanescente = max(0.0, valor_nota - valor_aceito)
     except Exception:
         saldo_remanescente = valor_nota
-        
-    if saldo_remanescente > VAL_TOL:
-        # 1) buscar em XMLs uma NFe que referencie a NF original (refNFe/nº NF) do mesmo CNPJ
-        #    -> obtenha valor_devolucao (vnf_dev)
-        vnf_dev = _buscar_valor_devolucao_relacionada(nota)  # <- se já tiver helper, use-o
 
+    if saldo_remanescente > VAL_TOL:
+        vnf_dev = _buscar_valor_devolucao_relacionada(nota)
         if vnf_dev and vnf_dev > 0:
             diff = abs(vnf_dev - saldo_remanescente)
             if diff <= VAL_TOL:
-                # 2) procurar um pagamento solto com exatamente o valor da diferença
                 cands_diff = df_base[
                     (df_base['associada'] != True) &
                     (df_base['pagamento_cancelado'].astype(str).str.upper() != 'SIM') &
                     (df_base['cnpj'].astype(str) == cnpj_nota) &
                     np.isclose(df_base['valor'].astype(float), saldo_remanescente, atol=VAL_TOL)
                 ].copy()
-
-                # opcional: aplicar mesma janela de datas
-                if not pd.isna(data_nota):
+                if not pd.isna(data_nota) and not cands_diff.empty:
                     dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
                     dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
                     cands_diff['data_pagamento'] = pd.to_datetime(cands_diff['data_pagamento'], errors='coerce')
                     cands_diff = cands_diff[(cands_diff['data_pagamento'] >= dmin) & (cands_diff['data_pagamento'] < dmax)]
-
                 if not cands_diff.empty:
-                    # gerar UMA linha TXT correspondente ao abatimento por devolução (parcela extra)
                     parcela_k = 1
                     if 'parcelas_escolhidas' in locals() and parcelas_escolhidas:
                         parcela_k = len(parcelas_escolhidas) + 1
-
                     row = cands_diff.sort_values('data_pagamento').iloc[0]
                     data_pgto = pd.to_datetime(row.get('data_pagamento'), errors='coerce')
                     usa_data_nota = _should_use_data_nota(nota, data_pgto)
                     data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
                     data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
-                    cod_banco = _conta_codigo(str(row.get('banco', '')).strip()) or '001'
+                    cod_banco = _conta_codigo(str(row.get('banco', '')).strip()) or _banco_padrao_cod()
                     valor_cent = str(int(round(float(saldo_remanescente) * 100)))
-                    num_nf = num_nf_nota
-
-                    descricao = f"PAGAMENTO NF {num_nf} (ABATE DEVOLUÇÃO)"
-
+                    descricao = f"PAGAMENTO NF {num_nf_nota} (ABATE DEVOLUÇÃO)"
                     txt_lines.append("|".join([
                         data_fmt,
                         str(nota.get('cod_fazenda')).zfill(3),
                         cod_banco,
-                        f"{num_nf}-{parcela_k}",
+                        f"{num_nf_nota}-{parcela_k}",
                         str(parcela_k),
                         descricao,
                         cnpj_nota,
@@ -867,14 +1058,10 @@ for i, nota in df_to_process.iterrows():
                         valor_cent, valor_cent,
                         "N"
                     ]))
-
-                    # marca associado e atualiza resultado
                     try:
-                        idx_sel = row.name
-                        df_base.at[idx_sel, 'associada'] = True
+                        df_base.at[row.name, 'associada'] = True
                     except Exception:
                         pass
-
                     result_row.update({
                         'Status Nota': 'Ativa',
                         'Status Pagamento': 'Pago',
@@ -883,14 +1070,9 @@ for i, nota in df_to_process.iterrows():
                         'Observações': (result_row.get('Observações') or '') + f" | Abate por devolução: {saldo_remanescente:.2f}"
                     })
                     results.append(result_row)
-                    # (não precisa continue aqui; já estamos no final do bloco por nota)
                     continue
 
-
-    # ======== CAMADA 1: candidatos com mesmo CNPJ E mesmo nº NF ========
-    num_nf_nota = str(nota.get('num_nf_busca', '')).strip()
-    cnpj_nota   = str(nota.get('cnpj_busca', '')).strip()
-
+    # ======== CAMADA 1 / FALLBACKS ========
     if 'num_nf' not in cands.columns:
         cands['num_nf'] = None
     if 'historico' in cands.columns:
@@ -903,23 +1085,16 @@ for i, nota in df_to_process.iterrows():
         (cands['cnpj'].astype(str) == cnpj_nota) &
         (cands['num_nf'].astype(str) == num_nf_nota)
     ]
-
     if not cands_layer1.empty:
         cands = cands_layer1.copy()
     else:
-        # ======== FALLBACK: sem nº NF, ficar bem restrito ========
-        # 1) CNPJ igual (preferência forte)
         cands = cands[(cands['cnpj'].astype(str) == cnpj_nota)].copy()
-
-        # Se mesmo assim não houver, permitir CNPJ ≠ porém com nome MUITO parecido
         if cands.empty and 'sim_nome' in df_base.columns:
             cands = df_base[
                 (df_base['associada'] != True) &
                 (df_base['pagamento_cancelado'].astype(str).str.upper() != 'SIM') &
                 (df_base['sim_nome'].astype(float) >= SIMILARIDADE_MIN_NOME_STRICT)
             ].copy()
-
-        # Proibir candidatos com nº NF diferente quando ambos existem
         if 'num_nf' in cands.columns:
             cands = cands[
                 (cands['num_nf'].isna()) |
@@ -928,172 +1103,56 @@ for i, nota in df_to_process.iterrows():
                 (cands['num_nf'].astype(str) == num_nf_nota)
             ]
 
-    # ======== JANELA DE DATAS: [data_nota -10d, +45d] ========
-    data_nota = pd.to_datetime(nota.get('data_nota'), errors='coerce')
     if not pd.isna(data_nota) and not cands.empty:
         dmin = (data_nota - timedelta(days=DATE_WINDOW_DAYS_BEFORE)).normalize()
         dmax = (data_nota + timedelta(days=DATE_WINDOW_DAYS_AFTER)).normalize() + pd.Timedelta(days=1)
         cands['data_pagamento'] = pd.to_datetime(cands['data_pagamento'], errors='coerce')
         cands = cands[(cands['data_pagamento'] >= dmin) & (cands['data_pagamento'] < dmax)]
-    
-    # ======== RANQUEAMENTO + TOLERÂNCIAS ========
-    import numpy as np
+
     cands = cands.copy()
-    cands['valor'] = cands['valor'].astype(float)
-    cands['score'] = 0.0
-    cands['score'] += (cands['cnpj'].astype(str) == cnpj_nota).astype(float) * 2.0
-    if not pd.isna(data_nota) and 'data_vencimento' in cands.columns:
-        cands['data_vencimento'] = pd.to_datetime(cands['data_vencimento'], errors='coerce')
-        cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
-    
-    valor_nf = float(nota.get('valor_busca', 0.0) or 0.0)
-    cands['diff_val'] = (cands['valor'] - valor_nf).abs()
-    
-    # tolerância absoluta e relativa
-    cands['isclose_val'] = np.isclose(cands['valor'], valor_nf, atol=VAL_TOL)
-    cands['score'] += cands['isclose_val'].astype(float) * 1.0
-    cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
-    # Pontua ter 'banco' preenchido (se a coluna existir)
-    if 'banco' in cands.columns:
-        cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
-
-    
-    # CNPJ divergente: exigir similaridade alta (se houver) e proibir nº NF conflitante
-    if 'sim_nome' in cands.columns and num_nf_nota:
-        cands = cands[
-            (cands['cnpj'].astype(str) == cnpj_nota) |
-            (
-                (cands['sim_nome'].astype(float) >= SIMILARIDADE_MIN_NOME_STRICT) &
-                ((cands['num_nf'].isna()) | (cands['num_nf'].astype(str) == '') | (cands['num_nf'].astype(str) == num_nf_nota))
-            )
-        ]
-    
-    cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'], ascending=[False, True, False])
-    
-    # CAMADA 2: mesma NF (ignorando CNPJ) + não cancelado + não associada,
-    #           MAS agora exigindo semelhança de nome e coerência de valor/data.
-    if cands.empty:
-        grupo_nf = df_base.loc[
-            (df_base['num_nf'] == nota['num_nf_busca']) &
-            (~df_base['associada'])
-        ].copy()
-    
-        # respeitar N° Primário cancelado
-        if 'num_primario' in grupo_nf.columns:
-            primarios_cancelados = set(
-                grupo_nf.loc[grupo_nf['pagamento_cancelado'] == 'SIM', 'num_primario']
-                        .dropna().astype(str).unique().tolist()
-            )
-            grupo_nf = grupo_nf.loc[
-                (grupo_nf['pagamento_cancelado'] != 'SIM') &
-                (~grupo_nf['num_primario'].astype(str).isin(primarios_cancelados))
-            ].copy()
-        else:
-            grupo_nf = grupo_nf.loc[(grupo_nf['pagamento_cancelado'] != 'SIM')].copy()
-    
-        # >>> PATCH: exigir similaridade de nome quando CNPJ for diferente
-        if not grupo_nf.empty and ('fornecedor_base_norm' in grupo_nf.columns):
-            grupo_nf['sim_nome'] = grupo_nf['fornecedor_base_norm'].apply(
-                lambda x: _sim(x, nome_nota_norm)
-            )
-            # Mantém CNPJ IGUAL sem exigir similaridade;
-            # Para CNPJ DIFERENTE: exige sim >= 0.80
-            grupo_nf = grupo_nf.loc[
-                (grupo_nf['cnpj'] == nota['cnpj_busca']) |
-                (grupo_nf['sim_nome'] >= SIMILARIDADE_MIN_NOME)
-            ].copy()
-    
-        # >>> PATCH: exigir coerência de VALOR quando CNPJ for diferente
-        if not grupo_nf.empty and valor_nota > 0:
-            tol = _tolerancia_valor_para_cnpj_diferente(valor_nota)
-            # Mantém pagamento se (CNPJ igual) ou (diferença de valor dentro da tolerância)
-            grupo_nf['diff_val'] = (grupo_nf['valor'] - valor_nota).abs()
-            grupo_nf = grupo_nf.loc[
-                (grupo_nf['cnpj'] == nota['cnpj_busca']) |
-                (grupo_nf['diff_val'] <= tol)
-            ].copy()
-    
-        # >>> PATCH: exigir coerência de DATA quando CNPJ for diferente (janela ±120 dias)
-        if not grupo_nf.empty and not pd.isna(data_nota) and 'data_vencimento' in grupo_nf.columns:
-            janela = pd.Timedelta(days=120)
-            delta = (grupo_nf['data_vencimento'] - data_nota).abs()
-            grupo_nf = grupo_nf.loc[
-                (grupo_nf['cnpj'] == nota['cnpj_busca']) |
-                (delta <= janela)
-            ].copy()
-    
-        cands = grupo_nf.copy()
-    
-    
-    # CAMADA 3: fallback por NOME (≥80%) se houver coluna de fornecedor na base
-    if cands.empty and ('fornecedor_base_norm' in df_base.columns):
-        grupo_nf = df_base.loc[
-            (df_base['num_nf'] == nota['num_nf_busca']) &
-            (~df_base['associada']) &
-            (df_base['pagamento_cancelado'] != 'SIM')
-        ].copy()
-    
-        try:
-            nome_nota_norm = _norm_txt(nota.get('fornecedor', ''))
-            grupo_nf['sim_nome'] = grupo_nf['fornecedor_base_norm'].apply(lambda x: _sim(x, nome_nota_norm))
-            cands = grupo_nf.loc[grupo_nf['sim_nome'] >= SIMILARIDADE_MIN_NOME].copy()
-        except NameError:
-            # _norm_txt/_sim não estão definidos (se o item 3 ainda não foi aplicado); ignore similaridade
-            pass
-            
-    # RANQUEAR candidatos e escolher o melhor
     if not cands.empty:
+        cands['valor'] = cands['valor'].astype(float)
         cands['score'] = 0.0
-        # Preferir CNPJ igual
-        cands['score'] += (cands['cnpj'] == nota['cnpj_busca']).astype(float) * 2.0
-        # Penalizar CNPJ diferente
-        cands['score'] -= (cands['cnpj'] != nota['cnpj_busca']).astype(float) * 1.0
-
-        # Preferir data de vencimento = data da nota
-        if not pd.isna(data_nota):
+        cands['score'] += (cands['cnpj'].astype(str) == cnpj_nota).astype(float) * 2.0
+        if not pd.isna(data_nota) and 'data_vencimento' in cands.columns:
+            cands['data_vencimento'] = pd.to_datetime(cands['data_vencimento'], errors='coerce')
             cands['score'] += (cands['data_vencimento'].dt.date == data_nota.date()).astype(float) * 1.5
-        # Aproximação por valor
-        cands['diff_val'] = (cands['valor'] - float(nota['valor_busca'])).abs()
-        cands['score'] += np.isclose(cands['valor'], nota['valor_busca'], atol=VAL_TOL).astype(float) * 1.0
-        cands['score'] -= (cands['diff_val'] > 5.0).astype(float) * 0.5
-        # Similaridade de nome (se existir)
-        if 'sim_nome' in cands.columns:
-            cands['score'] += cands['sim_nome']
-
-        # Preferir quem tem data de pagamento e banco
+        cands['diff_val'] = (cands['valor'] - valor_nota).abs()
+        cands['isclose_val'] = np.isclose(cands['valor'], valor_nota, atol=VAL_TOL)
+        cands['score'] += cands['isclose_val'].astype(float) * 1.0
         cands['score'] += (~cands['data_pagamento'].isna()).astype(float) * 1.0
-        cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
-
-        # Leve preferência se data_pagamento = data_nota
-        if not pd.isna(data_nota):
-            cands['score'] += (cands['data_pagamento'].dt.date == data_nota.date()).astype(float) * 0.5
-
+        if 'banco' in cands.columns:
+            cands['score'] += (cands['banco'].astype(str).str.strip() != '').astype(float) * 1.0
+        if 'sim_nome' in cands.columns and num_nf_nota:
+            cands = cands[
+                (cands['cnpj'].astype(str) == cnpj_nota) |
+                (
+                    (cands['sim_nome'].astype(float) >= SIMILARIDADE_MIN_NOME_STRICT) &
+                    ((cands['num_nf'].isna()) | (cands['num_nf'].astype(str) == '') | (cands['num_nf'].astype(str) == num_nf_nota))
+                )
+            ]
         cands = cands.sort_values(['score', 'diff_val', 'data_pagamento'],
                                   ascending=[False, True, False])
-        idx_sel = cands.index[0]
-        cand = cands.loc[idx_sel]
+        if not cands.empty:
+            idx_sel = cands.index[0]
+            cand = cands.loc[idx_sel]
 
-        # >>> PATCH: safety gate – se CNPJ for diferente, a similaridade precisa existir e ser >=80%
-        if str(cand.get('cnpj','')) != str(nota['cnpj_busca']):
-            sim_ok = False
-            if 'sim_nome' in cand.index and not pd.isna(cand['sim_nome']):
-                sim_ok = float(cand['sim_nome']) >= SIMILARIDADE_MIN_NOME
-            if not sim_ok:
-                parcela_encontrada = None
+            if str(cand.get('cnpj','')) != cnpj_nota:
+                sim_ok = False
+                if 'sim_nome' in cand.index and not pd.isna(cand['sim_nome']):
+                    sim_ok = float(cand['sim_nome']) >= SIMILARIDADE_MIN_NOME
+                if not sim_ok:
+                    parcela_encontrada = None
+                else:
+                    parcela_encontrada = cand
+                    df_base.at[idx_sel, 'associada'] = True
             else:
                 parcela_encontrada = cand
                 df_base.at[idx_sel, 'associada'] = True
-        else:
-            parcela_encontrada = cand
-            df_base.at[idx_sel, 'associada'] = True
-    # === [FIM DO BLOCO SUBSTITUÍDO] ===
-    
-    
-    # Processar resultado
+
+    # ===== PROCESSAR RESULTADO =====
     if parcela_encontrada is not None:
-        # Verificar se a parcela tem dados de pagamento válidos
         if pd.isna(parcela_encontrada['data_pagamento']) or str(parcela_encontrada['banco']).strip() == '':
-            # Parcela encontrada mas sem dados de pagamento
             result_row.update({
                 'Status Nota': "Ativa",
                 'Status Pagamento': 'Não pago',
@@ -1103,37 +1162,30 @@ for i, nota in df_to_process.iterrows():
             })
             parcelas_nao_pagas += 1
         else:
-            # Determinar status
             status_nota = "Cancelada" if "CANCELADA" in str(parcela_encontrada['nota_cancelada']).upper() else "Ativa"
             status_pag = "Pago"
-            
-            # Formatar data pagamento
             data_pgto = parcela_encontrada['data_pagamento']
             usa_data_nota = _should_use_data_nota(nota, data_pgto)
             data_base = nota['data_nota'] if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
             data_str = data_base.strftime('%d%m%Y') if not pd.isna(data_base) else ""
-            
-            # Obter código do banco
+
             banco_nome = str(parcela_encontrada['banco']).strip()
-            cod_banco = _conta_codigo(banco_nome)
-            
-            # >>> PATCH: tornar a 'origem' mais explícita
+            cod_banco = _conta_codigo(banco_nome) or _banco_padrao_cod()
+
             origem = (
                 "Associada por CNPJ"
-                if str(parcela_encontrada.get('cnpj', '')) == str(nota['cnpj_busca'])
+                if str(parcela_encontrada.get('cnpj', '')) == cnpj_nota
                 else "Associada por NF + Nome≈" + f"{float(parcela_encontrada.get('sim_nome',0)): .0%}".replace(" ","")
             )
 
-            # Se CNPJ não bateu mas o N° Primário é diferente (ou seja, outra linha válida)
             if (
                 hasattr(parcela_encontrada, "index")
                 and 'num_primario' in parcela_encontrada.index
                 and pd.notna(parcela_encontrada['num_primario'])
-                and str(parcela_encontrada.get('cnpj', '')) != str(nota['cnpj_busca'])
+                and str(parcela_encontrada.get('cnpj', '')) != cnpj_nota
             ):
                 origem = "Associada por NF (N° Primário distinto)"
-            
-            # Se você aplicou o passo de similaridade (item 4/3), acrescenta o % aproximado
+
             if (
                 hasattr(parcela_encontrada, "index")
                 and 'sim_nome' in parcela_encontrada.index
@@ -1143,72 +1195,51 @@ for i, nota in df_to_process.iterrows():
                     origem += " + Nome≈" + f"{float(parcela_encontrada['sim_nome']):.0%}"
                 except Exception:
                     pass
-                
-            # Atualizar linha de resultado (apenas troca o campo 'Observações')
+
             result_row.update({
                 'Status Nota': status_nota,
                 'Status Pagamento': status_pag,
-                'Banco': cod_banco,  # Agora apenas o código do banco
+                'Banco': cod_banco,
                 'Data Pagamento': data_str,
                 'Observações': origem
             })
 
-            
-            # Gerar linha para TXT com novo formato
             if status_nota == "Ativa" and status_pag == "Pago" and data_str:
-                # === NOVO FORMATO (PIPE '|') ===
-                # Ex.: 01-01-2025|006|001|14209|1|PAGAMENTO NF 14209 HOHL MAQUINAS AGRICOLAS LTDA|01608488001250|2|000|573500|573500|N
                 data_fmt = data_base.strftime('%d-%m-%Y') if not pd.isna(data_base) else nota['data_nota'].strftime('%d-%m-%Y')
-                fornecedor = nota['fornecedor']
-                cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)  # "006"
-                num_nf = nota['num_nf_busca']
-                cnpj = nota['cnpj_busca']
-                
-                # valor em centavos, sem separadores (ex.: 5735,00 -> "573500")
+                cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)
+                num_nf = num_nf_nota
+                cnpj = cnpj_nota
                 valor_cent = str(int(round(float(parcela_encontrada['valor']) * 100)))
-                
-                # número real da parcela (1, 2, 3, …) vindo da base
                 parcela_num = int(parcela_encontrada.get('parcela_idx', 1))
-                
-                # sufixo no número do documento (ex.: 1350-1, 1350-2, 1350-3)
                 num_nf_txt = f"{num_nf}-{parcela_num}"
-                
-                # descrição com “(PARCELA n)”
                 descricao = f"PAGAMENTO NF {num_nf}".upper()
-                
-                # campo parcela no TXT = n
                 parcela_txt = str(parcela_num)
-                
-                conta_cod_pg = _conta_codigo(parcela_encontrada.get('banco', '') if 'parcela_encontrada' in locals() else '')
+                conta_cod_pg = _conta_codigo(parcela_encontrada.get('banco', '')) or _banco_padrao_cod()
                 txt_line = [
-                    data_fmt,           # 1 - data (DD-MM-YYYY)
-                    cod_fazenda3,       # 2 - fazenda (3 dígitos)
-                    (conta_cod_pg or "001"),  # 3 - conta (código mapeado; fallback 001)
-                    num_nf_txt,         # 4 - número do doc (ex.: 1350-1)
-                    parcela_txt,        # 5 - nº da parcela
-                    descricao,          # 6 - descrição
-                    cnpj,               # 7 - CNPJ (14 dígitos)
-                    "2",                # 8 - Tipo (2 = Despesa/Pagamento)
-                    "000",              # 9 - Centro/Histórico (fixo)
-                    valor_cent,         # 10 - Saída (centavos, sem separador)
-                    valor_cent,         # 11 - Valor total (idem)
-                    "N"                 # 12 - Marcador
+                    data_fmt,
+                    cod_fazenda3,
+                    conta_cod_pg,
+                    num_nf_txt,
+                    parcela_txt,
+                    descricao,
+                    cnpj,
+                    "2",
+                    "000",
+                    valor_cent,
+                    valor_cent,
+                    "N"
                 ]
                 txt_lines.append("|".join(txt_line))
                 pagamentos_associados += 1
-                
-                # Registrar como linha paga
                 linhas_pagas_idx.append(nota.name)
     else:
-        # Verificar se existem parcelas canceladas não associadas
         mask_canceladas = (
-            (df_base['num_nf'] == nota['num_nf_busca']) &
-            (df_base['cnpj'] == nota['cnpj_busca']) &
+            (df_base['num_nf'] == num_nf_nota) &
+            (df_base['cnpj'] == cnpj_nota) &
             (~df_base['associada']) &
             (df_base['pagamento_cancelado'] == 'SIM')
         )
         parcelas_canceladas = df_base[mask_canceladas]
-        
         if not parcelas_canceladas.empty:
             result_row.update({
                 'Status Nota': "Ativa",
@@ -1226,52 +1257,42 @@ for i, nota in df_to_process.iterrows():
                 'Observações': 'Pagamento não realizado para esta nota'
             })
         parcelas_nao_pagas += 1
-    
-    # TRATAMENTO ESPECIAL PARA PRODUTOS ESPECIAIS (após processamento normal)
+
+    # PRODUTOS ESPECIAIS → pagar automático (usando mapeamento do perfil para banco padrão)
     if nota['produto_especial'] and result_row['Status Pagamento'] == 'Não pago':
         produtos_especiais += 1
-        
-        # Produto especial SEM PAGAMENTO - aplicar pagamento automático
-        data_nota = nota['data_nota']
-        data_str = data_nota.strftime('%d%m%Y') if not pd.isna(data_nota) else ""
-        
-        # Preencher resultado para produto especial
+        data_nota2 = nota['data_nota']
+        data_str = data_nota2.strftime('%d%m%Y') if not pd.isna(data_nota2) else ""
+        _cod_banco_padrao = _banco_padrao_cod()
         result_row.update({
             'Status Nota': "Ativa",
             'Status Pagamento': 'Pago',
-            'Banco': '001',
+            'Banco': _cod_banco_padrao,
             'Data Pagamento': data_str,
             'Observações': 'Produto especial (combustível/lubrificante) - Pagamento automático'
         })
-        
-        # Gerar linha para TXT
-        # === NOVO FORMATO (PIPE '|') — PRODUTOS ESPECIAIS ===
-        data_fmt = nota['data_nota'].strftime('%d-%m-%Y')  # DD-MM-AAAA
-        fornecedor = nota['fornecedor']
+        data_fmt = data_nota2.strftime('%d-%m-%Y')
         cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)
-        num_nf = nota['num_nf_busca']
-        cnpj = nota['cnpj_busca']
-        
-        # número de parcela para produto especial: tratar como avulso
-        parcela_num = 1
-        num_nf_txt = f"{num_nf}"  # sem sufixo aqui
-        descricao = f"PAGAMENTO NF {num_nf}".upper()
-        parcela_txt = str(parcela_num)
-        
-        # >>> PATCH: corrigir valor_cent para produtos especiais
-        valor_cent = str(int(round(float(valor_nota) * 100)))  # usa o valor da própria nota
-
-        # Para produtos especiais não há pagamento na base; use conta "Não Mapeado" como fallback
-        conta_cod_pg = '001'
-        txt_line = [
-            data_fmt, cod_fazenda3, conta_cod_pg,
-            num_nf, parcela_txt, descricao, cnpj, "2", "000", valor_cent, valor_cent, "N"
-        ]
-        txt_lines.append("|".join(txt_line))
+        num_nf = num_nf_nota
+        cnpj = cnpj_nota
+        valor_cent = str(int(round(float(valor_nota) * 100)))
+        txt_lines.append("|".join([
+            data_fmt,
+            cod_fazenda3,
+            _cod_banco_padrao,
+            num_nf,
+            "1",
+            f"PAGAMENTO NF {num_nf}".upper(),
+            cnpj,
+            "2",
+            "000",
+            valor_cent,
+            valor_cent,
+            "N"
+        ]))
         pagamentos_associados += 1
         linhas_pagas_idx.append(nota.name)
-        
-    
+
     results.append(result_row)
 
 print(f"\n🔍 Resultados da associação:")
@@ -1281,25 +1302,18 @@ print(f"  > Produtos especiais cancelados: {produtos_especiais_cancelados}")
 print(f"- Parcelas associadas: {pagamentos_associados}")
 print(f"- Parcelas não pagas: {parcelas_nao_pagas}")
 
-# =========================
-# PASSO EXTRA (pós-associação):
-#   Para notas ainda "Não pago", procurar XML do mesmo fornecedor que
-#   mencione a NF original; calcular a DIFERENÇA e buscar pagamento igual a essa diferença.
-# =========================
-print("\nAnalisando XMLs para diferenças (devolução/reefaturamento)...")
-
-# Mapa rápido: índice da nota -> posição no results
+# =====================================================================
+# PASSO EXTRA: AJUSTES POR XML
+# =====================================================================
+print("\nAnalisando XMLs para diferenças (devolução/reefat)…")
 idx_to_results_pos = {}
 for pos, r in enumerate(results):
-    idx_to_results_pos[df_to_process.index[pos]] = pos  # assume ordem idêntica
+    idx_to_results_pos[df_to_process.index[pos]] = pos
 
-# Carregar (lazy) infos de XMLs apenas 1x
 xml_infos = list(_iter_xmls(XML_DIRS))
-
 ajustes_por_xml = 0
 
 for i, nota in df_to_process.iterrows():
-    # se já está pago, ignore
     pos_res = idx_to_results_pos.get(i)
     if pos_res is None:
         continue
@@ -1310,82 +1324,61 @@ for i, nota in df_to_process.iterrows():
     cnpj_alvo = nota['cnpj_busca']
     valor_nf = float(nota['valor_busca'] or 0.0)
 
-    # achar um XML do mesmo fornecedor que referencia essa NF
     achado = None
     for x in xml_infos:
         if _xml_menciona_nf_do_mesmo_fornecedor(cnpj_alvo, nf_alvo, x):
             achado = x
             break
-
     if not achado:
-        continue  # nenhum XML do mesmo fornecedor mencionando esta NF
+        continue
 
-    # diferença entre a NF original e a NF 'referenciante'
     diferenca = round(abs(valor_nf - float(achado['vnf'])), 2)
     if diferenca <= VAL_TOL:
         continue
 
-    # procurar um pagamento NÃO associado com exatamente esse valor (tolerância centavos)
-    #   prioridade: mesmo CNPJ; senão, por nome ≥80% (mesma NF)
     cand = df_base.loc[
         (~df_base['associada']) &
         (df_base['pagamento_cancelado'] != 'SIM') &
         np.isclose(df_base['valor'], diferenca, atol=VAL_TOL)
     ].copy()
-
     if cand.empty:
         continue
 
-    # priorização: mesma NF alvo, depois CNPJ, depois similaridade por nome
     cand['score'] = 0.0
     cand['score'] += (cand['num_nf'] == nf_alvo).astype(float) * 2.0
     cand['score'] += (cand['cnpj'] == cnpj_alvo).astype(float) * 1.5
     if 'fornecedor_base_norm' in cand.columns:
         cand['sim_nome'] = cand['fornecedor_base_norm'].apply(lambda x: _sim(x, nota['fornecedor_norm']))
         cand.loc[cand['sim_nome'] >= SIMILARIDADE_MIN_NOME, 'score'] += cand['sim_nome']
-
     cand = cand.sort_values('score', ascending=False)
     j = cand.index[0]
     pgto = cand.loc[j]
     df_base.at[j, 'associada'] = True
 
-    # montar resultado como PAGO (TXT usa valor do PAGAMENTO, não o da NF)
-    status_nota = "Ativa"
-    status_pag = "Pago"
-    # Ano de referência (planilha): tenta 'ANO'; se não houver/estiver vazio, usa ano de data_nota
     try:
         ref_ano = int(nota['ANO']) if ('ANO' in nota.index and pd.notna(nota['ANO'])) else None
     except Exception:
         ref_ano = None
     if ref_ano is None:
         ref_ano = int(nota['data_nota'].year) if ('data_nota' in nota.index and pd.notna(nota['data_nota'])) else None
-    
-    # Data do pagamento (base)
-    data_pg = pgto['data_pagamento']  # pode ser NaT
-    
-    # Regra: se o pagamento for de ANO ANTERIOR ao ano de referência, usar a data da NOTA
+
+    data_pg = pgto['data_pagamento']
     usar_data_nota = (pd.notna(data_pg) and ref_ano is not None and int(data_pg.year) < ref_ano)
-    
-    # Data “base” para planilha e TXT
     data_base = nota['data_nota'] if (usar_data_nota or pd.isna(data_pg)) else data_pg
-    
-    # → Planilha
     data_str = data_base.strftime('%d%m%Y') if pd.notna(data_base) else ""
     banco_nome = str(pgto['banco']).strip()
-    cod_banco = _conta_codigo(banco_nome)
-    
+    cod_banco = _conta_codigo(banco_nome) or _banco_padrao_cod()
+
     results[pos_res].update({
-        'Status Nota': status_nota,
-        'Status Pagamento': status_pag,
+        'Status Nota': "Ativa",
+        'Status Pagamento': "Pago",
         'Banco': cod_banco,
         'Data Pagamento': data_str,
         'Observações': f"Diferença via XML (NF ref.: {achado.get('nnf','?')} | {Path(achado['path']).name})"
     })
-    
-    # → TXT com valor do PAGAMENTO (diferença)
+
     data_fmt = (data_base.strftime('%d-%m-%Y') if pd.notna(data_base)
                 else (nota['data_nota'].strftime('%d-%m-%Y') if pd.notna(nota.get('data_nota', pd.NaT)) else ""))
-    fornecedor = nota['fornecedor']
     cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)
     num_nf = nf_alvo
     cnpj = cnpj_alvo
@@ -1393,11 +1386,21 @@ for i, nota in df_to_process.iterrows():
     descricao = f"PAGAMENTO NF {num_nf}".upper()
     parcela_txt = "1"
 
-    txt_line = [
-        data_fmt, cod_fazenda3, MAP_CONTAS.get("Não Mapeado","0000"), num_nf, parcela_txt,
-        descricao, cnpj, "2", "000", valor_cent, valor_cent, "N"
-    ]
-    txt_lines.append("|".join(txt_line))
+    # 🔸 Linha TXT usa o cod_banco do pagamento (mapeado pelo perfil); fallback para padrão do perfil
+    txt_lines.append("|".join([
+        data_fmt,
+        cod_fazenda3,
+        (cod_banco or _banco_padrao_cod()),
+        num_nf,
+        parcela_txt,
+        descricao,
+        cnpj,
+        "2",
+        "000",
+        valor_cent,
+        valor_cent,
+        "N"
+    ]))
     pagamentos_associados += 1
     linhas_pagas_idx.append(i)
     ajustes_por_xml += 1
@@ -1405,64 +1408,48 @@ for i, nota in df_to_process.iterrows():
 print(f"✅ Ajustes por XML (diferença): {ajustes_por_xml}")
 
 # =====================================================================
-# SALVAR RESULTADOS FORMATADOS
+# SALVAR RESULTADOS
 # =====================================================================
 try:
     print("\nSalvando resultados formatados...")
     df_result = pd.DataFrame(results)
-    
-    # Remover colunas auxiliares e completamente vazias
     colunas_remover = [
         'num_nf_busca', 'cnpj_busca', 'valor_busca', 'data_nota',
         'produto_upper', 'produto_especial'
     ]
     df_result = df_result.drop(columns=[c for c in colunas_remover if c in df_result.columns], errors='ignore')
-    
-    # Remover colunas completamente vazias
     df_result = df_result.dropna(axis=1, how='all')
-    
-    # Selecionar apenas colunas relevantes para a tabela final
+
     colunas_relevantes = [
-        'DATA', 'MÊS', 'ANO', 'Nº NF', 'EMITENTE', 'CNPJ', 'PRODUTO', 
-        'CFOP', 'DESPESAS', 'NATUREZA', 'XML', 'FAZENDA', 'Status Nota', 
+        'DATA', 'MÊS', 'ANO', 'Nº NF', 'EMITENTE', 'CNPJ', 'PRODUTO',
+        'CFOP', 'DESPESAS', 'NATUREZA', 'XML', 'FAZENDA', 'Status Nota',
         'Status Pagamento', 'Banco', 'Data Pagamento', 'Observações'
     ]
-    
-    # Manter apenas colunas que existem no DataFrame
     colunas_finais = [c for c in colunas_relevantes if c in df_result.columns]
     df_result = df_result[colunas_finais]
-    
-    # Formatar colunas de data
+
     if 'Data Pagamento' in df_result.columns:
         df_result['Data Pagamento'] = df_result['Data Pagamento'].apply(
-            lambda x: f"{x[:2]}/{x[2:4]}/{x[4:]}" if x and len(x) == 8 else x
+            lambda x: f"{x[:2]}/{x[2:4]}/{x[4:]}" if x and isinstance(x, str) and len(x) == 8 else x
         )
-    
-    # Salvar planilha formatada como tabela (se openpyxl disponível)
+
     output_excel = "RESULTADO_PAGAMENTOS.xlsx"
     df_result.to_excel(output_excel, index=False)
-    
+
     if OPENPYXL_AVAILABLE:
         try:
-            # Carregar o workbook
             wb = load_workbook(output_excel)
             ws = wb.active
-            
-            # Criar tabela formatada
             tab = Table(displayName="TabelaResultados", ref=f"A1:{get_column_letter(ws.max_column)}{ws.max_row}")
-            
-            # Adicionar estilo
             style = TableStyleInfo(
-                name="TableStyleMedium9", 
+                name="TableStyleMedium9",
                 showFirstColumn=False,
-                showLastColumn=False, 
-                showRowStripes=True, 
+                showLastColumn=False,
+                showRowStripes=True,
                 showColumnStripes=False
             )
             tab.tableStyleInfo = style
             ws.add_table(tab)
-            
-            # Ajustar largura das colunas
             for col in ws.columns:
                 max_length = 0
                 column = col[0].column_letter
@@ -1474,12 +1461,9 @@ try:
                         pass
                 adjusted_width = (max_length + 2) * 1.2
                 ws.column_dimensions[column].width = adjusted_width
-            
-            # Centralizar cabeçalho
             for cell in ws[1]:
                 cell.alignment = Alignment(horizontal='center', vertical='center')
                 cell.font = Font(bold=True)
-            
             wb.save(output_excel)
             print(f"✅ Planilha formatada salva como tabela: {output_excel}")
         except Exception as e:
@@ -1487,107 +1471,78 @@ try:
     else:
         print(f"✅ Planilha formatada salva: {output_excel}")
 
-    # === PÓS-PROCESSAMENTO: renumeração por NF+CNPJ neste LOTE ===
-    # - Se houver 1 só ocorrência de (NF, CNPJ): remove "-1" e o texto "(PARCELA 1)"
-    # - Se houver 2+ ocorrências: numera 1..n na ordem da data (DD-MM-YYYY)
+    # renumeração das linhas TXT por NF + CNPJ
     if txt_lines:
-        import re
-        from datetime import datetime
-        from collections import defaultdict
-
-        # Parse das linhas já montadas
+        from datetime import datetime as _dt
         recs = []
-        for i, line in enumerate(txt_lines):
+        for i_line, line in enumerate(txt_lines):
             parts = line.split("|")
             if len(parts) < 12:
                 continue
-            data_txt = parts[0]                # DD-MM-YYYY
-            num_nf_field = parts[3]            # pode estar "1234-2"
+            data_txt = parts[0]
+            num_nf_field = parts[3]
             cnpj = parts[6]
-            base_nf = num_nf_field.split("-", 1)[0]  # "1234"
+            base_nf = num_nf_field.split("-", 1)[0]
             try:
-                dt = datetime.strptime(data_txt, "%d-%m-%Y")
+                dt = _dt.strptime(data_txt, "%d-%m-%Y")
             except Exception:
                 dt = None
-            recs.append({"i": i, "parts": parts, "base_nf": base_nf, "cnpj": cnpj, "dt": dt})
-
-        # Agrupa por (NF base, CNPJ)
+            recs.append({"i": i_line, "parts": parts, "base_nf": base_nf, "cnpj": cnpj, "dt": dt})
         grupos = defaultdict(list)
         for r in recs:
             grupos[(r["base_nf"], r["cnpj"])].append(r)
-
-        # Ajusta cada grupo
-        for key, lst in grupos.items():
-            # ordena por data (asc); se sem data, manda pro fim
+        new_lines = [""] * len(txt_lines)
+        for (nf, cnpj), lst in grupos.items():
             lst.sort(key=lambda r: (r["dt"] is None, r["dt"]))
-            n = len(lst)
-            if n == 1:
+            if len(lst) == 1:
                 r = lst[0]
-                # tira sufixo -1 e remove "(PARCELA 1)" da descrição
                 r["parts"][3] = r["base_nf"]
                 r["parts"][5] = re.sub(r"\s*\(PARCELA\s+\d+\)\s*", "", r["parts"][5], flags=re.I)
-                # deixa o campo parcela como já estava (normalmente "1")
+                new_lines[r["i"]] = "|".join(r["parts"])
             else:
                 for idx, r in enumerate(lst, start=1):
-                    r["parts"][3] = f"{r['base_nf']}-{idx}"   # num_nf com sufixo correto
-                    r["parts"][4] = str(idx)                  # campo parcela
-                    # garante "(PARCELA n)" na descrição (primeiro remove qualquer anterior)
+                    r["parts"][3] = f"{r['base_nf']}-{idx}"
+                    r["parts"][4] = str(idx)
                     r["parts"][5] = re.sub(r"\s*\(PARCELA\s+\d+\)\s*", "", r["parts"][5], flags=re.I)
                     r["parts"][5] = f"{r['parts'][5]} (PARCELA {idx})"
-
-        # Recria txt_lines na ordem original
-        new_lines = [""] * len(txt_lines)
-        for r in recs:
-            new_lines[r["i"]] = "|".join(r["parts"])
+                    new_lines[r["i"]] = "|".join(r["parts"])
         txt_lines = new_lines
-    # === FIM do pós-processamento ===
 
-    # Salvar arquivo TXT
     if txt_lines:
         with open("PAGAMENTOS.txt", "w", encoding="utf-8") as f:
             f.write("\n".join(txt_lines))
         print(f"✅ Arquivo TXT gerado com {len(txt_lines)} pagamentos válidos")
     else:
-        print("⚠️  Nenhum pagamento válido para gerar TXT")
+        print("⚠️ Nenhum pagamento válido para gerar TXT")
 
     # =====================================================================
-    # RECEBIMENTOS (iterar RECEITAS usando NOTAS RECEBIDAS.xlsx)
+    # RECEBIMENTOS (NOTAS RECEBIDAS.xlsx)
     # =====================================================================
     try:
-        # 1) Caminho do arquivo NOTAS RECEBIDAS
-        notas_recebidas_path = _resolve_notas_recebidas_path(testes_path) if "_resolve_notas_recebidas_path" in globals() else (sys.argv[3] if len(sys.argv) >= 4 else None)
+        notas_recebidas_path = _resolve_notas_recebidas_path(testes_path)
         if not notas_recebidas_path or not os.path.exists(notas_recebidas_path):
             print("ℹ️ NOTAS RECEBIDAS.xlsx não encontrado — pulando RECEBIMENTOS.")
         else:
             print(f"\nProcessando RECEBIMENTOS a partir de: {notas_recebidas_path}")
-
-            # 2) Selecionar RECEITAS (>0) na planilha RELATORIO já carregada (df_notas)
             if 'RECEITAS' not in df_notas.columns:
                 print("ℹ️ A aba RELATORIO não possui coluna 'RECEITAS' — pulando RECEBIMENTOS.")
             else:
                 df_receitas = df_notas.copy()
                 df_receitas['valor_receita'] = pd.to_numeric(df_receitas['RECEITAS'], errors='coerce').fillna(0.0)
                 df_receitas = df_receitas[df_receitas['valor_receita'] > 0].copy()
-
                 if df_receitas.empty:
                     print("ℹ️ Não há RECEITAS (>0) na RELATORIO. Nada a pagar via recebimentos.")
                 else:
-                    # 3) Descobrir colunas relevantes no RELATORIO
-                    # Nº NF
                     col_nf = 'Nº NF' if 'Nº NF' in df_receitas.columns else ('NF' if 'NF' in df_receitas.columns else None)
                     if not col_nf:
                         print("⚠️ Não encontrei coluna de 'Nº NF' para RECEITAS — pulando RECEBIMENTOS.")
                     else:
-                        # Participante (cliente)
                         cand_part_cols = ['CLIENTE','Destinatário','DESTINATÁRIO','DESTINATARIO','PN','Participante','Favorecido','EMITENTE']
                         col_pn = next((c for c in cand_part_cols if c in df_receitas.columns), None) or df_receitas.columns[0]
-
-                        # Outros campos úteis
                         col_data = 'DATA' if 'DATA' in df_receitas.columns else None
                         col_faz = 'FAZENDA' if 'FAZENDA' in df_receitas.columns else None
                         col_cnpj = 'CNPJ' if 'CNPJ' in df_receitas.columns else None
 
-                        # Normalizações e ordenação
                         df_receitas['__pn'] = df_receitas[col_pn].astype(str)
                         df_receitas['__pn_norm'] = df_receitas['__pn'].apply(_norm_txt)
                         df_receitas['__nf_ord'] = pd.to_numeric(
@@ -1596,13 +1551,10 @@ try:
                         )
                         df_receitas = df_receitas.sort_values(['__pn_norm','__nf_ord'], kind='stable')
 
-                        # 4) Ler NOTAS RECEBIDAS e somar recebimentos por PN
                         df_r = pd.read_excel(notas_recebidas_path, sheet_name=0, header=1)
-
                         col_pn_r = next((c for c in ['PN','Participante','Cliente'] if c in df_r.columns), None)
                         if col_pn_r is None:
                             col_pn_r = 'Unnamed: 4' if 'Unnamed: 4' in df_r.columns else None
-
                         col_valor_r = next((c for c in ['Valor','VALOR'] if c in df_r.columns), None)
                         if col_valor_r is None:
                             col_valor_r = 'Unnamed: 6' if 'Unnamed: 6' in df_r.columns else None
@@ -1612,22 +1564,31 @@ try:
                         else:
                             df_r['__pn_norm'] = df_r[col_pn_r].astype(str).apply(_norm_txt)
                             df_r['__valor'] = pd.to_numeric(df_r[col_valor_r], errors='coerce').fillna(0.0)
-                            
                             df_r = df_r[df_r['__valor'] > 0].copy()
-
                             col_conta_r = next((c for c in ['CONTA','Conta','conta'] if c in df_r.columns), None)
 
-                            # header=1 => cabeçalho na linha 2; dados começam na linha 3
+                            # NOVO: CNPJ no NOTAS RECEBIDAS
+                            col_cnpj_r = next((c for c in ['CPF/CNPJ','CNPJ','CPF','Documento'] if c in df_r.columns), None)
+                            cnpj_por_pn = {}
+                            if col_cnpj_r:
+                                df_r['__cnpj_r'] = df_r[col_cnpj_r].astype(str).str.replace(r'\D','', regex=True).str.zfill(14)
+                                mask_valid = df_r['__cnpj_r'].ne('0'*14)
+                                if mask_valid.any():
+                                    cnpj_por_pn = (
+                                        df_r.loc[mask_valid]
+                                            .groupby('__pn_norm')['__cnpj_r']
+                                            .agg(lambda s: s.value_counts().idxmax())
+                                            .to_dict()
+                                    )
+
                             OFFSET_NR = 3
-                            # Coluna Excel (1-based) do "Valor" na planilha NOTAS RECEBIDAS:
                             VALOR_COL_XL = df_r.columns.get_loc(col_valor_r) + 1
 
-                            # normaliza uma funçãozinha para mapear a conta -> código
-                            def _map_conta(c):
+                            def _map_conta_receb(c):
                                 nome = str(c or '').strip()
                                 if not nome:
-                                    return "0000", ""
-                                cod = MAP_CONTAS.get(nome, MAP_CONTAS.get("Não Mapeado", "0000"))
+                                    return _banco_padrao_cod(), ""
+                                cod = _conta_codigo(nome) or _banco_padrao_cod()
                                 return cod, nome
 
                             if '__data_r' not in df_r.columns and 'Data' in df_r.columns:
@@ -1639,252 +1600,187 @@ try:
                             ws_nr = wb_nr.worksheets[0] if wb_nr else None
 
                             filas_por_pn = defaultdict(deque)
-                            for i, r in df_r.reset_index(drop=True).iterrows():
+                            rows_receb_atualizados = set()
+                            rows_receb_zerados = set()
+
+                            for i_r, r in df_r.reset_index(drop=True).iterrows():
                                 if float(r["__valor"]) > 0:
-                                    excel_row = OFFSET_NR + i
-                                    conta_cod, conta_nome = _map_conta(r[col_conta_r] if col_conta_r else "")
+                                    excel_row = OFFSET_NR + i_r
+                                    conta_cod, conta_nome = _map_conta_receb(r[col_conta_r] if col_conta_r else "")
                                     filas_por_pn[r["__pn_norm"]].append({
                                         "row": excel_row,
                                         "valor": float(r["__valor"]),
                                         "data": r.get("__data_r", pd.NaT),
-                                        "conta_cod": conta_cod,      # ← código mapeado (ex.: 003, 004…)
-                                        "conta_nome": conta_nome     # ← nome da planilha (coluna CONTA)
+                                        "conta_cod": conta_cod,
+                                        "conta_nome": conta_nome
                                     })
 
-                            # --- NOVO: localizar CNPJ no NOTAS RECEBIDAS e mapear PN -> CNPJ (apenas dígitos, 14 casas) ---
-                            col_cnpj_r = next((c for c in ['CPF/CNPJ','CNPJ','CPF','Documento'] if c in df_r.columns), None)
+                            if OPENPYXL_AVAILABLE:
+                                green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                            else:
+                                green_fill = None
 
-                            cnpj_por_pn = {}
-                            if col_cnpj_r:
-                                df_r['__cnpj_r'] = df_r[col_cnpj_r].astype(str).str.replace(r'\D', '', regex=True).str.zfill(14)
-                                # Descartar zeros
-                                mask_valid = df_r['__cnpj_r'].ne('0'*14)
-                                if mask_valid.any():
-                                    # Se tiver vários por PN, pega o mais frequente (modo)
-                                    cnpj_por_pn = (
-                                        df_r.loc[mask_valid]
-                                            .groupby('__pn_norm')['__cnpj_r']
-                                            .agg(lambda s: s.value_counts().idxmax())
-                                            .to_dict()
-                                    )
-                            # --- FIM NOVO ---
-
-                        
-                            rows_receb_atualizados = set()
-                            rows_receb_zerados = set()
-                            green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid") if OPENPYXL_AVAILABLE else None
-
-                            # identificar a coluna de data no NOTAS RECEBIDAS
                             col_data_r = next((c for c in ['Data','DATA','Data Pagamento','Dt'] if c in df_r.columns), None)
-
-                            # normaliza a coluna de data (se existir)
                             if col_data_r:
                                 df_r['__data_r'] = pd.to_datetime(df_r[col_data_r], dayfirst=True, errors='coerce')
                             else:
                                 df_r['__data_r'] = pd.NaT
 
                             def saldo_total_pn(pn_norm: str) -> float:
-                                """Soma quanto ainda resta na fila desse PN em NOTAS RECEBIDAS."""
                                 return sum(item["valor"] for item in filas_por_pn.get(pn_norm, []))
-                            # --- FIM NOVO ---
-                            
-                            if df_r.empty:
-                                print("ℹ️ NOTAS RECEBIDAS.xlsx não tem valores (>0). Nada a fazer.")
-                            else:
 
-                                totais_por_pn = df_r.groupby('__pn_norm')['__valor'].sum().to_dict()
-                                txt_recebimentos = []
-                                resumo_receb = []
+                            totais_por_pn = df_r.groupby('__pn_norm')['__valor'].sum().to_dict()
+                            txt_recebimentos = []
+                            resumo_receb = []
 
-                                # 5) Pagar notas de RECEITA em ordem do Nº NF, por participante
-                                for pn_norm, grupo in df_receitas.groupby('__pn_norm', sort=False):
-                                    disponivel = float(totais_por_pn.get(pn_norm, 0.0))
-                                    pn_nome = str(grupo.iloc[0][col_pn])
-                                    if disponivel <= 0:
-                                        resumo_receb.append(f"• {pn_nome}: sem recebimentos. Nenhuma nota paga.")
-                                        continue
+                            for pn_norm, grupo in df_receitas.groupby('__pn_norm', sort=False):
+                                disponivel = float(totais_por_pn.get(pn_norm, 0.0))
+                                pn_nome = str(grupo.iloc[0][col_pn])
+                                if disponivel <= 0:
+                                    resumo_receb.append(f"• {pn_nome}: sem recebimentos. Nenhuma nota paga.")
+                                    continue
+                                faltam = 0
+                                pagos = 0
 
-                                    faltam = 0
-                                    pagos = 0
+                                for idx, row in grupo.iterrows():
+                                    valor_nf = float(row['valor_receita'])
+                                    if saldo_total_pn(pn_norm) + 1e-9 >= valor_nf:
+                                        restante = valor_nf
+                                        conta_cod_usada = ""
+                                        conta_nome_usado = ""
+                                        dt_receb_usada = pd.NaT
 
-                                    for idx, row in grupo.iterrows():
-                                        valor_nf = float(row['valor_receita'])
-                                        if saldo_total_pn(pn_norm) + 1e-9 >= valor_nf:
-                                            # Consome da fila de NOTAS RECEBIDAS até cobrir o valor da NF
-                                            restante = valor_nf
-                                            conta_cod_usada = ""
-                                            conta_nome_usado = ""
-                                            dt_receb_usada = pd.NaT
-
-                                            while restante > 1e-9 and filas_por_pn[pn_norm]:
-                                                topo = filas_por_pn[pn_norm][0]
-                                                usar = min(topo["valor"], restante)
-                                                topo["valor"] -= usar
-                                                restante -= usar
-
-                                                if not conta_cod_usada:
-                                                    conta_cod_usada = topo.get("conta_cod","")
-                                                    conta_nome_usado = topo.get("conta_nome","")
-                                                if pd.isna(dt_receb_usada):
-                                                    dt_receb_usada = topo.get("data", pd.NaT)
-                                                # Atualiza o valor da célula de "Valor" na NOTAS RECEBIDAS (zerando parcial/total)
-                                                if OPENPYXL_AVAILABLE and ws_nr:
-                                                    ws_nr.cell(row=topo["row"], column=VALOR_COL_XL).value = round(topo["valor"], 2)
-                                                rows_receb_atualizados.add(topo["row"])
-
-                                                # Se zerou esse recebimento, pinta B..I de VERDE e remove da fila
-                                                if topo["valor"] <= 1e-9:
-                                                    filas_por_pn[pn_norm].popleft()
-                                                    rows_receb_zerados.add(topo["row"])
-                                                    if OPENPYXL_AVAILABLE and ws_nr and green_fill:
-                                                        for col in range(2, 10):  # B..I
-                                                            ws_nr.cell(row=topo["row"], column=col).fill = green_fill
-
-                                            # Marca a NF como paga no RELATORIO (mantém como já estava)
-                                            pagos += 1
-                                            linhas_receitas_pagas_idx.append(idx)
-
-                                            # ====== GERAR LINHA DO TXT (RECEBIMENTOS) ======
-                                            
+                                        while restante > 1e-9 and filas_por_pn[pn_norm]:
+                                            topo = filas_por_pn[pn_norm][0]
+                                            usar = min(topo["valor"], restante)
+                                            topo["valor"] -= usar
+                                            restante -= usar
+                                            if not conta_cod_usada:
+                                                conta_cod_usada = topo.get("conta_cod","")
+                                                conta_nome_usado = topo.get("conta_nome","")
                                             if pd.isna(dt_receb_usada):
-                                                dt_receb_usada = pd.Timestamp.today()
-                                            data_fmt = dt_receb_usada.strftime('%d-%m-%Y')
-                                            
-                                            # Fazenda → como já estava
-                                            cod_faz = "000"
-                                            if col_faz and pd.notna(row.get(col_faz, None)):
-                                                cod = str(MAP_FAZENDAS.get(str(row[col_faz]).strip(), "0"))
-                                                cod_faz = cod.zfill(3)
-                                            
-                                            # CNPJ → PN (do NOTAS RECEBIDAS) com fallback na RELATORIO (como você já fez)
-                                            cnpj = cnpj_por_pn.get(pn_norm, "")
-                                            if (not cnpj or cnpj == "0"*14) and col_cnpj:
-                                                cnpj = "".join(ch for ch in str(row[col_cnpj]) if ch.isdigit()).zfill(14)
-                                            
-                                            # NF e descrição (inclui a CONTA mapeada no histórico para conferência)
-                                            num_nf = str(row[col_nf]).strip()
-                                            conta_info = f" [CONTA: {conta_nome_usado} — {conta_cod_usada}]" if conta_nome_usado else ""
-                                            descricao = f"RECEBIMENTO NF {num_nf} {pn_nome}{conta_info}".upper()
-                                            
-                                            # valor em centavos com Decimal (evita cair R$ 1,00)
-                                            from decimal import Decimal, ROUND_HALF_UP
-                                            valor_cent = str(
-                                                int(
-                                                    (Decimal(str(valor_nf)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100)
-                                                    .to_integral_value(rounding=ROUND_HALF_UP)
-                                                )
+                                                dt_receb_usada = topo.get("data", pd.NaT)
+                                            if OPENPYXL_AVAILABLE and ws_nr:
+                                                ws_nr.cell(row=topo["row"], column=VALOR_COL_XL).value = round(topo["valor"], 2)
+                                            rows_receb_atualizados.add(topo["row"])
+                                            if topo["valor"] <= 1e-9:
+                                                filas_por_pn[pn_norm].popleft()
+                                                rows_receb_zerados.add(topo["row"])
+                                                if OPENPYXL_AVAILABLE and ws_nr and green_fill:
+                                                    for col in range(2, 10):
+                                                        ws_nr.cell(row=topo["row"], column=col).fill = green_fill
+
+                                        pagos += 1
+                                        linhas_receitas_pagas_idx.append(idx)
+
+                                        if pd.isna(dt_receb_usada):
+                                            dt_receb_usada = pd.Timestamp.today()
+                                        data_fmt = dt_receb_usada.strftime('%d-%m-%Y')
+                                        cod_faz = "000"
+                                        if col_faz and pd.notna(row.get(col_faz, None)):
+                                            cod = str(MAP_FAZENDAS.get(str(row[col_faz]).strip(), "0"))
+                                            cod_faz = cod.zfill(3)
+                                        cnpj_rec = cnpj_por_pn.get(pn_norm, "")
+                                        if (not cnpj_rec or cnpj_rec == "0"*14) and col_cnpj:
+                                            cnpj_rec = "".join(ch for ch in str(row[col_cnpj]) if ch.isdigit()).zfill(14)
+                                        num_nf = str(row[col_nf]).strip()
+                                        conta_info = f" [CONTA: {conta_nome_usado} — {conta_cod_usada}]" if conta_nome_usado else ""
+                                        descricao = f"RECEBIMENTO NF {num_nf} {pn_nome}{conta_info}".upper()
+                                        from decimal import Decimal, ROUND_HALF_UP
+                                        valor_cent = str(
+                                            int(
+                                                (Decimal(str(valor_nf)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100)
+                                                .to_integral_value(rounding=ROUND_HALF_UP)
                                             )
-                                            linha = [
-                                                data_fmt,                 # 1  (data da NOTAS RECEBIDAS)
-                                                cod_faz,                  # 2
-                                                (conta_cod_usada or _conta_codigo(conta_nome_usado) or MAP_CONTAS.get("Não Mapeado","0000")),
-                                                num_nf,                   # 4
-                                                "1",                      # 5
-                                                descricao,                # 6
-                                                cnpj,                     # 7
-                                                "1",                      # 8 (Receita)
-                                                valor_cent,               # 9 (Entrada)
-                                                "000",                    # 10
-                                                valor_cent,               # 11 (Entrada)
-                                                "N"                       # 12
-                                            ]
-                                            txt_recebimentos.append("|".join(linha))
-                                            # ====== FIM GERAR LINHA ======
-
-                                            # (deixe o restante do bloco igual: data_fmt, cod_faz, cnpj, descricao, valor_cent, txt_recebimentos.append...)
-                                        else:
-                                            faltam += 1
-
-                                    restante_pn = saldo_total_pn(pn_norm)
-                                    if restante_pn > 1e-6:
-                                        resumo_receb.append(f"• {pn_nome}: pagas {pagos} nota(s), sobrou R$ {restante_pn:,.2f}.")
+                                        )
+                                        linha = [
+                                            data_fmt,
+                                            cod_faz,
+                                            (conta_cod_usada or _conta_codigo(conta_nome_usado) or _banco_padrao_cod()),
+                                            num_nf,
+                                            "1",
+                                            descricao,
+                                            cnpj_rec,
+                                            "1",
+                                            valor_cent,
+                                            "000",
+                                            valor_cent,
+                                            "N"
+                                        ]
+                                        txt_recebimentos.append("|".join(linha))
                                     else:
-                                        if faltam > 0:
-                                            resumo_receb.append(f"• {pn_nome}: pagas {pagos} nota(s), faltam {faltam} nota(s).")
-                                        else:
-                                            resumo_receb.append(f"• {pn_nome}: todas as notas pagas.")
+                                        faltam += 1
 
-                                # garantir que só escrevemos linhas se realmente houve marcação de pago no RELATORIO
-                                if txt_recebimentos and not linhas_receitas_pagas_idx:
-                                    txt_recebimentos = []
-
-                                # 6) Gerar RECEBIMENTOS.txt
-                                if txt_recebimentos:
-                                    with open("RECEBIMENTOS.txt", "w", encoding="utf-8") as f:
-                                        f.write("\n".join(txt_recebimentos))
-                                    print(f"✅ Arquivo TXT gerado com {len(txt_recebimentos)} recebimento(s)")
+                                restante_pn = saldo_total_pn(pn_norm)
+                                if restante_pn > 1e-6:
+                                    resumo_receb.append(f"• {pn_nome}: pagas {pagos} nota(s), sobrou R$ {restante_pn:,.2f}.")
                                 else:
-                                    print("ℹ️ Nenhum recebimento gerado (valores insuficientes).")
+                                    if faltam > 0:
+                                        resumo_receb.append(f"• {pn_nome}: pagas {pagos} nota(s), faltam {faltam} nota(s).")
+                                    else:
+                                        resumo_receb.append(f"• {pn_nome}: todas as notas pagas.")
 
-                                # 6.1) NOVO — Persistir alterações na planilha NOTAS RECEBIDAS
-                                if OPENPYXL_AVAILABLE and wb_nr and (rows_receb_atualizados or rows_receb_zerados):
-                                    try:
-                                        wb_nr.save(notas_recebidas_path)
-                                        print(f"✅ NOTAS RECEBIDAS atualizada: {len(rows_receb_atualizados)} linha(s) alterada(s); "
-                                              f"{len(rows_receb_zerados)} zerada(s) e destacada(s).")
-                                    except Exception as e:
-                                        print(f"⚠️ Falha ao salvar NOTAS RECEBIDAS atualizada: {e}")
+                            if txt_recebimentos and not linhas_receitas_pagas_idx:
+                                txt_recebimentos = []
 
-                                # 7) Marcar em VERDE (C–Q) as linhas de RECEITA pagas (sem mexer nas DESPESAS)
-                                if OPENPYXL_AVAILABLE and linhas_receitas_pagas_idx:
-                                    try:
-                                        wb = load_workbook(testes_path)
-                                        ws = wb['RELATORIO']
-                                        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
-                                        deslocamento = 7            # mesmo offset do resto do script
-                                        col_inicio, col_fim = 3, 17 # C..Q
-                                        for idx in linhas_receitas_pagas_idx:
-                                            row_excel = deslocamento + idx
-                                            for col in range(col_inicio, col_fim + 1):
-                                                ws.cell(row=row_excel, column=col).fill = green_fill
-                                        wb.save(testes_path)
-                                        print(f"✅ {len(linhas_receitas_pagas_idx)} linha(s) de RECEITA marcadas em verde.")
-                                    except Exception as e:
-                                        print(f"⚠️ Falha ao marcar RECEITAS em verde: {e}")
+                            if txt_recebimentos:
+                                with open("RECEBIMENTOS.txt", "w", encoding="utf-8") as f:
+                                    f.write("\n".join(txt_recebimentos))
+                                print(f"✅ Arquivo TXT gerado com {len(txt_recebimentos)} recebimento(s)")
+                            else:
+                                print("ℹ️ Nenhum recebimento gerado (valores insuficientes).")
 
-                                # 8) Resumo por participante
-                                if resumo_receb:
-                                    print("\nResumo RECEBIMENTOS por participante:")
-                                    for msg in resumo_receb:
-                                        print(msg)
+                            if OPENPYXL_AVAILABLE and wb_nr and (rows_receb_atualizados or rows_receb_zerados):
+                                try:
+                                    wb_nr.save(notas_recebidas_path)
+                                    print(f"✅ NOTAS RECEBIDAS atualizada: {len(rows_receb_atualizados)} linha(s) alterada(s); "
+                                          f"{len(rows_receb_zerados)} zerada(s) e destacada(s).")
+                                except Exception as e:
+                                    print(f"⚠️ Falha ao salvar NOTAS RECEBIDAS atualizada: {e}")
+
+                            if OPENPYXL_AVAILABLE and linhas_receitas_pagas_idx:
+                                try:
+                                    wb = load_workbook(testes_path)
+                                    ws = wb['RELATORIO']
+                                    green_fill2 = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+                                    deslocamento = 7
+                                    col_inicio, col_fim = 3, 17
+                                    for idx in linhas_receitas_pagas_idx:
+                                        row_excel = deslocamento + idx
+                                        for col in range(col_inicio, col_fim + 1):
+                                            ws.cell(row=row_excel, column=col).fill = green_fill2
+                                    wb.save(testes_path)
+                                    print(f"✅ {len(linhas_receitas_pagas_idx)} linha(s) de RECEITA marcadas em verde.")
+                                except Exception as e:
+                                    print(f"⚠️ Falha ao marcar RECEITAS em verde: {e}")
+
+                            if resumo_receb:
+                                print("\nResumo RECEBIMENTOS por participante:")
+                                for msg in resumo_receb:
+                                    print(msg)
 
     except Exception as e:
         print(f"❌ Erro no bloco de RECEBIMENTOS: {str(e)}")
 
     # =====================================================================
-    # MARCAR LINHAS PAGAS NA PLANILHA ORIGINAL (APENAS COLUNAS C-Q)
+    # MARCAR DESPESAS PAGAS EM VERDE
     # =====================================================================
     if OPENPYXL_AVAILABLE and linhas_pagas_idx:
         try:
             print("\nMarcando notas pagas na planilha original (colunas C-Q)...")
-            
-            # Carregar workbook original
             wb_original = load_workbook(testes_path)
             ws_original = wb_original['RELATORIO']
-            
-            # Definir cor de fundo verde
-            green_fill = PatternFill(start_color="C6EFCE", 
-                                    end_color="C6EFCE", 
-                                    fill_type="solid")
-            
-            # Calcular deslocamento (cabeçalho começa na linha 5)
-            deslocamento = 7  # Dados começam na linha 6
-            
-            # Definir intervalo de colunas (C=3, Q=17)
+            green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            deslocamento = 7
             col_inicio = 3
             col_fim = 17
-            
-            # Marcar apenas colunas C-Q para as linhas pagas
             for idx in linhas_pagas_idx:
                 row_idx = deslocamento + idx
                 for col in range(col_inicio, col_fim + 1):
                     ws_original.cell(row=row_idx, column=col).fill = green_fill
-            
-            # Salvar alterações na planilha original (sem criar nova)
             wb_original.save(testes_path)
             print(f"✅ Planilha original atualizada com notas pagas destacadas: {testes_path}")
             print(f"   - {len(linhas_pagas_idx)} notas marcadas como pagas (colunas C-Q)")
-            
         except Exception as e:
             print(f"⚠️ Erro ao marcar notas pagas: {str(e)}")
     elif not OPENPYXL_AVAILABLE:
@@ -1893,44 +1789,24 @@ try:
         print("⚠️ Nenhuma nota paga para destacar")
 
     # =====================================================================
-    # MARCAR PRODUTOS ESPECIAIS NA PLANILHA ORIGINAL (COLUNAS C-Q)
+    # MARCAR PRODUTOS ESPECIAIS
     # =====================================================================
-    # Logo depois de "linhas_pagas_idx", adicione:
-    
-    # 1) Recarregar workbook e aba
-    wb_original = load_workbook(testes_path)
-    ws_original = wb_original['RELATORIO']
-    
-    # 2) Definir preenchimento verde
-    green_fill = PatternFill(start_color="C6EFCE",
-                             end_color="C6EFCE",
-                             fill_type="solid")
-    
-    # 3) Parâmetros de deslocamento de linha/coluna
-    deslocamento = 7   # dados começam na linha 6 (porque header=5)
-    col_inicio, col_fim = 3, 17  # colunas C (3) até Q (17)
-    
-    # 4) Índices a destacar
-    #   a) Notas pagas
-    idx_pagas = set(linhas_pagas_idx)
-    
-    #   b) Todos os produtos especiais (qualquer substring em PRODUTO)
-    pattern = '|'.join(PRODUTOS_ESPECIAIS)
+    if OPENPYXL_AVAILABLE:
+        wb_original = load_workbook(testes_path)
+        ws_original = wb_original['RELATORIO']
+        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+        deslocamento = 7
+        col_inicio, col_fim = 3, 17
+        idx_pagas = set(linhas_pagas_idx)
+        idx_especiais = set(df_despesas.loc[df_despesas['produto_especial']].index)
+        idx_para_destacar = idx_pagas.union(idx_especiais)
+        for idx in idx_para_destacar:
+            row_excel = deslocamento + idx
+            for col in range(col_inicio, col_fim + 1):
+                ws_original.cell(row=row_excel, column=col).fill = green_fill
+        wb_original.save(testes_path)
+        print(f"✅ Destacadas {len(idx_para_destacar)} linhas (pagas + especiais)")
 
-    idx_especiais = set(df_despesas.loc[df_despesas['produto_especial']].index)
-    
-    #   c) União de ambos
-    idx_para_destacar = idx_pagas.union(idx_especiais)
-    
-    # 5) Aplicar cor em cada célula (C–Q) de cada linha
-    for idx in idx_para_destacar:
-        row_excel = deslocamento + idx
-        for col in range(col_inicio, col_fim + 1):
-            ws_original.cell(row=row_excel, column=col).fill = green_fill
-    
-    # 6) Salvar alterações
-    wb_original.save(testes_path)
-    print(f"✅ Destacadas {len(idx_para_destacar)} linhas (pagas + especiais)")
     print("\n✅ Processo concluído com sucesso!")
 
 except Exception as e:
