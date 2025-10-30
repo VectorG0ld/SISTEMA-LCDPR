@@ -181,6 +181,7 @@ CODIGOS_CIDADES_LUCAS   = {
     "Trombas": "Primavera Retiro lucas",
     "Trombas - GO": "Primavera Retiro lucas",
     "TROMBAS - GO": "Primavera Retiro lucas",
+    "NOVA GLORIA": "Aliança 2",
 }
 
 FARM_MAPPING_BY_OWNER = {
@@ -455,6 +456,9 @@ class RuralXmlImporter(QWidget):
         if self.active_owner not in OWNERS:
             self.active_owner = 'CLEUBER'
 
+        # >>> ADICIONE ESTA LINHA:
+        self._apply_owner_paths(self.active_owner)
+
     # ---------- UI helpers ----------
     def _apply_global_styles(self):
         self.setStyleSheet(STYLE_SHEET)
@@ -526,6 +530,34 @@ class RuralXmlImporter(QWidget):
 
         self._add_shadow(header, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
         return header
+
+    def _apply_owner_paths(self, owner: str):
+        """
+        Ajusta excel_path/testes_path/isento_path conforme o dono ativo
+        e salva no json/config.json para refletir na interface.
+        """
+        owner = (owner or "CLEUBER").upper()
+
+        excel_file = rf"\\rilkler\LIVRO CAIXA\TESTE\LIVRO CAIXA {owner}.xlsx"
+        self.config["excel_path"]  = excel_file
+        self.config["testes_path"] = excel_file
+
+        self.config["isento_path"] = (
+            rf"C:\Users\conta\OneDrive\Área de Trabalho\Documentos Automacao\NOTAS LIVRO CAIXA\{owner}"
+        )
+
+        # mantém se já houver em config; não forçamos mudança
+        # self.config.setdefault("notas_recebidas_path", r"\\rilkler\LIVRO CAIXA\TESTE\NOTAS RECEBIDAS.xlsx")
+
+        # Atualiza atributos usados pela UI/lógica
+        self.excel_path  = self.config.get('excel_path', '')
+        self.testes_path = self.config.get('testes_path', '')
+        self.isento_path = self.config.get('isento_path', '')
+
+        try:
+            self.save_config()  # persiste para o diálogo de Configurações ler já atualizado
+        except Exception:
+            pass
 
     def _close_self_tab(self):
         parent = self.parent()
