@@ -38,6 +38,30 @@ except ImportError:
     print("⚠️ Aviso: openpyxl não instalado. Formatação de tabelas não estará disponível.")
     print("Instale com: pip install openpyxl")
 
+def _parse_excel_date_maybe(v):
+    """
+    Converte:
+    - número de série do Excel (float/int)
+    - data em texto (dd/mm/aaaa, etc.)
+    em Timestamp (ou NaT se não conseguir).
+    """
+    import pandas as pd
+
+    if pd.isna(v):
+        return pd.NaT
+    # número de série do Excel
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        try:
+            # Excel costuma usar 1899-12-30 como data base
+            return pd.to_datetime("1899-12-30") + pd.to_timedelta(int(v), unit="D")
+        except Exception:
+            # se der erro, cai para o parse normal
+            pass
+    try:
+        return pd.to_datetime(v, dayfirst=True, errors="coerce")
+    except Exception:
+        return pd.NaT
+
 def _load_json_config():
     """Tenta ler json/config.json no mesmo diretório do script e retorna (base, testes)."""
     try:
@@ -93,7 +117,7 @@ from datetime import timedelta
 DATE_WINDOW_DAYS_BEFORE = 10   # janela mínima antes da data da nota
 DATE_WINDOW_DAYS_AFTER  = 45   # janela máxima depois da data da nota
 TOL_ATOL = 0.01                # tolerância absoluta de centavos
-TOL_REL  = 0.001               # tolerância relativa (0.1%)
+TOL_REL  = 0.004               # tolerância relativa (0.1%)
 SIMILARIDADE_MIN_NOME_STRICT = 0.90  # quando CNPJ divergir
 # Tolerância de valor: menos de R$ 1 (centavos)
 VAL_TOL = 0.10  # R$ 0,10
@@ -299,71 +323,71 @@ print(f"🗂️  base_dados_path = {base_dados_path}")
 print(f"🗂️  testes_path     = {testes_path}")
 
 MAP_CONTAS = {
-    "Caixa Geral": "001",
-    "Cheques a Compensar": "001",
-    "Fundo Fixo - Gildevan": "001",
-    "Fundo Fixo - Cleidson Alves": "001",
-    "Fundo Fixo - Rodrigo": "001",
-    "Fundo Fixo - Wandres": "001",
-    "Fundo Fixo - Cezar Dias": "001",
-    "Fundo Fixo - Geraldo": "001",
-    "Fundo Fixo - Daniel": "001",
-    "Fundo Fixo - Hadlaim": "001",
-    "Fundo Fixo - Lourival": "001",
-    "Fundo Fixo - Rogeris": "001",
-    "Fundo Fixo - Joaquim": "001",
-    "Caixa Dobrado": "001",
-    "Fundo Fxo - Douglas": "001",
-    "Fundo Fixo - Samuel": "001",
-    "Fundo Fixo - Adarildo": "001",
-    "Fundo Fixo - Fabricio": "001",
-    "Fundo Fixo - Fernando": "001",
-    "Fundo Fixo - Orivan": "001",
-    "Fundo Fixo - Saimon": "001",
-    "Fundo Fxo - Eduardo": "001",
-    "Fundo Fixo - Melquiades": "001",
-    "Fundo Fixo - Anivaldo": "001",
-    "Fundo Fixo - Cida": "001",
-    "Caixa Dobrado - Cobrança": "001",
-    "Fundo Fixo - Neto": "001",
-    "Conta Rotative Gilson": "001",
-    "Fundo Fixo - Osvaldo": "001",
-    "Fundo Fixo - Cleto Zanatta": "001",
-    "Fundo Fixo - Edison": "001",
-    "Fundo Fixo - Phelipe": "001",
-    "Caixa Deposito": "001",
-    "Fundo Fixo - Valdivino": "001",
-    "Fundo Fixo - Jose Domingos": "001",
-    "Fudo Fixo - Stenyo": "001",
-    "Fundo Fixo - Marcos": "001",
-    "Fundo Fixo - ONR": "001",
-    "Fundo Fixo - Marcelo Dutra": "001",
-    "Fundo Fixo - Gustavo": "001",
-    "Fundo Fixo - Delimar": "001",
-    "Caixa Contábil": "001",
-    "Banco Sicoob_Frutacc_597": "001",
-    "Banco Bradesco_Frutacc_28.751": "001",
+    "Caixa Geral": "004",
+    "Cheques a Compensar": "004",
+    "Fundo Fixo - Gildevan": "004",
+    "Fundo Fixo - Cleidson Alves": "004",
+    "Fundo Fixo - Rodrigo": "004",
+    "Fundo Fixo - Wandres": "004",
+    "Fundo Fixo - Cezar Dias": "004",
+    "Fundo Fixo - Geraldo": "004",
+    "Fundo Fixo - Daniel": "004",
+    "Fundo Fixo - Hadlaim": "004",
+    "Fundo Fixo - Lourival": "004",
+    "Fundo Fixo - Rogeris": "004",
+    "Fundo Fixo - Joaquim": "004",
+    "Caixa Dobrado": "004",
+    "Fundo Fxo - Douglas": "004",
+    "Fundo Fixo - Samuel": "004",
+    "Fundo Fixo - Adarildo": "004",
+    "Fundo Fixo - Fabricio": "004",
+    "Fundo Fixo - Fernando": "004",
+    "Fundo Fixo - Orivan": "004",
+    "Fundo Fixo - Saimon": "004",
+    "Fundo Fxo - Eduardo": "004",
+    "Fundo Fixo - Melquiades": "004",
+    "Fundo Fixo - Anivaldo": "004",
+    "Fundo Fixo - Cida": "004",
+    "Caixa Dobrado - Cobrança": "004",
+    "Fundo Fixo - Neto": "004",
+    "Conta Rotative Gilson": "004",
+    "Fundo Fixo - Osvaldo": "004",
+    "Fundo Fixo - Cleto Zanatta": "004",
+    "Fundo Fixo - Edison": "004",
+    "Fundo Fixo - Phelipe": "004",
+    "Caixa Deposito": "004",
+    "Fundo Fixo - Valdivino": "004",
+    "Fundo Fixo - Jose Domingos": "004",
+    "Fudo Fixo - Stenyo": "004",
+    "Fundo Fixo - Marcos": "004",
+    "Fundo Fixo - ONR": "004",
+    "Fundo Fixo - Marcelo Dutra": "004",
+    "Fundo Fixo - Gustavo": "004",
+    "Fundo Fixo - Delimar": "004",
+    "Caixa Contábil": "004",
+    "Banco Sicoob_Frutacc_597": "004",
+    "Banco Bradesco_Frutacc_28.751": "004",
     "Banco do Brasil_Gilson_21252": "001",
-    "Banco do Brasil_Cleuber_24585": "004",
-    "Banco da Amazonia_Cleuber_34472": "001",
-    "Caixa Economica_Cleuber_20573": "001",
-    "Caixa Economica_Adriana_20590": "001",
-    "Banco Bradesco_Cleuber_22102": "003",
-    "Banco Bradesco_Gilson_27014": "001",
-    "Banco Bradesco_Adriana_29260": "001",
-    "Banco Bradesco_Lucas 29620": "001",
-    "Banco Itau_Gilson_26059": "001",
-    "Banco Sicoob_Cleuber_052": "002",
-    "Banco Sicoob_Gilson_781": "001",
-    "Caixa Economica_Cleuber_25766": "001",
-    "Banco Santander_Cleuber_1008472": "001",
-    "Banco Sicredi_Cleuber_36120": "001",
-    "Banco Sicredi_Gilson_39644": "001",
-    "Banco Itau_Cleuber_63206": "001",
-    "Banco Sicoob_Cleuber_81934": "002",
-    "Caixa Economica_Cleuber_20177": "001",
-    "Banco Itau_Frutacc_16900": "001",
-    "Banco Sicredi_Anne_27012": "001",
+    "Banco do Brasil_Cleuber_24585": "001",
+    "Banco da Amazonia_Cleuber_34472": "004",
+    "Caixa Economica_Cleuber_20573": "004",
+    "Caixa Economica_Adriana_20590": "004",
+    "Banco Bradesco_Cleuber_22102": "002",
+    "Banco Bradesco_Gilson_27014": "004",
+    "Banco Bradesco_Adriana_29260": "004",
+    "Banco Bradesco_Lucas 29620": "004",
+    "Banco Itau_Gilson_26059": "004",
+    "Banco Sicoob_Cleuber_052": "003",
+    "Banco Sicoob_Gilson_781": "004",
+    "Caixa Economica_Cleuber_25766": "004",
+    "Banco Santander_Cleuber_1008472": "004",
+    "Banco Sicredi_Cleuber_36120": "004",
+    "Banco Sicredi_Gilson_39644": "004",
+    "Banco Itau_Cleuber_63206": "004",
+    "Banco Sicoob_Cleuber_81934": "003",
+    "Caixa Economica_Cleuber_20177": "004",
+    "Banco Itau_Frutacc_16900": "004",
+    "Banco Sicredi_Anne_27012": "004",
     "Não Mapeado": "0000"
 }
 
@@ -592,17 +616,9 @@ try:
     df_base['valor'] = pd.to_numeric(df_base['valor'], errors='coerce')
     
     # Converter datas com formato DD/MM/AAAA
-    df_base['data_pagamento'] = pd.to_datetime(
-        df_base['data_pagamento'], 
-        dayfirst=True,
-        errors='coerce'
-    )
-    df_base['data_vencimento'] = pd.to_datetime(
-        df_base['data_vencimento'], 
-        dayfirst=True,
-        errors='coerce'
-    )
-    
+    df_base['data_pagamento'] = df_base['data_pagamento'].apply(_parse_excel_date_maybe)
+    df_base['data_vencimento'] = df_base['data_vencimento'].apply(_parse_excel_date_maybe)
+
     # Normalizar coluna de cancelamento
     df_base['pagamento_cancelado'] = df_base['pagamento_cancelado'].astype(str).str.strip().str.upper()
     df_base['nota_cancelada'] = df_base['nota_cancelada'].astype(str).str.strip().str.upper()
@@ -642,7 +658,7 @@ print("\nAssociando pagamentos usando datas de vencimento...")
 for i, nota in df_to_process.iterrows():
     # Criar cópia da linha original
     result_row = nota.to_dict()
-    
+
     # === [SUBSTITUIR TODO O BLOCO A PARTIR DAQUI] ===
     # CAMADA 1: NF + CNPJ + não cancelado + não associada
     data_nota = nota['data_nota']
@@ -746,7 +762,7 @@ for i, nota in df_to_process.iterrows():
                 usa_data_nota = _should_use_data_nota(nota, data_pgto)
                 data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
                 data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
-                cod_banco = _conta_codigo(str(parcela.get('banco', '')).strip()) or '001'
+                cod_banco = _conta_codigo(str(parcela.get('banco', '')).strip()) or '004'
                 valor = float(parcela.get('valor', 0.0) or 0.0)
                 valor_cent = str(int(round(valor * 100)))
 
@@ -849,7 +865,7 @@ for i, nota in df_to_process.iterrows():
                     usa_data_nota = _should_use_data_nota(nota, data_pgto)
                     data_base = nota.get('data_nota') if (usa_data_nota or pd.isna(data_pgto)) else data_pgto
                     data_fmt = (pd.to_datetime(data_base).strftime('%d-%m-%Y') if not pd.isna(data_base) else '')
-                    cod_banco = _conta_codigo(str(row.get('banco', '')).strip()) or '001'
+                    cod_banco = _conta_codigo(str(row.get('banco', '')).strip()) or '004'
                     valor_cent = str(int(round(float(saldo_remanescente) * 100)))
                     num_nf = num_nf_nota
 
@@ -1157,7 +1173,7 @@ for i, nota in df_to_process.iterrows():
             # Gerar linha para TXT com novo formato
             if status_nota == "Ativa" and status_pag == "Pago" and data_str:
                 # === NOVO FORMATO (PIPE '|') ===
-                # Ex.: 01-01-2025|006|001|14209|1|PAGAMENTO NF 14209 HOHL MAQUINAS AGRICOLAS LTDA|01608488001250|2|000|573500|573500|N
+                # Ex.: 01-01-2025|006|004|14209|1|PAGAMENTO NF 14209 HOHL MAQUINAS AGRICOLAS LTDA|01608488004250|2|000|573500|573500|N
                 data_fmt = data_base.strftime('%d-%m-%Y') if not pd.isna(data_base) else nota['data_nota'].strftime('%d-%m-%Y')
                 fornecedor = nota['fornecedor']
                 cod_fazenda3 = str(nota['cod_fazenda']).zfill(3)  # "006"
@@ -1183,7 +1199,7 @@ for i, nota in df_to_process.iterrows():
                 txt_line = [
                     data_fmt,           # 1 - data (DD-MM-YYYY)
                     cod_fazenda3,       # 2 - fazenda (3 dígitos)
-                    (conta_cod_pg or "001"),  # 3 - conta (código mapeado; fallback 001)
+                    (conta_cod_pg or "004"),  # 3 - conta (código mapeado; fallback 004)
                     num_nf_txt,         # 4 - número do doc (ex.: 1350-1)
                     parcela_txt,        # 5 - nº da parcela
                     descricao,          # 6 - descrição
@@ -1239,7 +1255,7 @@ for i, nota in df_to_process.iterrows():
         result_row.update({
             'Status Nota': "Ativa",
             'Status Pagamento': 'Pago',
-            'Banco': '001',
+            'Banco': '004',
             'Data Pagamento': data_str,
             'Observações': 'Produto especial (combustível/lubrificante) - Pagamento automático'
         })
@@ -1262,7 +1278,7 @@ for i, nota in df_to_process.iterrows():
         valor_cent = str(int(round(float(valor_nota) * 100)))  # usa o valor da própria nota
 
         # Para produtos especiais não há pagamento na base; use conta "Não Mapeado" como fallback
-        conta_cod_pg = '001'
+        conta_cod_pg = '004'
         txt_line = [
             data_fmt, cod_fazenda3, conta_cod_pg,
             num_nf, parcela_txt, descricao, cnpj, "2", "000", valor_cent, valor_cent, "N"

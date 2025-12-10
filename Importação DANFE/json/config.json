@@ -1,8 +1,8 @@
 {
-    "excel_path": "//rilkler/LIVRO CAIXA/TESTE/TESTES.xlsx",
+    "excel_path": "C:\\Users\\conta\\Downloads\\TESTE\\TESTES.xlsx",
     "isento_path": "C:\\Users\\conta\\OneDrive\\\u00c1rea de Trabalho\\Documentos Automacao\\NOTAS LIVRO CAIXA\\CLEUBER",
     "last_xml_dir": "C:\\Users\\conta\\Downloads",
-    "base_dados_path": "//rilkler/LIVRO CAIXA/TESTE/BASE DE DADOS.xlsx",
-    "testes_path": "//rilkler/LIVRO CAIXA/TESTE/TESTES.xlsx",
+    "base_dados_path": "C:\\Users\\conta\\Downloads\\TESTE\\BASE DE DADOS.xlsx",
+    "testes_path": "C:\\Users\\conta\\Downloads\\TESTE\\TESTES.xlsx",
     "notas_recebidas_path": "//rilkler/LIVRO CAIXA/TESTE/NOTAS RECEBIDAS.xlsx"
 }
