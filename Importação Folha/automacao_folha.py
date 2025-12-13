@@ -154,14 +154,18 @@ IMOVEL_MAP = {
     },
     "ADRIANA": {
         "FAZENDA POUSO DA ANTA": "001",
+        "FAZENDA PRIMAVERA III": "002",
     },
     "GILSON": {
         "FAZENDA FORMIGA": "001",
     },
     "LUCAS": {
-        "FAZENDA ALIANÇA 2": "001",
+        "FAZENDA PRIMAVERA RETIRO": "001",
+        "FAZENDA ALIANÇA 2": "002",
+        "11 - LUCAS LAIGNIER OLIVEIRA FAZ ALIANCA II": "002",
     },
 }
+
 
 # ===== Perfis suportados (rótulo -> nome interno da MainWindow) =====
 PROFILE_DISPLAY = ["Cleuber", "Gilson", "Adriana", "Lucas"]
@@ -170,6 +174,13 @@ PROFILE_MAP = {
     "Gilson":  "Gilson Oliveira",
     "Adriana": "Adriana Lucia",
     "Lucas":   "Lucas Laignier",
+}
+
+OWNER_TO_DISPLAY = {
+    "CLEUBER": "Cleuber",
+    "ADRIANA": "Adriana",
+    "GILSON":  "Gilson",
+    "LUCAS":   "Lucas",
 }
 
 # ===== CNPJs dos TRIBUTOS (usar apenas dígitos) =====
@@ -351,42 +362,42 @@ def _owner_from_text(a_txt: str) -> str | None:
 
 def _cod_imovel_from_colA(a_txt: str, owner: str | None = None) -> str:
     """
-    Lê a coluna A e tenta identificar a FAZENDA pelo texto livre, mapeando para o CÓDIGO
-    cadastrado em IMOVEL_MAP. Se o titular (owner) for detectado, restringe o match ao mapa dele.
-    Usa substring e, se necessário, similaridade (fuzzy).
+    Detecta o código do imóvel a partir da coluna A, priorizando o mapa do titular.
+    Corrigido para evitar confundir 'FAZENDA ALIANÇA 2' com 'FAZENDA ALIANÇA'.
     """
     t = _norm(a_txt or "")
-    # normaliza abreviações comuns
     t = t.replace(" FAZ. ", " FAZENDA ").replace(" FAZ ", " FAZENDA ")
 
-    # 0) Se tiver owner, usamos primeiro só o mapa dele
+    # Mapa primário (do titular, se informado)
     maps_to_scan = []
     if owner and owner in IMOVEL_MAP:
         maps_to_scan.append(IMOVEL_MAP[owner])
-    # 1) Depois, todos os mapas (fallback)
+    # Fallback geral (caso não encontre)
     maps_to_scan.append({faz: code for mp in IMOVEL_MAP.values() for faz, code in mp.items()})
 
     for mp in maps_to_scan:
         candidates = [(_norm(faz), code) for faz, code in mp.items()]
-        # Match direto por substring (mais seguro)
-        for n, code in candidates:
-            if n in t or t in n:
-                return code
-        # Fuzzy se não achou por substring
-        try:
-            from difflib import SequenceMatcher
-            best_code, best_ratio = None, 0.0
-            for n, code in candidates:
-                r = SequenceMatcher(None, n, t).ratio()
-                if r > best_ratio:
-                    best_ratio, best_code = r, code
-            if best_ratio >= 0.60:
-                return best_code
-        except Exception:
-            pass
+        best = None
+        best_len = 0
 
-    # 2) Fallback
-    return "001"
+        for n, code in candidates:
+            # 🔹 1) Match exato total
+            if t == n:
+                return code
+            # 🔹 2) Match por palavra inteira (com bordas)
+            if re.search(rf"\b{re.escape(n)}\b", t):
+                if len(n) > best_len:
+                    best = code
+                    best_len = len(n)
+            # 🔹 3) Substring somente se for palavra isolada e não prefixo de outra (evita “ALIANÇA 2” ~ “ALIANÇA”)
+            elif n in t.split():
+                if len(n) > best_len:
+                    best = code
+                    best_len = len(n)
+        if best:
+            return best
+
+    return ""
 
 # --- Reparador do cache do win32com/pywin32 (para erros CLSIDToPackageMap) ---
 def _repair_win32com_genpy_cache():
@@ -576,18 +587,23 @@ def _read_sheet_with_openpyxl(filepath: str, mes: int, ano: int):
         cpf   = _digits(ws[f"B{r}"].value or "")
         nome  = str(ws[f"C{r}"].value or "").strip()
         val   = ws[f"D{r}"].value
-        if not (a_txt or cpf or nome or val):
-            break
+        # …
+        owner = _owner_from_text(a_txt)
+        imovel_nome = _extract_imovel_name(a_txt)
+        cod_imovel = _cod_imovel_from_colA(a_txt, owner)
 
-        cod_imovel = _cod_imovel_from_colA(a_txt)
         if cod_imovel:
             imoveis.append(cod_imovel)
 
         funcionarios.append({
-            "cpf": cpf, "nome": nome,
+            "cpf": cpf,
+            "nome": nome,
             "centavos": _to_cent(val),
-            "imovel": cod_imovel  # <- usa o CÓDIGO
+            "imovel": cod_imovel,
+            "imovel_nome": imovel_nome,
+            "titular": owner,           # <- NOVO (igual ao xlwings)
         })
+
         r += 1
 
     imovel_tributos = _mode_or_default(imoveis, default="001")  # códigos
@@ -662,48 +678,143 @@ class FolhaWorker(QThread):
         cur.execute(sql, params)
         return cur.fetchone()
 
-    def _imovel_id(self, cod: str):
+    def _imovel_id(self, cod: str, perfil_id: int | None = None):
         if not cod:
             return None
         for alt in _norms_code(cod):
+            if perfil_id is not None:
+                row = self._fetch_one(
+                    "SELECT id FROM imovel_rural WHERE cod_imovel=? AND perfil_id=?",
+                    (alt, perfil_id)
+                )
+                if row:
+                    return row[0]
+            # fallback antigo (sem perfil)
             row = self._fetch_one("SELECT id FROM imovel_rural WHERE cod_imovel=?", (alt,))
             if row:
                 return row[0]
         return None
+    
 
-    def _part_id(self, digits: str):
+    def _part_ids(self, digits: str):
         if not digits:
-            return None
-        row = self._fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
-        return row[0] if row else None
+            return []
+        conn = self._conn_ro()
+        if not conn:
+            return []
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM participante WHERE cpf_cnpj=?", (digits,))
+        rows = cur.fetchall() or []
+        return [r[0] for r in rows]
 
     def _exists_in_db(self, data_br: str, cod_imovel: str, digits: str, cents_str: str, historico: str) -> bool:
         """
-        True se já existe lançamento idêntico (data_ord, imóvel, participante, tipo=2, valor_saida, histórico).
+        True se já existe lançamento equivalente no banco:
+          - mesma data_ord
+          - mesmo imóvel (qualquer id que tenha o MESMO cod_imovel, em qualquer perfil)
+          - mesmo participante (qualquer id com o mesmo CPF/CNPJ)
+          - tipo_lanc = 2 (saída)
+          - mesmo valor (com tolerância)
+          - e MESMA REF (MM/AAAA), comparada em Python (robusta a 'REF.' vs 'REF', espaços, caixa)
         Se não conseguir resolver FKs ou não houver conexão, NÃO bloqueia.
         """
-        id_im = self._imovel_id(cod_imovel)
-        pid = self._part_id(digits)
-        if not id_im or not pid:
+        # --- conexão somente leitura
+        conn = self._conn_ro()
+        if not conn:
             return False
-
-        data_ord = _yyyymmdd_from_br(data_br)
+        cur = conn.cursor()
+    
+        # --- participantes por CPF/CNPJ (pode haver mais de um id)
+        pid_list = self._part_ids(digits)
+        if not pid_list:
+            return False
+    
+        # --- todos os ids de imóvel que tenham o mesmo cod_imovel (em qualquer perfil)
+        im_ids: list[int] = []
+        try:
+            # considerar variações normalizadas do código (ex.: "002", "0002", etc.)
+            ids_tmp = set()
+            for alt in _norms_code(cod_imovel):
+                for row in cur.execute("SELECT id FROM imovel_rural WHERE cod_imovel=?", (alt,)).fetchall() or []:
+                    ids_tmp.add(int(row[0]))
+            im_ids = list(ids_tmp)
+        except Exception:
+            im_ids = []
+    
+        if not im_ids:
+            return False
+    
+        # --- data AAAAMMDD (igual usada no banco)
+        try:
+            data_ord = _yyyymmdd_from_br(data_br)
+        except Exception:
+            return False
+    
+        # --- valor numérico com tolerância
         try:
             valor = (int(''.join(c for c in str(cents_str) if c.isdigit())) / 100.0)
         except Exception:
             valor = 0.0
+    
+        # --- REF alvo (ex.: "03/2025")
+        alvo_ref = (_extract_ref(historico) or "").strip()
+    
+        # --- traz candidatos por chaves fortes (sem depender de histórico no SQL)
+        try:
+            # placeholders dinâmicos para IN (...)
+            pid_ph = ",".join(["?"] * len(pid_list))
+            im_ph  = ",".join(["?"] * len(im_ids))
+    
+            rows = cur.execute(
+                f"""
+                SELECT historico, valor_saida
+                  FROM lancamento
+                 WHERE data_ord = ?
+                   AND tipo_lanc = 2
+                   AND ABS(valor_saida - ?) < 0.005
+                   AND id_participante IN ({pid_ph})
+                   AND cod_imovel IN ({im_ph})
+                 LIMIT 500
+                """,
+                (data_ord, valor, *pid_list, *im_ids)
+            ).fetchall() or []
+        except Exception:
+            return False
+    
+        if not rows:
+            return False
+    
+        # --- compara histórico/REF no Python (robusto a 'REF.' x 'REF', espaços, caixa)
+        alvo_prefix_norm = "FOLHA DE PAGAMENTO REF"
+        for (hist_db, v) in rows:
+            h = (hist_db or "").strip()
+    
+            # a) se conseguimos extrair REF do histórico alvo, comparar MM/AAAA exatamente
+            if alvo_ref:
+                if (_extract_ref(h) or "").strip() == alvo_ref:
+                    return True
+                # b) fallback: começo com "FOLHA DE PAGAMENTO REF" (normalizado) e contém MM/AAAA alvo
+                if alvo_prefix_norm in _norm(h) and alvo_ref in h:
+                    return True
+            else:
+                # c) se não houve REF no alvo, aceitar prefixo "FOLHA DE PAGAMENTO REF"
+                if _norm(h).startswith(alvo_prefix_norm):
+                    return True
+    
+        return False
+    
 
-        row = self._fetch_one(
-            """
-            SELECT 1 FROM lancamento
-             WHERE data_ord=? AND cod_imovel=? AND id_participante=? AND tipo_lanc=2
-               AND ABS(valor_saida - ?) < 0.005
-               AND TRIM(COALESCE(historico,'')) = TRIM(?)
-             LIMIT 1
-            """,
-            (data_ord, id_im, pid, valor, historico)
-        )
-        return bool(row)
+    def _perfil_id_by_owner(self, owner: str | None) -> int | None:
+        if not owner:
+            return None
+        display = OWNER_TO_DISPLAY.get(str(owner).upper())
+        if not display:
+            return None
+        nome_interno = PROFILE_MAP.get(display)
+        if not nome_interno:
+            return None
+        row = self._fetch_one("SELECT id FROM perfil WHERE nome=?", (nome_interno,))
+        return row[0] if row else None
 
     # ---------- Execução ----------
     def run(self):
@@ -799,6 +910,7 @@ class FolhaWorker(QThread):
                     nome  = (f.get("nome") or "").strip()
                     cents = str(f.get("centavos") or "0")
                     imov  = (f.get("imovel") or "001").strip()
+                    owner = f.get("titular")  # <- NOVO
     
                     if not nome:
                         self._emit("⚠️ Linha ignorada: sem nome.", "warning")
@@ -1145,7 +1257,23 @@ class AutomacaoFolhaUI(QWidget):
             "• Escolha o período (MM/AAAA → MM/AAAA).\n"
             "• A: imóvel/fazenda; B: CPF; C: Funcionário; D: Líquido; F3/G3/H3: INSS/IRRF/FGTS.\n"
             "• Funcionários no 5º dia útil; tributos no 20º dia útil; valores sem pontuação.\n"
-            "• Você pode CANCELAR durante a geração."
+            "• Você pode CANCELAR durante a geração.\n\n"
+            "FAZENDAS DOMÍNIO:\n\n"
+            "CLEUBER:\n"
+            "  4  - FAZ ALIANÇA\n"
+            "  5  - FAZ PRIMAVERA\n"
+            "  6  - ARMAZEM PRIMA\n"
+            "  7  - FAZ FORMOSO\n"
+            "  8  - FAZ L3\n"
+            "  9  - FAZ FRUTACC\n"
+            " 10  - FAZ GUARA\n\n"
+            "GILSON:\n"
+            " 14  - FAZ FORMIGA\n\n"
+            "LUCAS:\n"
+            " 11  - FAZ ALIANÇA 2\n\n"
+            "ADRIANA:\n"
+            " 12  - FAZ POUSO DA ANTA\n"
+            " 13  - FAZ FRUTACC 3\n"
         ))
         btn_cfg = QToolButton(); btn_cfg.setText("⚙️ Configurar")
         btn_cfg.clicked.connect(self._open_config)
@@ -1825,14 +1953,52 @@ class AutomacaoFolhaUI(QWidget):
                         nome = pid_rows[0].get("nome") or ""
     
                         # 2) pega candidatos deste participante nesta data
-                        cand = (mw.db.sb.table("lancamento")
-                                .select("id,data,tipo_doc,historico,valor_entrada,valor_saida")
-                                .eq("id_participante", pid)
-                                .eq("data", data_str)          # data exata
-                                .order("id", desc=True)
-                                .limit(200)
-                                .execute().data) or []
-    
+                        # --- preparar chaves (data ISO/ORD, pids por CPF, perfil atual) ---
+                        # data_br vem como "DD-MM-AAAA"
+                        try:
+                            dd, mm, yyyy = data_br.split("-")
+                            data_iso = f"{yyyy}-{mm}-{dd}"           # AAAA-MM-DD (igual no BD)
+                            data_ord = int(f"{yyyy}{mm}{dd}")        # AAAAMMDD (seguro para comparar)
+                        except Exception:
+                            sem_dup.append(ln)
+                            continue
+                        
+                        # pegar TODOS os participantes com o mesmo CPF (evita duplicata de pessoa)
+                        pid_rows = (mw.db.sb.table("participante")
+                                    .select("id")
+                                    .eq("cpf_cnpj", cpf_cnpj)
+                                    .execute().data) or []
+                        pids = [int(r["id"]) for r in pid_rows] or [-1]
+
+                        # perfil atual (se disponível)
+                        perfil_id = getattr(mw.db, "perfil_id", None)
+
+                        # --- buscar candidatos do(s) participante(s) nesta data (por data_ord) ---
+                        q = (mw.db.sb.table("lancamento")
+                              .select("id,data,data_ord,tipo_doc,historico,valor_entrada,valor_saida,perfil_id,cod_imovel")
+                              .in_("id_participante", pids)
+                              .eq("data_ord", data_ord)              # usa ORD para bater 100%
+                              .order("id", desc=True)
+                              .limit(200))
+
+                        # trava por perfil (recomendado)
+                        if perfil_id:
+                            q = q.eq("perfil_id", perfil_id)
+
+                        cand = (q.execute().data) or []
+
+                        # (opcional) se quiser amarrar também ao imóvel lido da linha:
+                        # cod_imovel_linha = (parts[1] or "").strip()
+                        # if cod_imovel_linha:
+                        #     # normaliza para o ID real do imóvel do perfil
+                        #     imrow = (mw.db.sb.table("imovel_rural")
+                        #                 .select("id")
+                        #                 .eq("perfil_id", perfil_id)
+                        #                 .eq("cod_imovel", cod_imovel_linha)
+                        #                 .limit(1).execute().data) or []
+                        #     if imrow:
+                        #         cand = [c for c in cand if c.get("cod_imovel") == imrow[0]["id"]]
+
                         # 3) regra: se for folha (tipo_doc=5) OU histórico começa com "FOLHA"
                         alvo = round(float(valor_alvo or 0), 2)
                         for c in cand:

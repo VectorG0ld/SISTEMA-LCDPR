@@ -1,0 +1,296 @@
+[28/10/2025 15:52:06] ℹ️Log limpo.
+[28/10/2025 15:52:21] ✅Configurações salvas em: c:\Users\conta\OneDrive\Documentos\CODIGOS\Trabalho\LIVRO CAIXA\SISTEMA-LCDPR\Importação Folha\json\config_folha.json
+[28/10/2025 15:52:24] 📌Geração do TXT iniciada (03/2025 → 03/2025)…
+🧾 Geração de TXT — 28/10/2025
+⏳ Início: 15:52:24
+
+⚙️ Engine: Excel (xlwings) — fórmulas recalculadas.
+🔄 Ajustando C1 → 03/2025 e lendo dados…
+📆 03/2025  —  Funcionários: 74  •  Tributos: 3
+👤 Funcionário: JOAO PAULO SANTOS SENA — CPF: 04883431193
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOAO PAULO SANTOS SENA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: MARCIA REGINA GUIMARAES — CPF: 92804780104
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.754,84
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (MARCIA REGINA GUIMARAES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: MARCOS ROBERTO DE OLIVEIRA MACIEL — CPF: 70333900170
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.521,38
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (MARCOS ROBERTO DE OLIVEIRA MACIEL)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RAFAEL NOVAIS SILVA — CPF: 02470406145
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.762,38
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RAFAEL NOVAIS SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ROGERIS MANOEL PIMENTEL — CPF: 03261616199
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.506,38
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ROGERIS MANOEL PIMENTEL)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: SAMUEL PINTO CARDOSO — CPF: 02526729173
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.857,06
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (SAMUEL PINTO CARDOSO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: SUELLEN VENANCIO DIAS — CPF: 04503101161
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.103,17
+🏠 Imóvel: 005  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (SUELLEN VENANCIO DIAS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ADAO PEREIRA BERNARDO — CPF: 01785622544
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.695,03
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ADAO PEREIRA BERNARDO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): ALESSANDRA DAIANE DE SOUZA LIRA
+👤 Funcionário: DIEGO DE LUCENA FELIX — CPF: 05365281101
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.371,12
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DIEGO DE LUCENA FELIX)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: DIONEI SOARES DA SILVA — CPF: 01876844132
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.972,03
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DIONEI SOARES DA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ELAINE OLIVEIRA RODRIGUES — CPF: 07831042199
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ELAINE OLIVEIRA RODRIGUES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ERIVELTON ANTAO DOS REIS — CPF: 03801022501
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.695,03
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ERIVELTON ANTAO DOS REIS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: JACEMON DOS REIS BERNARDO — CPF: 85947284502
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.695,03
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JACEMON DOS REIS BERNARDO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): MATHEUS PEREIRA DOS SANTOS
+👤 Funcionário: RENATA TATIELE DA SILVA SAMPAIO TENORIO — CPF: 06952596100
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.842,77
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RENATA TATIELE DA SILVA SAMPAIO TENORIO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ROBERTO RODRIGUES DOS SANTOS — CPF: 03159338100
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.006,78
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ROBERTO RODRIGUES DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: SIDNEI DOS REIS BONFIM — CPF: 02636364536
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.695,03
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (SIDNEI DOS REIS BONFIM)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: UTARLIS GABRIEL DE BRITO — CPF: 70447901192
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.644,70
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (UTARLIS GABRIEL DE BRITO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: FABRICIO DE PAIVA MARTINS — CPF: 02285742185
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.857,06
+🏠 Imóvel: 004  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (FABRICIO DE PAIVA MARTINS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: GILDEVAN OLIVEIRA DOS SANTOS — CPF: 70447300199
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.085,84
+🏠 Imóvel: 004  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (GILDEVAN OLIVEIRA DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: KASSIO DE PAIVA MARTINS — CPF: 02285741103
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.439,70
+🏠 Imóvel: 004  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (KASSIO DE PAIVA MARTINS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: LEOMAR CASTRO DA SILVA — CPF: 06928314109
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 004  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (LEOMAR CASTRO DA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ODIVARDO FERNANDES VITOR — CPF: 48484415104
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.371,12
+🏠 Imóvel: 004  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ODIVARDO FERNANDES VITOR)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ALFREDO PEREIRA DE MELO NETO — CPF: 07450228122
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 960,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ALFREDO PEREIRA DE MELO NETO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: ANTONIO LEONILDO SILVA — CPF: 06085956320
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 960,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (ANTONIO LEONILDO SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): ANTONIO LUCAS SILVA SANTOS
+👤 Funcionário: BRUNO BARROS DE LACERDA — CPF: 96021799100
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.371,12
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (BRUNO BARROS DE LACERDA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: CARLOS ROBERTO PEREIRA GUIMARAES SALGADO — CPF: 60156586304
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.119,49
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (CARLOS ROBERTO PEREIRA GUIMARAES SALGADO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): CLEIBY REMERSON DOS SANTOS VASCONCELOS
+👤 Funcionário: DANIEL BATISTA DOS SANTOS — CPF: 07362299141
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 960,01
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DANIEL BATISTA DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): DANIEL PINHEIRO MILHOMENS FONSECA
+👤 Funcionário: DAVI BARBOSA MOTA — CPF: 05270312166
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DAVI BARBOSA MOTA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: DAYANNE GAMA MACIEL — CPF: 01525526189
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 202,40
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DAYANNE GAMA MACIEL)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: DIEGO ANTONY SOUZA SILVA — CPF: 61478102357
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DIEGO ANTONY SOUZA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: DOMYNIK RIBEIRO ALVES — CPF: 06302406129
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.440,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (DOMYNIK RIBEIRO ALVES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: FRANCISCO JOSE DA CONCEICAO RIBEIRO — CPF: 10598767363
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.680,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (FRANCISCO JOSE DA CONCEICAO RIBEIRO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: IRAILTON BARBOSA DOS SANTOS — CPF: 05569343180
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.467,52
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (IRAILTON BARBOSA DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: IRANILDES CARVALHO BRAGA MAGALHAES — CPF: 03053329107
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.404,15
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (IRANILDES CARVALHO BRAGA MAGALHAES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): JOALDO DA SILVA PAZ
+👤 Funcionário: JOSE ADEMIR RODRIGUES — CPF: 29110878874
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOSE ADEMIR RODRIGUES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: JOSE FRANCISCO LIMA DA SILVA FILHO — CPF: 60647689324
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.119,65
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOSE FRANCISCO LIMA DA SILVA FILHO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: JOSE NERES BORGES DE LIMA — CPF: 06655340357
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOSE NERES BORGES DE LIMA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): JOSE NILSON SILVA CAVALCANTE
+👤 Funcionário: JOSE SIDICLEY CARDOSO DE ALMEIDA — CPF: 02808725183
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.040,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOSE SIDICLEY CARDOSO DE ALMEIDA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): JOSE VENICIO DA SILVA LEAL
+👤 Funcionário: LEANDRO FRAGOSO DA SILVA — CPF: 03441188195
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.119,65
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (LEANDRO FRAGOSO DA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: LEONARDO ROZ COSTA GOMES — CPF: 93166877134
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (LEONARDO ROZ COSTA GOMES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: MANOEL AMBROSIO LEAL RIBEIRO — CPF: 62564686354
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (MANOEL AMBROSIO LEAL RIBEIRO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): MARCILIO ALVES ROCHA
+👤 Funcionário: PEDRO HENRRIQUE CESARIO CAMPOS — CPF: 63543927302
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (PEDRO HENRRIQUE CESARIO CAMPOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: PEDRO IVO RAMIRES DA ROSA FILHO — CPF: 03630169104
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (PEDRO IVO RAMIRES DA ROSA FILHO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RAILTON BATISTA SILVA — CPF: 62980691356
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.600,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RAILTON BATISTA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RAIMUNDO DA SILVA MAGALHÃES — CPF: 01384447148
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.371,12
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RAIMUNDO DA SILVA MAGALHÃES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RAIMUNDO NONATO ALCANTARA VALADARES — CPF: 99552884187
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RAIMUNDO NONATO ALCANTARA VALADARES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RAIMUNDO NONATO DE LIMA SANTOS FILHO — CPF: 05035761150
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.371,12
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RAIMUNDO NONATO DE LIMA SANTOS FILHO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: REBECA ALVES DE SOUZA RODRIGUES — CPF: 05565398185
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.404,15
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (REBECA ALVES DE SOUZA RODRIGUES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: TALISSON BRUNO SILVA GONCALVES — CPF: 60752500341
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (TALISSON BRUNO SILVA GONCALVES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: THAWAN DA SILVA MARTINS — CPF: 61392331358
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.400,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (THAWAN DA SILVA MARTINS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): TIAGO PEREIRA DE SOUSA
+👤 Funcionário: VALDEMAR GOMES DA SILVA — CPF: 93636563300
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (VALDEMAR GOMES DA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+[28/10/2025 15:52:30] ⚠️⚠️ Linha ignorada (valor zero): WALACE RAMOS COSTA
+👤 Funcionário: WESLEY JOSE DOS SANTOS — CPF: 71107190142
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 960,00
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (WESLEY JOSE DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: CLAUDIO TAVARES DE SOUZA — CPF: 07641545165
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (CLAUDIO TAVARES DE SOUZA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: JHEFFSON UBIRATAN MENDES PEREIRA — CPF: 60290926343
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.567,52
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JHEFFSON UBIRATAN MENDES PEREIRA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: LUIZ FELIPE ALVES CABRAL — CPF: 04905469198
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (LUIZ FELIPE ALVES CABRAL)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: RISLEY REZENDE DA SILVA — CPF: 02019160374
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.521,38
+🏠 Imóvel: 009  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (RISLEY REZENDE DA SILVA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: VALDENOR FILHO TAVARES DOS SANTOS — CPF: 07202602563
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.534,15
+🏠 Imóvel: 009  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (VALDENOR FILHO TAVARES DOS SANTOS)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: AFONSO FERREIRA ROCHA — CPF: 82455252191
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.669,92
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (AFONSO FERREIRA ROCHA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: GUSTAVO GOMES LIMA — CPF: 04421407119
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 3.872,06
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (GUSTAVO GOMES LIMA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: JOAO DA CRUZ DE OLIVEIRA — CPF: 83246983100
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.871,12
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (JOAO DA CRUZ DE OLIVEIRA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: PAULO RICARDO BORGES BRITO — CPF: 03395811158
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 2.094,84
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (PAULO RICARDO BORGES BRITO)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: SAIMON DANIEL ALVES — CPF: 04154234145
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 4.280,38
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (SAIMON DANIEL ALVES)
+✅ OK 15:52:30  •  📌 Pagamento processado
+👤 Funcionário: VILMA LINO DE SOUSA OLIVEIRA — CPF: 00174715161
+🗓️ Data: 05/03/2025  •  💰 Pago: R$ 1.404,15
+🏠 Imóvel: 001  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 (VILMA LINO DE SOUSA OLIVEIRA)
+✅ OK 15:52:30  •  📌 Pagamento processado
+🏛️ Tributo: INSS — CNPJ: 00394460005887
+🗓️ Data: 20/03/2025  •  💰 Valor: R$ 8.772,12
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 INSS
+✅ OK 15:52:30  •  📌 Tributo processado
+🏛️ Tributo: IRRF — CNPJ: 29979036000140
+🗓️ Data: 20/03/2025  •  💰 Valor: R$ 594,64
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 IRRF
+✅ OK 15:52:30  •  📌 Tributo processado
+🏛️ Tributo: FGTS — CNPJ: 37115367000160
+🗓️ Data: 20/03/2025  •  💰 Valor: R$ 6.598,68
+🏠 Imóvel: 003  •  🧾 Histórico: FOLHA DE PAGAMENTO REF. 03/2025 FGTS
+✅ OK 15:52:30  •  📌 Tributo processado
+💵 Subtotal 03/2025: R$ 156.956,19  —  ⏱️ 0s (15:52:30 → 15:52:30)
+
+🏁 Resumo Final
+• 🗓️ Período: 03/2025 → 03/2025
+• 📦 Registros processados: 66
+• 🧾 TXT: \\rilkler\LIVRO CAIXA\FOLHA DE PAGAMENTO\folha_03-2025_a_03-2025.txt
+• ⏱️ Tempo total: 5s (15:52:24 → 15:52:30)
+• 💰 Valor total: R$ 156.956,19
+[28/10/2025 15:52:30] ✅TXT gerado: \\rilkler\LIVRO CAIXA\FOLHA DE PAGAMENTO\folha_03-2025_a_03-2025.txt
+[28/10/2025 15:52:30] ✅TXT gerado: \\rilkler\LIVRO CAIXA\FOLHA DE PAGAMENTO\folha_03-2025_a_03-2025.txt
+[28/10/2025 15:52:58] ℹ️Importando (via temporário) no perfil 'Cleuber': folha_03-2025_a_03-2025.txt
+[28/10/2025 15:53:26] ✅Importado no sistema (perfil 'Cleuber', via temporário): folha_03-2025_a_03-2025.txt

@@ -275,22 +275,105 @@ def _nome_cnpj_from_receita(data: dict) -> str:
             return v.strip()
     return ""
 
-# 1) Pasta base do seu projeto (onde está esse script)
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+# >>> ADICIONE ESTE BLOCO em sistema.py (perto das outras consts utilitárias) <<<
+from pathlib import Path
+import json, os
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))  # se já existir, mantenha o seu
+CONFIG_DIR  = os.path.join(PROJECT_DIR, "Importação DANFE", "json")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+def _owner_key_from_profile(profile: str) -> str:
+    """
+    Converte o nome exibido na interface para a chave usada no config.json.
+    Faz correspondência flexível (contém, ignora acentos e capitalização).
+    """
+    import unicodedata, re
+
+    def _norm(s: str) -> str:
+        s = unicodedata.normalize("NFKD", s or "")
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        return re.sub(r"[^a-z]", "", s.lower())
+
+    p = _norm(profile)
+
+    if "cleuber" in p:  return "CLEUBER"
+    if "gilson"  in p:  return "GILSON"
+    if "adriana" in p:  return "ADRIANA"
+    if "lucas"   in p:  return "LUCAS"
+    return "CLEUBER"  # fallback
+
+def _load_json_config_safe() -> dict:
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f) or {}
+    except Exception:
+        pass
+    return {}
+
+def _save_json_config_safe(cfg: dict) -> None:
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(cfg or {}, f, ensure_ascii=False, indent=4)
+
+def persist_active_owner_from_profile(profile_text: str) -> None:
+    """
+    Salva no json/config.json:
+      - active_owner
+      - excel_path/testes_path (LIVRO CAIXA {OWNER}.xlsx)
+      - isento_path (.../NOTAS LIVRO CAIXA/{OWNER})
+    Mantém base_dados_path e notas_recebidas_path como estiverem.
+    """
+    cfg = _load_json_config_safe()
+
+    # Dono (normalizado)
+    owner = _owner_key_from_profile(profile_text)  # CLEUBER | GILSON | ADRIANA | LUCAS
+    cfg["active_owner"] = owner
+
+    # Monta caminhos padronizados por dono
+    excel_file = rf"\\rilkler\LIVRO CAIXA\TESTE\LIVRO CAIXA {owner}.xlsx"
+    cfg["excel_path"]  = excel_file
+    cfg["testes_path"] = excel_file
+
+    # Caminho da pasta ISENTO por dono
+    cfg["isento_path"] = (
+        rf"C:\Users\conta\OneDrive\Área de Trabalho\Documentos Automacao\NOTAS LIVRO CAIXA\{owner}"
+    )
+
+    # (Opcional) Se quiser forçar um padrão de NOTAS RECEBIDAS quando vazio:
+    # cfg.setdefault("notas_recebidas_path", r"\\rilkler\LIVRO CAIXA\TESTE\NOTAS RECEBIDAS.xlsx")
+
+    _save_json_config_safe(cfg)
 
 ICONS_DIR = os.path.join(PROJECT_DIR, 'banco_de_dados', 'icons')
 APP_ICON    = os.path.join(ICONS_DIR, 'agro_icon.png')
 LOCK_ICON   = os.path.join(ICONS_DIR, 'lock.png')
 
 # Perfil dinâmico
-CURRENT_PROFILE = "Cleuber Marcos"
+CURRENT_PROFILE = os.environ.get("CURRENT_PROFILE", "Cleuber Marcos")
 
 # Usuário que fez login
 CURRENT_USER = None
 
-def get_profile_db_filename():
-    # legado removido (não há mais SQLite local)
-    return ""
+def get_current_profile() -> str:
+    return CURRENT_PROFILE
+
+def set_current_profile(profile: str) -> None:
+    """
+    Atualiza o perfil atual em memória e sincroniza com variável de ambiente,
+    e também grava o 'active_owner' no json/config.json.
+    """
+    global CURRENT_PROFILE
+    CURRENT_PROFILE = (profile or "").strip()
+    os.environ["CURRENT_PROFILE"] = CURRENT_PROFILE
+
+    # >>> NOVO: persiste no JSON
+    try:
+        persist_active_owner_from_profile(CURRENT_PROFILE)
+    except Exception as e:
+        print(f"[warn] Falha ao salvar active_owner no config.json: {e}")
 
 # ── (1) Login 100% Supabase ─────────────────────────────────────────
 # Tabela esperada: public.app_users (username text PK, password text, role text)
@@ -2670,55 +2753,61 @@ class DashboardWidget(QWidget):
 
     # DashboardWidget
     def on_dash_filter_changed(self):
-        self.settings.setValue("dashFilterIni", self.dt_dash_ini.date())
-        self.settings.setValue("dashFilterFim", self.dt_dash_fim.date())
+        # Normaliza as datas e salva preferências
+        d_ini = self.dt_dash_ini.date()
+        d_fim = self.dt_dash_fim.date()
+        if d_ini > d_fim:
+            d_ini, d_fim = d_fim, d_ini
+            self.dt_dash_ini.setDate(d_ini)
+            self.dt_dash_fim.setDate(d_fim)
 
-        # empurra datas para a aba Lançamentos, se existir
+        self.settings.setValue("dashFilterIni", d_ini)
+        self.settings.setValue("dashFilterFim", d_fim)
+
+        # Empurra para a aba Lançamentos SEM disparar sinais reentrantes
         mw = self.parent()
         if mw and hasattr(mw, "dt_ini") and hasattr(mw, "dt_fim"):
-            mw.dt_ini.setDate(self.dt_dash_ini.date())
-            mw.dt_fim.setDate(self.dt_dash_fim.date())
+            from PySide6.QtCore import QSignalBlocker
+            with QSignalBlocker(mw.dt_ini), QSignalBlocker(mw.dt_fim):
+                mw.dt_ini.setDate(d_ini)
+                mw.dt_fim.setDate(d_fim)
             mw.carregar_lancamentos()
 
+        # Recalcula o Dashboard já com o estado consistente
         self.load_data()
 
     def load_data(self):
         d1_ord = int(self.dt_dash_ini.date().toString("yyyyMMdd"))
         d2_ord = int(self.dt_dash_fim.date().toString("yyyyMMdd"))
+        if d1_ord > d2_ord:
+            d1_ord, d2_ord = d2_ord, d1_ord
 
-        # Receitas e Despesas no intervalo (indexado e cobrindo)
-        rec = self.db.fetch_one(
+        # Somas do período (com filtro por perfil implementado na camada Database)
+        rec = float(self.db.fetch_one(
             "SELECT SUM(valor_entrada) FROM lancamento WHERE data_ord BETWEEN ? AND ?",
             (d1_ord, d2_ord)
-        )[0] or 0
-        desp = self.db.fetch_one(
-            "SELECT SUM(valor_saida)   FROM lancamento WHERE data_ord BETWEEN ? AND ?",
+        )[0] or 0.0)
+
+        desp = float(self.db.fetch_one(
+            "SELECT SUM(valor_saida) FROM lancamento WHERE data_ord BETWEEN ? AND ?",
             (d1_ord, d2_ord)
-        )[0] or 0
+        )[0] or 0.0)
 
-        # Saldo do PERÍODO (usa a mesma base dos cartões de Receita/Despesa)
-        saldo = (rec or 0) - (desp or 0)
+        saldo = rec - desp
 
-        # Atualiza os cards
+        # Atualiza os cards apenas uma vez
         fmt = lambda v: f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         self.saldo_card.findChild(QLabel, "value").setText(f"R$ {fmt(saldo)}")
         self.receita_card.findChild(QLabel, "value").setText(f"R$ {fmt(rec)}")
         self.despesa_card.findChild(QLabel, "value").setText(f"R$ {fmt(desp)}")
 
-
-        r = f"{rec:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        self.receita_card.findChild(QLabel, "value").setText(f"R$ {r}")
-        d = f"{desp:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        self.despesa_card.findChild(QLabel, "value").setText(f"R$ {d}")
-
-        # Gráfico de pizza com %
+        # Gráfico de pizza
         self.series.clear()
         self.series.append("Receitas", rec)
         self.series.append("Despesas", desp)
         for sl in self.series.slices():
-            pct = sl.percentage() * 100
             sl.setLabelVisible(True)
-            sl.setLabel(f"{sl.label()} ({pct:.1f}%)")
+            sl.setLabel(f"{sl.label()} ({sl.percentage()*100:.1f}%)")
 
 class ReportCenterDialog(QDialog):
     """
@@ -5707,13 +5796,19 @@ class MainWindow(QMainWindow):
         self._profile_banner.setText(f"Perfil: {CURRENT_PROFILE}  |  Usuário: {user}")
 
     def switch_profile(self, profile: str):
-        global CURRENT_PROFILE
-        if profile == CURRENT_PROFILE:
-            return
-        CURRENT_PROFILE = profile
+        # mantém variável global e variável de ambiente sempre em sincronia
+        set_current_profile(profile)
+
+        # >>> NOVO: persiste no json/config.json para os outros módulos/scripts
+        try:
+            persist_active_owner_from_profile(profile)
+        except Exception as e:
+            # não interrompe a troca de perfil se falhar a escrita do JSON
+            print(f"[warn] Falha ao salvar active_owner no config.json: {e}")
+
         self._update_profile_banner()
 
-        # reabrir conexões
+        # reabrir conexões já com o novo perfil
         self.db.set_profile(profile)
         self.dashboard.db.set_profile(profile)
 
@@ -7591,18 +7686,34 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(widget)
 
     def _apply_filters_everywhere(self):
+        # Normaliza o intervalo do filtro principal (Lançamentos)
         ini = self.dt_ini.date()
         fim = self.dt_fim.date()
         if fim < ini:
             ini, fim = fim, ini
             self.dt_ini.setDate(ini)
             self.dt_fim.setDate(fim)
-
-        # Apenas aplica o filtro na lista de lançamentos.
-        # NÃO altera datas do Dashboard nem recarrega o Dashboard.
+    
+        # 1) Recarrega a lista de lançamentos
         self.carregar_lancamentos()
-
-
+    
+        # 2) 🔄 Mantém o Dashboard em sincronia (inclusive na abertura)
+        if hasattr(self, "dashboard"):
+            try:
+                from PySide6.QtCore import QSignalBlocker
+                with QSignalBlocker(self.dashboard.dt_dash_ini), QSignalBlocker(self.dashboard.dt_dash_fim):
+                    self.dashboard.dt_dash_ini.setDate(ini)
+                    self.dashboard.dt_dash_fim.setDate(fim)
+                # persiste preferência do período do dashboard
+                try:
+                    self.dashboard.settings.setValue("dashFilterIni", ini)
+                    self.dashboard.settings.setValue("dashFilterFim", fim)
+                except Exception:
+                    pass
+                # recálculo imediato dos cards e gráfico
+                self.dashboard.load_data()
+            except Exception as e:
+                print("apply_filters (dashboard sync) erro:", e)
 
     def closeEvent(self, event):
         try:

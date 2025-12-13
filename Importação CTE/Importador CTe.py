@@ -574,77 +574,120 @@ class ImportadorCTe(QWidget):
         return card
 
     # ===== NOVO: garante cadastro de participante (CNPJ/CPF) =====
-    def _ensure_participante(self, cpf_cnpj: str, nome: str, tipo: int = TIPO_FORNECEDOR) -> int | None:
-        """
-        Retorna o ID do participante. Se não existir, cadastra e atualiza as listas da UI.
-        - tipo: usar 2 para fornecedor (saída), compatível com seu schema.
-        """
-        cpf_cnpj = re.sub(r"\D", "", cpf_cnpj or "")
-        nome = (nome or "").strip()
-        if not cpf_cnpj or not nome:
-            return None
-
-        mw = self.window()
-        if not mw or not hasattr(mw, "db"):
-            # sem DB disponível na janela principal, não há o que fazer
-            return None
-
-        # Existe?
-        row = mw.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (cpf_cnpj,))
-        if row and row[0]:
-            return int(row[0])
-
-        # Cadastra
-        mw.db.execute_query(
-            "INSERT INTO participante (cpf_cnpj, nome, tipo_contraparte) VALUES (?,?,?)",
-            (cpf_cnpj, nome, int(tipo))
-        )
-        pid = mw.db.fetch_one("SELECT id FROM participante WHERE cpf_cnpj=?", (cpf_cnpj,))
-        pid = int(pid[0]) if pid and pid[0] else None
-
-        # Atualiza listas/tabelas imediatamente (tenta vários nomes possíveis)
-        for fn in (
-            "atualizar_participantes", "carregar_participantes",
-            "reload_participants", "refresh_participants", "preencher_participantes"
-        ):
-            try:
-                if hasattr(mw, fn):
-                    getattr(mw, fn)()
-            except Exception:
-                pass
-
-        # Log amigável
-        self.log_msg(f"Participante cadastrado: {nome} [{cpf_cnpj}] (id={pid})", "success")
-        return pid
-    
-    # ===== NOVO: garante cadastro do imóvel =====
     def _ensure_imovel(self, cod_imovel_sugerido: str, nome_imovel: str, addr: dict) -> str:
         """
-        Garante que o imóvel exista. Se não existir, cria com CÓDIGO SEQUENCIAL (001, 002, ...),
-        ignorando IE/códigos grandes. Retorna o código efetivamente usado/existente.
+        Garante que o imóvel exista. Se não existir, cria com CÓDIGO SEQUENCIAL (001, 002, ...).
+        Agora: verifica PRIMEIRO por insc_estadual (IE). Se existir imóvel com a mesma IE,
+        retorna esse código e NÃO cadastra novo imóvel.
         """
         mw = self.window()
         if not mw or not hasattr(mw, "db"):
-            # Sem DB, devolve algo seguro
             return (cod_imovel_sugerido or "001")
 
-        # 1) Já existe pelo NOME? (preferência por nome exato da fazenda)
-        row = mw.db.fetch_one(
-            "SELECT cod_imovel FROM imovel_rural WHERE nome_imovel=? LIMIT 1",
-            (nome_imovel,)
-        )
+        # normalizar IE (só dígitos) se presente no endereco
+        ie = _digits((addr or {}).get("IE", "") or "") or None
+
+        # 0) SE houver IE -> procurar imóvel com insc_estadual = IE (prioridade)
+        if ie:
+            # Supabase path
+            if hasattr(mw.db, "sb"):
+                try:
+                    rows = (mw.db.sb.table("imovel_rural")
+                                .select("cod_imovel")
+                                .eq("insc_estadual", ie)
+                                .limit(1)
+                                .execute().data) or []
+                    if rows:
+                        code = str(rows[0].get("cod_imovel") or "")
+                        return code.zfill(3) if re.fullmatch(r"\d{1,3}", code) else code
+                except Exception:
+                    # fallback para versão antiga
+                    try:
+                        row = mw.db.fetch_one(
+                            "SELECT cod_imovel FROM imovel_rural WHERE insc_estadual=? LIMIT 1",
+                            (ie,)
+                        )
+                        if row and row[0]:
+                            code = str(row[0])
+                            return code.zfill(3) if re.fullmatch(r"\d{1,3}", code) else code
+                    except Exception:
+                        pass
+            else:
+                try:
+                    row = mw.db.fetch_one(
+                        "SELECT cod_imovel FROM imovel_rural WHERE insc_estadual=? LIMIT 1",
+                        (ie,)
+                    )
+                    if row and row[0]:
+                        code = str(row[0])
+                        return code.zfill(3) if re.fullmatch(r"\d{1,3}", code) else code
+                except Exception:
+                    pass
+
+        # 1) Continua com a verificação por NOME (comportamento antigo)
+        row = None
+        if hasattr(mw.db, "sb"):
+            try:
+                res = mw.db.sb.table("imovel_rural").select("cod_imovel").ilike("nome_imovel", nome_imovel).limit(1).execute()
+                data = getattr(res, "data", None) or []
+                if data:
+                    row = (data[0].get("cod_imovel"),)
+            except Exception:
+                try:
+                    row = mw.db.fetch_one(
+                        "SELECT cod_imovel FROM imovel_rural WHERE nome_imovel=? LIMIT 1",
+                        (nome_imovel,)
+                    )
+                except Exception:
+                    row = None
+        else:
+            try:
+                row = mw.db.fetch_one(
+                    "SELECT cod_imovel FROM imovel_rural WHERE nome_imovel=? LIMIT 1",
+                    (nome_imovel,)
+                )
+            except Exception:
+                row = None
+
         if row and row[0]:
-            # Se já existir, retorna o código existente (com zero-pad se for numérico de até 3 dígitos)
             code = str(row[0])
             return code.zfill(3) if re.fullmatch(r"\d{1,3}", code) else code
 
         # 2) Não existe: calcular PRÓXIMO CÓDIGO SEQUENCIAL de 3 dígitos (001..999)
-        row = mw.db.fetch_one(
-            "SELECT COALESCE(MAX(CAST(cod_imovel AS INTEGER)), 0) "
-            "FROM imovel_rural "
-            "WHERE cod_imovel GLOB '[0-9]*' AND LENGTH(cod_imovel) <= 3"
-        )
-        max3 = int(row[0] or 0)
+        max3 = 0
+        if hasattr(mw.db, "sb"):
+            try:
+                res = mw.db.sb.table("imovel_rural").select("cod_imovel").limit(1000).execute()
+                rows = getattr(res, "data", None) or []
+                for r in rows:
+                    ci = str(r.get("cod_imovel") or "")
+                    if re.fullmatch(r"\d{1,3}", ci):
+                        try:
+                            v = int(ci)
+                            if v > max3: max3 = v
+                        except Exception:
+                            pass
+            except Exception:
+                try:
+                    row = mw.db.fetch_one(
+                        "SELECT COALESCE(MAX(CAST(cod_imovel AS INTEGER)), 0) "
+                        "FROM imovel_rural "
+                        "WHERE cod_imovel GLOB '[0-9]*' AND LENGTH(cod_imovel) <= 3"
+                    )
+                    max3 = int(row[0] or 0)
+                except Exception:
+                    max3 = 0
+        else:
+            try:
+                row = mw.db.fetch_one(
+                    "SELECT COALESCE(MAX(CAST(cod_imovel AS INTEGER)), 0) "
+                    "FROM imovel_rural "
+                    "WHERE cod_imovel GLOB '[0-9]*' AND LENGTH(cod_imovel) <= 3"
+                )
+                max3 = int(row[0] or 0)
+            except Exception:
+                max3 = 0
+
         new_code = f"{max3 + 1:03d}"
 
         # 3) Sanitização dos campos de endereço
@@ -659,7 +702,7 @@ class ImportadorCTe(QWidget):
         bairro   = nz(addr.get("xBairro"), ".")
         numero   = nz(addr.get("nro"), None)
         compl    = nz(addr.get("xCpl"), None)
-        ie       = _digits(addr.get("IE", "")) or None
+        ie_val   = ie or None  # já normalizada acima
 
         # 4) INSERT com 18 campos (modelo do seu sistema)
         mw.db.execute_query(
@@ -672,7 +715,7 @@ class ImportadorCTe(QWidget):
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             [
-              new_code, "BR", "BRL", None, None, ie,
+              new_code, "BR", "BRL", None, None, ie_val,
               nome_imovel, endereco, numero, compl, bairro, uf,
               cod_mun, cep, 1, 100.0, 0.0, 0.0
             ],
@@ -681,7 +724,6 @@ class ImportadorCTe(QWidget):
 
         self.log_msg(f"🏡 Imóvel cadastrado: {nome_imovel} [cod {new_code}]", "success")
         return new_code
-
 
     def importar_xmls_cte(self):
         base_dir = self.config.get("cte_dir", "").strip()
@@ -759,24 +801,54 @@ class ImportadorCTe(QWidget):
                 CIDADES_NORM = { _norm(k): v for k, v in CODIGOS_CIDADES.items() }
                 IE_TO_ALIAS  = { re.sub(r"\D", "", k): v for k, v in FARM_MAPPING.items() }
 
-                # helpers de consulta no banco
                 def _query_cod_by_alias(alias: str):
                     mw = self.window()
                     if not alias or not mw or not hasattr(mw, "db"): return None
                     alias_to_cod = self.config.get("alias_to_cod", {})
                     cod = alias_to_cod.get(alias) or alias_to_cod.get(_norm(alias))
                     if cod: return str(cod)
-                    row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE UPPER(nome_imovel)=?", (alias.upper(),))
-                    if row and row[0]: return str(row[0])
-                    row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE UPPER(nome_imovel) LIKE ?", (f"%{alias.upper()}%",))
-                    if row and row[0]: return str(row[0])
+                    # Supabase-aware
+                    if hasattr(mw.db, "sb"):
+                        try:
+                            # tentar match exato (insensível)
+                            res = mw.db.sb.table("imovel_rural").select("cod_imovel").ilike("nome_imovel", alias).limit(1).execute()
+                            data = getattr(res, "data", None) or []
+                            if data:
+                                return str(data[0].get("cod_imovel"))
+                            # tentar LIKE (parte do nome)
+                            res = mw.db.sb.table("imovel_rural").select("cod_imovel").ilike("nome_imovel", f"%{alias}%").limit(1).execute()
+                            data = getattr(res, "data", None) or []
+                            if data:
+                                return str(data[0].get("cod_imovel"))
+                        except Exception:
+                            pass
+                    # fallback legacy
+                    try:
+                        row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE UPPER(nome_imovel)=?", (alias.upper(),))
+                        if row and row[0]: return str(row[0])
+                        row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE UPPER(nome_imovel) LIKE ?", (f"%{alias.upper()}%",))
+                        if row and row[0]: return str(row[0])
+                    except Exception:
+                        pass
                     return None
 
                 def _query_cod_by_ie(ie: str):
                     mw = self.window()
                     if not ie or not mw or not hasattr(mw, "db"): return None
-                    row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE insc_estadual=?", (ie,))
-                    if row and row[0]: return str(row[0])
+                    if hasattr(mw.db, "sb"):
+                        try:
+                            res = mw.db.sb.table("imovel_rural").select("cod_imovel").eq("insc_estadual", ie).limit(1).execute()
+                            data = getattr(res, "data", None) or []
+                            if data:
+                                return str(data[0].get("cod_imovel"))
+                        except Exception:
+                            pass
+                    # fallback legacy
+                    try:
+                        row = mw.db.fetch_one("SELECT cod_imovel FROM imovel_rural WHERE insc_estadual=?", (ie,))
+                        if row and row[0]: return str(row[0])
+                    except Exception:
+                        pass
                     return None
 
                 for path in files:

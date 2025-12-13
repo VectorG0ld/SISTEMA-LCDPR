@@ -45,10 +45,30 @@ QTabBar::tab:selected { background: #1e5a9c; color: #FFFFFF; border-bottom: 2px 
 QStatusBar { background-color: #212425; color: #7F7F7F; border-top: 1px solid #1e5a9c; }
 """
 
-# -----------------------------
-# Regras de Negócio / Mapeamentos
-# -----------------------------
-FARM_MAPPING = {
+# =========================
+#  MAPEAMENTOS POR PRODUTOR
+# =========================
+# CPFs por produtor
+def _digits(s: str) -> str:
+    return ''.join(ch for ch in (s or '') if ch.isdigit())
+
+CLEUBER_CPF = "42276950153"
+GILSON_CPF  = "54860253191"
+ADRIANA_CPF = "47943246187"
+LUCAS_CPF   = "03886681130"
+
+# Tabela de owners (rótulos aceitos para alternância de perfil)
+OWNERS = {
+    "CLEUBER": {"CPF": CLEUBER_CPF, "PROFILE_LABELS": ("Cleuber", "CLEUBER")},
+    "GILSON":  {"CPF": GILSON_CPF,  "PROFILE_LABELS": ("Gilson", "GILSON")},
+    "ADRIANA": {"CPF": ADRIANA_CPF, "PROFILE_LABELS": ("Adriana", "ADRIANA")},
+    "LUCAS":   {"CPF": LUCAS_CPF,   "PROFILE_LABELS": ("Lucas", "LUCAS")},
+}
+for k in list(OWNERS.keys()):
+    OWNERS[k]["CPF_D"] = _digits(OWNERS[k]["CPF"])
+
+# ---- Mapeamentos por produtor ----
+FARM_MAPPING_CLEUBER = {
     "115149210": "Arm. Primavera",
     "111739837": "Aliança",
     "114436720": "B. Grande",
@@ -62,7 +82,18 @@ FARM_MAPPING = {
     "295359790": "Frutacc V",
     "295325704": "Siganna"
 }
-CODIGOS_CIDADES = {
+FARM_MAPPING_GILSON  = {
+    "112725503": "Formiga",
+}
+FARM_MAPPING_ADRIANA = {
+    "113348037": "Pouso da Anta",
+}
+FARM_MAPPING_LUCAS   = {
+    "115563083": "Aliança 2",
+    "115008810": "Primavera Retiro lucas",
+}
+
+CODIGOS_CIDADES_CLEUBER = {
     "Lagoa da Confusao": "Frutacc",
     "Rialma - GO": "Aliança",
     "Rialma": "Aliança", "Lizarda - TO": "Frutacc",
@@ -109,45 +140,89 @@ CODIGOS_CIDADES = {
     "Nova Crixas - GO": "Aliança",
     "Nova Crixás": "Aliança",
     "Nova Crixas": "Aliança",
-
+}
+CODIGOS_CIDADES_GILSON  = {
+    "Nova Glória - GO": "Formiga",
+    "RIALMA - GO": "Formiga",
+    "Rialma - GO": "Formiga",
+    "Rialma": "Formiga",
+    "RIALMA": "Formiga",
+    "Ceres": "NAO LANÇAR",
+    "CERES": "NAO LANÇAR",
+    "Goiania": "NAO LANÇAR",
+    "GOIANIA": "NAO LANÇAR",
+    "GOIÂNIA": "NAO LANÇAR",
+    "aparecida de goiania": "NAO LANÇAR",
+    "Aparecida de Goiania": "NAO LANÇAR",
+    "APARECIDA DE GOIANIA": "NAO LANÇAR",
+    "Ceres - GO": "NAO LANÇAR",
+    "MONTIVIDIU DO NORTE - GO": "Gabriela",
+    "Montividiu do Norte - GO": "Gabriela",
+    "Montividiu do Norte": "Gabriela",
+    "MONTIVIDIU DO NORTE": "Gabriela",
+    "Uruaçu - GO": "Formiga",
+}
+CODIGOS_CIDADES_ADRIANA = {
+    "GOIANIA": "NAO LANÇAR",
+    "Goiania": "NAO LANÇAR",
+    "GOIÂNIA": "NAO LANÇAR",
+    "Goiania - GO": "NAO LANÇAR",
+    "MONTIVIDIU DO NORTE - GO": "Pouso da Anta",
+    "Montividiu do Norte - GO": "Pouso da Anta",
+    "Montividiu do Norte": "Pouso da Anta",
+    "MONTIVIDIU DO NORTE": "Pouso da Anta",
+}
+CODIGOS_CIDADES_LUCAS   = {
+    "SAO MIGUEL DO ARAGUAIA": "Aliança 2",
+    "São Miguel do Araguaia": "Aliança 2",
+    "SÃO MIGUEL DO ARAGUAIA": "Aliança 2",
+    "Sao Miguel do Araguaia": "Aliança 2",
+    "TROMBAS": "Primavera Retiro lucas",
+    "Trombas": "Primavera Retiro lucas",
+    "Trombas - GO": "Primavera Retiro lucas",
+    "TROMBAS - GO": "Primavera Retiro lucas",
+    "NOVA GLORIA": "Aliança 2",
 }
 
-# ===== Normalização de cidades / chaves para mapeamento =====
+FARM_MAPPING_BY_OWNER = {
+    "CLEUBER": FARM_MAPPING_CLEUBER,
+    "GILSON":  FARM_MAPPING_GILSON,
+    "ADRIANA": FARM_MAPPING_ADRIANA,
+    "LUCAS":   FARM_MAPPING_LUCAS,
+}
+CODIGOS_CIDADES_BY_OWNER = {
+    "CLEUBER": CODIGOS_CIDADES_CLEUBER,
+    "GILSON":  CODIGOS_CIDADES_GILSON,
+    "ADRIANA": CODIGOS_CIDADES_ADRIANA,
+    "LUCAS":   CODIGOS_CIDADES_LUCAS,
+}
+
+# ===== Normalização de cidades =====
 import unicodedata
 import re
 
 def _norm_city_key(s: str) -> str:
-    """Remove acentos, normaliza hífens, comprime espaços e põe em UPPER p/ comparar chaves."""
     if not s:
         return ""
-    # troca hífens "estranhos" por "-"
-    s = re.sub(r"[–—−]", "-", s)          # EN DASH, EM DASH, MINUS
-    # remove acentos
+    s = re.sub(r"[–—−]", "-", s)
     s_noacc = unicodedata.normalize("NFKD", s)
     s_noacc = "".join(ch for ch in s_noacc if not unicodedata.combining(ch))
-    # colapsa espaços
     s_noacc = re.sub(r"\s+", " ", s_noacc)
-    # remove espaços ao redor de "-"
     s_noacc = re.sub(r"\s*-\s*", " - ", s_noacc).strip()
     return s_noacc.upper()
 
-# dicionário normalizado (não substitui o original — é complementar)
-CODIGOS_CIDADES_NORM = {_norm_city_key(k): v for k, v in CODIGOS_CIDADES.items()}
+# versão normalizada por owner
+CODIGOS_CIDADES_NORM_BY_OWNER = {}
+for owner_key, mapa in CODIGOS_CIDADES_BY_OWNER.items():
+    CODIGOS_CIDADES_NORM_BY_OWNER[owner_key] = {_norm_city_key(k): v for k, v in mapa.items()}
 
-
-CLEUBER_CPF = "42276950153"
+# usado quando não achar produtor
+PRODUTOR_PADRAO = "Produtor"
 
 # -----------------------------
 # Janelas auxiliares (Loading / Config / Associação)
 # -----------------------------
 class GlobalProgress:
-    """
-    Tela de progresso global. Use:
-        GlobalProgress.begin("Importando...", maximo, parent=self.window())
-        ... (loop) GlobalProgress.set_value(i)  ou GlobalProgress.step()
-        GlobalProgress.end()
-    Se não souber o total ainda, chame begin(maximo=0) que vira 'busy'.
-    """
     _dlg = None
 
     @classmethod
@@ -164,7 +239,7 @@ class GlobalProgress:
         cls._ensure(parent or QApplication.activeWindow())
         dlg = cls._dlg
         dlg.setLabelText(texto)
-        dlg.setRange(0, maximo if maximo and maximo > 0 else 0)  # 0..0 == busy
+        dlg.setRange(0, maximo if maximo and maximo > 0 else 0)
         dlg.setValue(0)
         dlg.show()
         QCoreApplication.processEvents()
@@ -186,7 +261,7 @@ class GlobalProgress:
         if not cls._dlg:
             return
         if cls._dlg.maximum() == 0:
-            return  # está em busy; nada a fazer
+            return
         cls._dlg.setValue(cls._dlg.value() + (inc or 1))
         QCoreApplication.processEvents()
 
@@ -196,7 +271,7 @@ class GlobalProgress:
             cls._dlg.reset()
             cls._dlg.hide()
             QCoreApplication.processEvents()
-            
+
 class ConfigDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -205,17 +280,13 @@ class ConfigDialog(QDialog):
         self.config = config
 
         lay = QVBoxLayout(self)
-        
-        # Escopo: nesta janela, tire as bordas internas dos inputs
         self.setObjectName("cfgDlg")
         self.setStyleSheet("#cfgDlg QLineEdit, #cfgDlg QComboBox, #cfgDlg QDateEdit, #cfgDlg QTextEdit { border:none; }")
-        
-        # Deixe APENAS a linha azul ao redor do grupo "Caminhos de Trabalho"
+
         grp = QGroupBox("Caminhos de Trabalho")
         grp.setObjectName("cfgGrp")
         grp.setStyleSheet("#cfgGrp{border:1px solid #1e5a9c; border-radius:12px; background:transparent;} #cfgGrp::title{left:10px; padding:0 6px; color:#E0E0E0;}")
         form = QFormLayout(grp)
-
 
         self.excel_path_edit = QLineEdit(self.config.get('excel_path', ''))
         self.excel_path_edit.setPlaceholderText("Caminho para a planilha Excel (RELATORIO)")
@@ -229,7 +300,6 @@ class ConfigDialog(QDialog):
         row2 = QHBoxLayout(); row2.addWidget(self.isento_path_edit); row2.addWidget(btn_isento)
         form.addRow("Pasta XMLs ISENTO:", row2)
 
-        # --- NOVO: caminho para NOTAS RECEBIDAS.xlsx ---
         self.notas_receb_path_edit = QLineEdit(self.config.get('notas_recebidas_path', ''))
         self.notas_receb_path_edit.setPlaceholderText("Caminho para a planilha NOTAS RECEBIDAS.xlsx")
         btn_notas = QPushButton("Procurar"); btn_notas.clicked.connect(self.browse_notas_recebidas)
@@ -258,7 +328,7 @@ class ConfigDialog(QDialog):
         return {
             'excel_path': self.excel_path_edit.text(),
             'isento_path': self.isento_path_edit.text(),
-            'notas_recebidas_path': self.notas_receb_path_edit.text(),  # NOVO
+            'notas_recebidas_path': self.notas_receb_path_edit.text(),
         }
 
 class AssocPagDialog(QDialog):
@@ -330,8 +400,8 @@ class RuralXmlImporter(QWidget):
         super().__init__()
 
         # Estado
-        self.proc = None                  # QProcess da varredura
-        self._cancel_import = False       # cancela importação XML
+        self.proc = None
+        self._cancel_import = False
         self.loading_window = None
         self.isento_keys = {}
         self.key_xml = {}
@@ -339,23 +409,19 @@ class RuralXmlImporter(QWidget):
         self.stat_ok = 0
         self.stat_err = 0
 
-        # Janela
         self.setWindowTitle("Importador Rural de XML")
         self.resize(940, 700)
         self.setWindowIcon(QIcon(str(ICON_PATH)))
 
         self._apply_global_styles()
 
-        # Layout raiz com splitter: topo (controles) / baixo (log)
         root = QVBoxLayout(self)
         root.setContentsMargins(14, 14, 14, 14)
         root.setSpacing(12)
 
-        # Header
         header = self._build_header()
         root.addWidget(header)
 
-        # Cards com sombra: Ações/Opções + Contadores
         controls_card = self._build_controls_card()
         stats_card = self._build_stats_card()
 
@@ -365,30 +431,33 @@ class RuralXmlImporter(QWidget):
         top_row.addWidget(stats_card, 2)
         root.addLayout(top_row)
 
-        # Splitter entre “painel (vazio agora)” e Log (para expandir)
         self.splitter = QSplitter(Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
 
-        # Log card
         log_card = self._build_log_card()
         self.splitter.addWidget(log_card)
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 3)
         root.addWidget(self.splitter)
 
-        # Rodapé
         footer = QLabel("🌱 Desenvolvido para produtores rurais — v.1.0")
         footer.setAlignment(Qt.AlignCenter)
         footer.setStyleSheet("font-size:11px; color:#7F7F7F; padding-top:4px;")
         root.addWidget(footer)
 
-        # Configuração / caminhos
         self.config = self.load_config()
         self.base_dados_path = self.config.get('base_dados_path', '')
         self.testes_path = self.config.get('testes_path', '')
         self.excel_path = self.config.get('excel_path', r"\\rilkler\LIVRO CAIXA\TESTE\TESTES.xlsx")
         self.isento_path = self.config.get('isento_path', '')
         self.notas_recebidas_path = self.config.get('notas_recebidas_path', '')
+        # PERFIL ATIVO (não muda interface; só vem do config.json)
+        self.active_owner = self.config.get('active_owner', 'CLEUBER').upper()
+        if self.active_owner not in OWNERS:
+            self.active_owner = 'CLEUBER'
+
+        # >>> ADICIONE ESTA LINHA:
+        self._apply_owner_paths(self.active_owner)
 
     # ---------- UI helpers ----------
     def _apply_global_styles(self):
@@ -405,7 +474,7 @@ class RuralXmlImporter(QWidget):
     def _build_header(self) -> QFrame:
         header = QFrame()
         header.setStyleSheet("QFrame{border:1px solid #1e5a9c; border-radius:16px;}")
-        
+
         lay = QHBoxLayout(header)
         lay.setContentsMargins(18, 16, 18, 16)
         lay.setSpacing(14)
@@ -424,17 +493,16 @@ class RuralXmlImporter(QWidget):
         f = QFont(); f.setPointSize(20); f.setBold(True)
         title.setFont(f)
         subtitle = QLabel("Importe notas, associe pagamentos e acompanhe tudo em tempo real.")
-        
+
         title.setStyleSheet("border:none;")
         subtitle.setStyleSheet("border:none;")
-        
+
         title_box = QVBoxLayout()
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-        
+
         lay.addLayout(title_box, 1)
 
-        # Ações rápidas à direita (Config / Ajuda / Fechar)
         btn_cfg = QToolButton()
         btn_cfg.setText("⚙️ Configurar")
         btn_cfg.clicked.connect(self.open_config)
@@ -453,25 +521,53 @@ class RuralXmlImporter(QWidget):
         btn_close.setText("✖ Fechar")
         btn_close.clicked.connect(self._close_self_tab)
 
-        row = QHBoxLayout()          # <-- CRIA O ROW ANTES DE USAR
+        row = QHBoxLayout()
         row.setSpacing(8)
         row.addWidget(btn_cfg)
         row.addWidget(btn_help)
-        row.addWidget(btn_close)     # <-- AGORA PODE ADICIONAR O FECHAR
+        row.addWidget(btn_close)
         lay.addLayout(row, 0)
 
         self._add_shadow(header, radius=16, blur=24, color=QColor(0,0,0,50), y_offset=5)
         return header
 
+    def _apply_owner_paths(self, owner: str):
+        """
+        Ajusta excel_path/testes_path/isento_path conforme o dono ativo
+        e salva no json/config.json para refletir na interface.
+        """
+        owner = (owner or "CLEUBER").upper()
+
+        excel_file = rf"\\rilkler\LIVRO CAIXA\TESTE\LIVRO CAIXA {owner}.xlsx"
+        self.config["excel_path"]  = excel_file
+        self.config["testes_path"] = excel_file
+
+        self.config["isento_path"] = (
+            rf"C:\Users\conta\OneDrive\Área de Trabalho\Documentos Automacao\NOTAS LIVRO CAIXA\{owner}"
+        )
+
+        # mantém se já houver em config; não forçamos mudança
+        # self.config.setdefault("notas_recebidas_path", r"\\rilkler\LIVRO CAIXA\TESTE\NOTAS RECEBIDAS.xlsx")
+
+        # Atualiza atributos usados pela UI/lógica
+        self.excel_path  = self.config.get('excel_path', '')
+        self.testes_path = self.config.get('testes_path', '')
+        self.isento_path = self.config.get('isento_path', '')
+
+        try:
+            self.save_config()  # persiste para o diálogo de Configurações ler já atualizado
+        except Exception:
+            pass
+
     def _close_self_tab(self):
         parent = self.parent()
         while parent and not isinstance(parent, QTabWidget):
             parent = parent.parent()
-        if parent:  # está dentro de um QTabWidget
+        if parent:
             idx = parent.indexOf(self)
             if idx != -1:
                 parent.removeTab(idx)
-        else:       # janela solta
+        else:
             self.close()
 
     def _build_controls_card(self) -> QFrame:
@@ -482,7 +578,6 @@ class RuralXmlImporter(QWidget):
         lay.setContentsMargins(14, 12, 14, 12)
         lay.setSpacing(10)
 
-        # Linha de botões principais (com um toolbar simples)
         actions = QHBoxLayout()
         actions.setSpacing(10)
 
@@ -494,7 +589,6 @@ class RuralXmlImporter(QWidget):
         self.btn_assoc.clicked.connect(self.associar_pagamentos)
         actions.addWidget(self.btn_assoc)
 
-        # depois de actions.addWidget(self.btn_import)
         self.btn_import_lanc = QPushButton("📥 Importar Lançamentos")
         self.btn_import_lanc.clicked.connect(self.importar_lancamentos_simples)
         actions.addWidget(self.btn_import_lanc)
@@ -502,13 +596,12 @@ class RuralXmlImporter(QWidget):
         self.btn_cancel = QPushButton("⛔ Cancelar")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.setObjectName("danger")
-        self.btn_import.setObjectName("success")   # ou self.btn_assoc.setObjectName("success")
+        self.btn_import.setObjectName("success")
         self.btn_cancel.clicked.connect(self.cancelar_processos)
         actions.addWidget(self.btn_cancel)
 
         actions.addStretch()
 
-        # Botões utilitários do Log
         self.btn_log_clear = QToolButton()
         self.btn_log_clear.setText("🧹 Limpar Log")
         self.btn_log_clear.setStyleSheet("QToolButton{background:#0d1b3d; border:1px solid #1e5a9c; border-radius:8px; padding:6px 10px;} QToolButton:hover{background:#123764;}")
@@ -523,7 +616,6 @@ class RuralXmlImporter(QWidget):
 
         lay.addLayout(actions)
 
-        # Opções
         opt = QHBoxLayout()
         opt.setSpacing(12)
         self.chk_delete = QCheckBox("Excluir notas existentes antes de importar")
@@ -545,10 +637,8 @@ class RuralXmlImporter(QWidget):
         title = QLabel("📊 Último Status da Sessão")
         f = QFont(); f.setPointSize(12); f.setBold(True)
         title.setStyleSheet("")
-
         lay.addWidget(title)
 
-        # NOVO: última linha de status + horário
         self.lbl_last_status = QLabel("—")
         self.lbl_last_status.setStyleSheet("font-weight:600; border:none; background:transparent;")
         self.lbl_last_status_time = QLabel(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
@@ -561,13 +651,12 @@ class RuralXmlImporter(QWidget):
         status_row.addWidget(self.lbl_last_status_time)
         lay.addLayout(status_row)
 
-        # Linha de contadores (Total / Sucesso / Erros)
         chips = QHBoxLayout()
         chips.setSpacing(10)
 
         self.lbl_stat_total = self._make_chip("Total", "#2B2F31", "#E0E0E0")
-        self.lbl_stat_ok    = self._make_chip("Sucesso", "#183d2a", "#A7F3D0")   # verde claro para positivos
-        self.lbl_stat_err   = self._make_chip("Erros", "#3b1f1f", "#FF6B6B")     # vermelho para negativos
+        self.lbl_stat_ok    = self._make_chip("Sucesso", "#183d2a", "#A7F3D0")
+        self.lbl_stat_err   = self._make_chip("Erros", "#3b1f1f", "#FF6B6B")
 
         chips.addWidget(self.lbl_stat_total)
         chips.addWidget(self.lbl_stat_ok)
@@ -584,7 +673,7 @@ class RuralXmlImporter(QWidget):
         w.setAlignment(Qt.AlignCenter)
         w.setStyleSheet(f"QLabel {{ background:{bg}; color:{fg}; border-radius:10px; padding:8px 12px; font-weight:600; }}")
         return w
-    
+
     def _build_log_card(self) -> QFrame:
         card = QFrame()
         card.setObjectName("logCard")
@@ -592,30 +681,29 @@ class RuralXmlImporter(QWidget):
         lay = QVBoxLayout(card)
         lay.setContentsMargins(12, 10, 12, 12)
         lay.setSpacing(8)
-    
+
         title = QLabel("📝 Histórico")
         f = QFont(); f.setBold(True); f.setPointSize(12)
         title.setFont(f)
         title.setStyleSheet("padding:2px 6px;")
         lay.addWidget(title, alignment=Qt.AlignLeft)
-    
+
         body = QFrame()
         body.setObjectName("logBody")
         body.setStyleSheet("#logBody{background:#2B2F31; border:none; border-radius:8px;}")
         body_lay = QVBoxLayout(body)
         body_lay.setContentsMargins(12, 12, 12, 12)
         body_lay.setSpacing(0)
-    
+
         self.log = QTextEdit(readOnly=True)
         self.log.setMinimumHeight(260)
         self.log.setFrameStyle(QFrame.NoFrame)
         self.log.setStyleSheet("QTextEdit{background:transparent; border:none;} QTextEdit::viewport{background:transparent; border:none;}")
-    
+
         body_lay.addWidget(self.log)
         lay.addWidget(body)
-    
+
         return card
-    
 
     def _update_stats(self):
         self.lbl_stat_total.setText(f"Total: {self.stat_total}")
@@ -650,7 +738,6 @@ class RuralXmlImporter(QWidget):
             self.log.setTextCursor(found)
             self.log.ensureCursorVisible()
         else:
-            # volta ao início
             start = QTextCursor(doc)
             start.movePosition(QTextCursor.Start)
             found = doc.find(term, start)
@@ -665,12 +752,10 @@ class RuralXmlImporter(QWidget):
         try:
             script_path = Path(__file__).parent / "Varredura NFE.py"
 
-            # Evita processo duplicado
             if self.proc and self.proc.state() != QProcess.NotRunning:
                 self.log_msg("Já existe uma varredura em execução.", "warning")
                 return
 
-            # Finaliza/limpa instância anterior, se existir
             if getattr(self, "proc", None):
                 try:
                     if self.proc.state() != QProcess.NotRunning:
@@ -684,7 +769,6 @@ class RuralXmlImporter(QWidget):
             self.proc.setWorkingDirectory(str(script_path.parent))
             self.proc.setProcessChannelMode(QProcess.MergedChannels)
 
-            # Sinais
             self.proc.started.connect(self.on_proc_started)
             self.proc.readyReadStandardOutput.connect(self.on_proc_output)
             self.proc.readyReadStandardError.connect(self.on_proc_output)
@@ -698,8 +782,7 @@ class RuralXmlImporter(QWidget):
 
             program = sys.executable
             args = ["-u", str(script_path), base_file, testes_file]
-            
-            # NOVO: se houver caminho configurado para NOTAS RECEBIDAS.xlsx, envia como 3º argumento
+
             nr_cfg = self.config.get("notas_recebidas_path", "") or getattr(self, "notas_recebidas_path", "")
             if nr_cfg:
                 p = Path(nr_cfg)
@@ -707,12 +790,11 @@ class RuralXmlImporter(QWidget):
                     args.append(str(p))
                 else:
                     self.log_msg(f"AVISO: caminho de NOTAS RECEBIDAS inválido ou inexistente:\n{nr_cfg}", "warning")
-            
+
             self.btn_assoc.setEnabled(False)
             self.btn_cancel.setEnabled(True)
             self.log_msg("Abrindo 'Varredura NFE.py' para associar pagamentos/recebimentos.", "info")
             self.proc.start(program, args)
-
 
         except Exception as e:
             self.log_msg(f"Erro ao iniciar varredura: {e}", "error")
@@ -753,11 +835,9 @@ class RuralXmlImporter(QWidget):
                 self.lbl_last_status.setText("Erro ao contar notas associadas")
                 self.log_msg(f"Erro ao ler PAGAMENTOS.txt para contar notas: {e}", "error")
 
-            # Integração com Sistema.py: perguntar e importar PAGAMENTOS.txt
             try:
                 from pathlib import Path as _Path
                 main_win = self.window()
-                # Apenas se estivermos embutidos dentro da janela principal
                 if main_win and hasattr(main_win, "_import_lancamentos_txt"):
                     resp = QMessageBox.question(
                         self,
@@ -766,7 +846,6 @@ class RuralXmlImporter(QWidget):
                         QMessageBox.Yes | QMessageBox.No
                     )
                     if resp == QMessageBox.Yes:
-                        # O script 'Varredura NFE.py' roda com diretório de trabalho no mesmo local do arquivo
                         pag_file = _Path(__file__).parent / "PAGAMENTOS.txt"
                         if pag_file.exists():
                             try:
@@ -814,7 +893,6 @@ class RuralXmlImporter(QWidget):
         self.log.ensureCursorVisible()
 
     def cancelar_processos(self):
-        """Cancela varredura (QProcess) e/ou importação de XML (LoadingWindow)."""
         cancelou = False
         if getattr(self, "proc", None) and self.proc.state() != QProcess.NotRunning:
             self.log_msg("Cancelando varredura de pagamentos...", "warning")
@@ -838,10 +916,8 @@ class RuralXmlImporter(QWidget):
         else:
             self.log_msg("Nenhum processo em execução para cancelar.", "info")
 
-
     # ---------- Ações principais ----------
     def associar_pagamentos(self):
-        """Abre diálogo, salva caminhos e executa Varredura NFE com logs na interface."""
         try:
             script_path = Path(__file__).parent / "Varredura NFE.py"
             if not script_path.exists():
@@ -861,7 +937,6 @@ class RuralXmlImporter(QWidget):
                 return
             base_file, testes_file = dlg.get_paths()
 
-            # Persistir no json/config.json
             self.config["base_dados_path"] = base_file
             self.config["testes_path"] = testes_file
             self.save_config()
@@ -869,7 +944,6 @@ class RuralXmlImporter(QWidget):
             self.testes_path = testes_file
             self.log_msg("Caminhos salvos em json/config.json", "success")
 
-            # Iniciar varredura via QProcess
             self.run_varredura(base_file, testes_file)
 
         except Exception as e:
@@ -877,7 +951,6 @@ class RuralXmlImporter(QWidget):
             QMessageBox.critical(self, "Erro ao executar", f"Ocorreu um erro:\n{e}")
 
     def import_xmls(self):
-        """Escolhe XMLs, mostra Loading bonitinho e processa com possibilidade de cancelamento."""
         try:
             start_dir = self.config.get("last_xml_dir", os.getcwd())
             files, _ = QFileDialog.getOpenFileNames(self, "Selecione os arquivos XML", start_dir, "XML (*.xml)")
@@ -885,20 +958,17 @@ class RuralXmlImporter(QWidget):
                 self.log_msg("Nenhum arquivo selecionado. Operação cancelada.", "warning")
                 return
 
-            # Persistir último diretório
             try:
                 self.config["last_xml_dir"] = str(Path(files[0]).parent)
                 self.save_config()
             except Exception:
                 pass
 
-            # Reset estatísticas da sessão
             self.stat_total = len(files)
             self.stat_ok = 0
             self.stat_err = 0
             self._update_stats()
 
-            # Estado de cancelamento
             self._cancel_import = False
             self.btn_cancel.setEnabled(True)
 
@@ -911,7 +981,6 @@ class RuralXmlImporter(QWidget):
             QMessageBox.critical(self, "Erro", f"Ocorreu um erro ao iniciar a importação:\n{e}")
 
     def importar_lancamentos_simples(self):
-        # Abre o explorador para TXT/XLSX
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Importar Lançamentos",
@@ -920,19 +989,18 @@ class RuralXmlImporter(QWidget):
         )
         if not path:
             return
-    
+
         try:
-            main_win = self.window()  # janela principal (MainWindow)
+            main_win = self.window()
             if not main_win or not hasattr(main_win, "_import_lancamentos_txt"):
                 QMessageBox.warning(self, "Aviso", "Janela principal não disponível para importar.")
                 return
-    
+
             if path.lower().endswith(".txt"):
                 main_win._import_lancamentos_txt(path)
             else:
                 main_win._import_lancamentos_excel(path)
-    
-            # Atualiza a UI principal após importar
+
             if hasattr(main_win, "carregar_lancamentos"):
                 main_win.carregar_lancamentos()
             if hasattr(main_win, "dashboard"):
@@ -940,12 +1008,11 @@ class RuralXmlImporter(QWidget):
                     main_win.dashboard.load_data()
                 except Exception:
                     pass
-                
+
             self.log_msg(f"Lançamentos importados de {os.path.basename(path)}", "success")
         except Exception as e:
             QMessageBox.warning(self, "Importação Falhou", f"{e}")
-    
-    
+
     # ---------- Config ----------
     def load_config(self):
         config_dir = Path(__file__).parent / "json"
@@ -973,20 +1040,20 @@ class RuralXmlImporter(QWidget):
     def open_config(self):
         dialog = ConfigDialog(self.config, self)
         if dialog.exec() == QDialog.Accepted:
-            # MESCLA ao invés de sobrescrever (preserva base_dados_path e testes_path)
             new_cfg = dialog.get_config() or {}
             self.config.update(new_cfg)
             self.notas_recebidas_path = self.config.get('notas_recebidas_path', '')
             self.excel_path  = self.config.get('excel_path', '')
             self.isento_path = self.config.get('isento_path', '')
+            # mantém active_owner se já existe
+            if 'active_owner' not in self.config:
+                self.config['active_owner'] = self.active_owner
             self.save_config()
             self.log_msg("Configurações atualizadas", "success")
 
-        # ---------- Log / mensagens ----------
+    # ---------- Log / mensagens ----------
     def log_msg(self, message: str, msg_type: str = "info"):
         now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    
-        # Paleta enxuta: negativos VERMELHO, positivos VERDE CLARO, restante BRANCO
         palette = {
             "info":   {"emoji": "ℹ️", "text": "#FFFFFF", "accent": "#3A3C3D", "weight": "500"},
             "success":{"emoji": "✅", "text": "#A7F3D0", "accent": "#2F7D5D", "weight": "700"},
@@ -995,14 +1062,13 @@ class RuralXmlImporter(QWidget):
             "title":  {"emoji": "📌", "text": "#FFFFFF", "accent": "#1e5a9c", "weight": "800"},
             "divider":{"emoji": "",   "text": "",       "accent": "#3A3C3D", "weight": "400"},
         }
-    
+
         if msg_type == "divider":
             self.log.append('<div style="border-top:1px solid #3A3C3D; margin:10px 0;"></div>')
             return
-    
+
         p = palette.get(msg_type, palette["info"])
-    
-        # Linha limpa: barra lateral por severidade + timestamp + 1 emoji + mensagem
+
         html = (
             f'<div style="border-left:3px solid {p["accent"]};'
             f' padding:6px 10px; margin:2px 0;">'
@@ -1012,7 +1078,6 @@ class RuralXmlImporter(QWidget):
             f'</div>'
         )
         self.log.append(html)
-    
 
     # ---------- OpenPyXL helpers ----------
     def copy_row_style(self, ws, src_row, dest_row, cols):
@@ -1033,6 +1098,138 @@ class RuralXmlImporter(QWidget):
             if min_row == header_row:
                 table.ref = f"{get_column_letter(min_col)}{header_row}:{get_column_letter(max_col)}{new_row}"
                 self.log_msg(f"Tabela '{table.name}' estendida até {new_row}.", "info")
+
+    # ---------- DETECÇÃO DE DONO / PERFIL ----------
+    def _resolve_owner_from_parties(self,
+                                    emit_id: str,
+                                    dest_id: str,
+                                    emit_ie: str,
+                                    dest_ie: str,
+                                    emit_city: str,
+                                    emit_uf: str,
+                                    dest_city: str,
+                                    dest_uf: str) -> tuple:
+        """
+        Retorna (owner_key, owner_side, farm_ie, farm_name)
+
+        owner_key: "CLEUBER" | "GILSON" | "ADRIANA" | "LUCAS" | None
+        owner_side: "emit" | "dest" | None
+        farm_ie: ie usado
+        farm_name: nome da fazenda (ou 'ISENTO')
+        """
+        active = (self.config.get('active_owner') or self.active_owner or 'CLEUBER').upper()
+        if active not in OWNERS:
+            active = 'CLEUBER'
+
+        emit_id_d = _digits(emit_id)
+        dest_id_d = _digits(dest_id)
+
+        emit_matches = [k for k, v in OWNERS.items() if emit_id_d and emit_id_d == v["CPF_D"]]
+        dest_matches = [k for k, v in OWNERS.items() if dest_id_d and dest_id_d == v["CPF_D"]]
+
+        # 1) se os dois lados são produtores → prioriza perfil ativo
+        if emit_matches and dest_matches:
+            if active in emit_matches:
+                owner_key = active
+                owner_side = "emit"
+            elif active in dest_matches:
+                owner_key = active
+                owner_side = "dest"
+            else:
+                # se o perfil ativo não está em nenhum, fica com emit
+                owner_key = emit_matches[0]
+                owner_side = "emit"
+        # 2) só o emitente é produtor
+        elif emit_matches:
+            owner_key = emit_matches[0]
+            owner_side = "emit"
+        # 3) só o destinatário é produtor
+        elif dest_matches:
+            owner_key = dest_matches[0]
+            owner_side = "dest"
+        else:
+            owner_key = None
+            owner_side = None
+
+        # agora tenta IE / cidade
+        farm_ie = ''
+        farm_name = 'ISENTO'
+
+        # se já tenho o dono, uso o mapa dele
+        if owner_key:
+            farm_map = FARM_MAPPING_BY_OWNER.get(owner_key, {})
+            city_map = CODIGOS_CIDADES_BY_OWNER.get(owner_key, {})
+            city_norm_map = CODIGOS_CIDADES_NORM_BY_OWNER.get(owner_key, {})
+
+            # IE do lado do dono
+            if owner_side == "emit" and emit_ie and emit_ie in farm_map:
+                farm_ie = emit_ie
+                farm_name = farm_map[emit_ie]
+            elif owner_side == "dest" and dest_ie and dest_ie in farm_map:
+                farm_ie = dest_ie
+                farm_name = farm_map[dest_ie]
+            else:
+                # tenta cidade (emit/dest conforme lado do dono; se não achar, tenta os dois)
+                candidates = []
+                if owner_side == "emit":
+                    candidates = [f"{emit_city} - {emit_uf}".strip(), emit_city]
+                elif owner_side == "dest":
+                    candidates = [f"{dest_city} - {dest_uf}".strip(), dest_city]
+                else:
+                    candidates = [
+                        f"{emit_city} - {emit_uf}".strip(), emit_city,
+                        f"{dest_city} - {dest_uf}".strip(), dest_city
+                    ]
+                found = False
+                for raw in candidates:
+                    if not raw:
+                        continue
+                    for key_try in self._variants_city(raw, emit_uf or dest_uf):
+                        if key_try in city_map:
+                            farm_name = city_map[key_try]
+                            found = True
+                            break
+                        k_norm = _norm_city_key(key_try)
+                        if k_norm in city_norm_map:
+                            farm_name = city_norm_map[k_norm]
+                            found = True
+                            break
+                    if found:
+                        break
+        else:
+            # não sabemos quem é → usa o perfil ativo como fallback de mapeamento de cidade
+            fallback_map = CODIGOS_CIDADES_BY_OWNER.get(active, {})
+            fallback_norm = CODIGOS_CIDADES_NORM_BY_OWNER.get(active, {})
+            candidates = [
+                f"{emit_city} - {emit_uf}".strip(), emit_city,
+                f"{dest_city} - {dest_uf}".strip(), dest_city
+            ]
+            for raw in candidates:
+                if not raw:
+                    continue
+                for key_try in self._variants_city(raw, emit_uf or dest_uf):
+                    if key_try in fallback_map:
+                        farm_name = fallback_map[key_try]
+                        break
+                    k_norm = _norm_city_key(key_try)
+                    if k_norm in fallback_norm:
+                        farm_name = fallback_norm[k_norm]
+                        break
+
+        return owner_key, owner_side, farm_ie, farm_name
+
+    def _variants_city(self, city: str, uf: str):
+        city = (city or '').strip()
+        if not city:
+            return []
+        s_noacc = unicodedata.normalize("NFKD", city)
+        s_noacc = ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
+        base = [city, city.upper(), s_noacc, s_noacc.upper()]
+        if uf:
+            clean = re.sub(r'\s*-\s*[A-Z]{2}$', '', s_noacc, flags=re.I).strip()
+            if clean:
+                base += [f"{clean} - {uf}", f"{clean.upper()} - {uf}"]
+        return base
 
     # ---------- Importação de XML ----------
     def process_files(self, files):
@@ -1096,22 +1293,19 @@ class RuralXmlImporter(QWidget):
                 self.log_msg(f"Processando arquivo: {filename}", "title")
                 tree = ET.parse(xml_file)
                 root = tree.getroot()
-                # === NOVO: Suporta NF-e e NFSe ===
                 ns = {'n': 'http://www.portalfiscal.inf.br/nfe'}
                 ns_nfse = {'s': 'http://www.sped.fazenda.gov.br/nfse'}
-                
-                # Tenta NF-e primeiro
+
                 ide = root.find('.//n:ide', ns)
-                
+
                 is_nfse = False
                 if ide is not None:
-                    # ---------- NF-e ----------
+                    # ========== NFE ==========
                     dh = (ide.findtext('n:dhEmi', default='', namespaces=ns) or '').strip()
                     nNF = (ide.findtext('n:nNF', default='', namespaces=ns) or '').strip()
                     tp  = (ide.findtext('n:tpNF', default='0', namespaces=ns) or '0').strip()
                     nat = (ide.findtext('n:natOp', default='', namespaces=ns) or '').strip()
-                
-                    # data de emissão NF-e
+
                     try:
                         dt = datetime.fromisoformat(dh)
                     except Exception:
@@ -1119,139 +1313,153 @@ class RuralXmlImporter(QWidget):
                     date  = dt.strftime("%d/%m/%Y")
                     month = dt.month
                     year  = dt.year
-                
-                    # participantes
+
                     emit = root.find('.//n:emit', ns)
                     dest = root.find('.//n:dest', ns)
-                    emit_name = emit.findtext('n:xNome', default='', namespaces=ns)
-                    dest_name = dest.findtext('n:xNome', default='', namespaces=ns)
-                    emit_id_node = emit.find('n:CNPJ', ns) or emit.find('n:CPF', ns)
-                    dest_id_node = dest.find('n:CNPJ', ns) or dest.find('n:CPF', ns)
+                    emit_name = emit.findtext('n:xNome', default='', namespaces=ns) if emit is not None else ''
+                    dest_name = dest.findtext('n:xNome', default='', namespaces=ns) if dest is not None else ''
+                    emit_id_node = emit.find('n:CNPJ', ns) if emit is not None else None
+                    if emit_id_node is None and emit is not None:
+                        emit_id_node = emit.find('n:CPF', ns)
+                    dest_id_node = dest.find('n:CNPJ', ns) if dest is not None else None
+                    if dest_id_node is None and dest is not None:
+                        dest_id_node = dest.find('n:CPF', ns)
                     emit_id = emit_id_node.text.strip() if (emit_id_node is not None and emit_id_node.text) else ''
                     dest_id = dest_id_node.text.strip() if (dest_id_node is not None and dest_id_node.text) else ''
-                
-                    # fallback se faltou CNPJ/CPF em algum nó
+
+                    # fallback geral
                     if not emit_id or not dest_id:
                         all_ids = [n.text.strip() for n in root.findall('.//n:CNPJ', ns) + root.findall('.//n:CPF', ns) if n.text]
                         if not emit_id and all_ids: emit_id = all_ids[0]
                         if not dest_id and len(all_ids) > 1: dest_id = all_ids[-1]
-                
-                    cleuber_emit = (emit_id == CLEUBER_CPF)
-                    cleuber_dest = (dest_id == CLEUBER_CPF)
-                
-                    # IE -> fazenda; se não houver IE, cair para cidade
-                    farm_ie_node = emit.find('n:IE', ns) if cleuber_emit else (dest.find('n:IE', ns) if cleuber_dest else None)
-                    farm_ie = (farm_ie_node.text.strip() if (farm_ie_node is not None and farm_ie_node.text in FARM_MAPPING) else '')
-                    if farm_ie:
-                        farm_name = FARM_MAPPING.get(farm_ie, 'ISENTO')
-                    else:
-                        # Fallback por cidade – busca a UF também em enderNac/UF e dentro do DPS
-                        import unicodedata, re
-                        
-                        def _nfse_get_uf(root, infs, emit, toma, ns_nfse) -> str:
-                            # tenta em várias posições comuns da NFSe (Abrasf/SPED)
-                            xpaths = [
-                                's:UFIncid',                                   # no infNFSe
-                                './/s:ender/s:UF', './/s:enderNac/s:UF',       # emit/toma com ender OU enderNac
-                                './/s:prest//s:end//s:endNac/s:UF',
-                                './/s:prest//s:enderNac/s:UF',
-                                './/s:toma//s:end//s:endNac/s:UF',
-                                './/s:toma//s:enderNac/s:UF',
-                                './/s:emit//s:enderNac/s:UF',
-                                './/s:DPS//s:prest//s:end//s:endNac/s:UF',     # dentro do DPS
-                            ]
-                            # procura primeiro relativo a infNFSe (se fornecido), depois no documento todo
-                            for xp in xpaths:
-                                v = ''
-                                if infs is not None:
-                                    # infs pode não existir em NFe; proteja o acesso
-                                    try:
-                                        v = infs.findtext(xp, default='', namespaces=ns_nfse)
-                                    except Exception:
-                                        v = ''
-                                if not v:
-                                    v = root.findtext(xp, default='', namespaces=ns_nfse)
-                                if v:
-                                    return v.strip().upper()
-                            return ''
-                        
-                        def _normalize_no_accents(s: str) -> str:
-                            s = (s or '').strip()
-                            if not s:
-                                return ''
-                            s_noacc = unicodedata.normalize('NFKD', s)
-                            return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
-                        
-                        def _variants(city: str, uf: str):
-                            """Gera variações para casar com CODIGOS_CIDADES"""
-                            city = (city or '').strip()
-                            if not city:
-                                return []
-                            noacc = _normalize_no_accents(city)
-                            base_variants = [city, city.upper(), noacc, noacc.upper()]
-                            if uf:
-                                # também tenta "Cidade - UF" (muitos mapas estão assim)
-                                base = re.sub(r'\s*-\s*[A-Z]{2}$', '', noacc, flags=re.I).strip()
-                                if base:
-                                    base_variants += [f'{base} - {uf}', f'{base.upper()} - {uf}']
-                            return base_variants
-                        
-                        # tenta obter <infNFSe> do documento (pode não existir em NF-e)
-                        infs_local = root.find('.//s:infNFSe', ns_nfse)
-                        # toma não existe em NF-e; passe o nó de destino (dest) para as verificações de cidade/UF
-                        uf = _nfse_get_uf(root, infs_local, emit, dest, ns_nfse)
-                    
-                        # candidatos de cidade por ordem de preferência (NFSe padrão SPED)
-                        cand_raw = [
-                            (infs_local.findtext('s:xLocIncid', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
-                            (infs_local.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
-                            (infs_local.findtext('s:xLocEmi', default='', namespaces=ns_nfse) if infs_local is not None else '') or '',
-                            # endereços (alguns layouts trazem xMun)
-                            emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
-                            emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
-                            dest.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if dest is not None else '',
-                            dest.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if dest is not None else '',
-                        ]
 
-                        farm_name = 'ISENTO'
-                        for raw in cand_raw:
-                            for key_try in _variants(raw, uf):
-                                if key_try and key_try in CODIGOS_CIDADES:
-                                    farm_name = CODIGOS_CIDADES[key_try]
-                                    break
-                            if farm_name != 'ISENTO':
-                                break
+                    emit_ie_node = emit.find('n:IE', ns) if emit is not None else None
+                    dest_ie_node = dest.find('n:IE', ns) if dest is not None else None
+                    emit_ie = emit_ie_node.text.strip() if (emit_ie_node is not None and emit_ie_node.text) else ''
+                    dest_ie = dest_ie_node.text.strip() if (dest_ie_node is not None and dest_ie_node.text) else ''
 
-                    # define contraparte e coluna do valor
-                    if cleuber_emit:
+                    emit_city = emit.findtext('n:enderEmit/n:xMun', default='', namespaces=ns) if emit is not None else ''
+                    emit_uf   = emit.findtext('n:enderEmit/n:UF',  default='', namespaces=ns) if emit is not None else ''
+                    dest_city = dest.findtext('n:enderDest/n:xMun', default='', namespaces=ns) if dest is not None else ''
+                    dest_uf   = dest.findtext('n:enderDest/n:UF',  default='', namespaces=ns) if dest is not None else ''
+
+                    owner_key, owner_side, farm_ie, farm_name = self._resolve_owner_from_parties(
+                        emit_id, dest_id, emit_ie, dest_ie, emit_city, emit_uf, dest_city, dest_uf
+                    )
+
+                    # dados de produto/total
+                    prod  = root.findtext('.//n:det/n:prod/n:xProd', default='', namespaces=ns) or ''
+                    cfop  = root.findtext('.//n:det/n:prod/n:CFOP', default='', namespaces=ns) or ''
+                    v_total_txt = root.findtext('.//n:ICMSTot/n:vNF', default='0', namespaces=ns) or '0'
+                    try:
+                        total = float(str(v_total_txt).replace(',', '.'))
+                    except Exception:
+                        total = 0.0
+
+                    key = (root.findtext('.//n:protNFe//n:chNFe', default='', namespaces=ns)
+                           or root.findtext('.//n:infProt/n:chNFe', default='', namespaces=ns) or '')
+                    if key:
+                        self.key_xml[key] = xml_file
+
+                    # define contraparte e coluna
+                    if owner_key and owner_side == "emit":
                         final_name, final_id = dest_name, dest_id
                         valor_col = 13 if tp == '1' else 14
-                        operation_type = "RECEITA (Cleuber Emitente, tpNF=1)" if tp == '1' else "DESPESA (Cleuber Emitente, tpNF=0)"
-                    elif cleuber_dest:
+                        operation_type = f"RECEITA ({owner_key} emitente, tpNF={tp})" if tp == '1' else f"DESPESA ({owner_key} emitente, tpNF={tp})"
+                    elif owner_key and owner_side == "dest":
                         final_name, final_id = emit_name, emit_id
                         valor_col = 14 if tp == '1' else 13
-                        operation_type = "DESPESA (Cleuber Destinatário, tpNF=1)" if tp == '1' else "RECEITA (Cleuber Destinatário, tpNF=0)"
+                        operation_type = f"DESPESA ({owner_key} destinatário, tpNF={tp})" if tp == '1' else f"RECEITA ({owner_key} destinatário, tpNF={tp})"
                     else:
                         final_name, final_id = emit_name, emit_id
                         valor_col = 13 if tp == '1' else 14
-                        operation_type = "RECEITA (Cleuber não encontrado, tpNF=1)" if tp == '1' else "DESPESA (Cleuber não encontrado, tpNF=0)"
-                        self.log_msg(f"Cleuber não encontrado como emitente/destinatário. Usando: {operation_type}", "warning")
-                
+                        operation_type = f"RECEITA ({PRODUTOR_PADRAO} não identificado, tpNF={tp})" if tp == '1' else f"DESPESA ({PRODUTOR_PADRAO} não identificado, tpNF={tp})"
+                        self.log_msg(f"{PRODUTOR_PADRAO} não identificado como emitente/destinatário. Usando fallback genérico.", "warning")
+
+                    dups = root.findall('.//n:dup', ns)
+                    if dups:
+                        self.log_msg(f"Nota fiscal {nNF} possui {len(dups)} parcela(s)", "info")
+                        for dup in dups:
+                            while ws.cell(current, 3).value:
+                                current += 1
+
+                            dVenc = dup.find('n:dVenc', ns).text
+                            vDup = float(dup.find('n:vDup', ns).text)
+
+                            dt_venc = datetime.strptime(dVenc, "%Y-%m-%d")
+                            date_parc = dt_venc.strftime("%d/%m/%Y")
+                            month_parc = dt_venc.month
+                            year_parc = dt_venc.year
+
+                            src_row = start if current == start else current - 1
+                            self.copy_row_style(ws, src_row, current, cols_style)
+
+                            ws.cell(current, 3, date_parc)
+                            ws.cell(current, 4, month_parc)
+                            ws.cell(current, 5, year_parc)
+                            ws.cell(current, 6, nNF)
+                            ws.cell(current, 7, final_name)
+                            ws.cell(current, 8, farm_ie)
+                            ws.cell(current, 9, farm_name)
+                            ws.cell(current, 10, final_id)
+                            ws.cell(current, 11, prod)
+                            ws.cell(current, 12, cfop)
+                            ws.cell(current, valor_col, vDup)
+                            ws.cell(current, 15, nat)
+                            ws.cell(current, 16, key)
+                            ws.cell(current, 17, None)
+
+                            if farm_name == "ISENTO":
+                                if key not in self.isento_keys: self.isento_keys[key] = []
+                                self.isento_keys[key].append(current)
+                                self.log_msg(f"Nota ISENTO registrada (linha {current})", "info")
+
+                            last = max(last, current)
+                            self.log_msg(f"Linha {current}: Parcela R$ {vDup:.2f} vencendo em {date_parc} ({operation_type})", "success")
+                            current += 1
+                    else:
+                        while ws.cell(current, 3).value:
+                            current += 1
+
+                        src_row = start if current == start else current - 1
+                        self.copy_row_style(ws, src_row, current, cols_style)
+
+                        ws.cell(current, 3, date)
+                        ws.cell(current, 4, month)
+                        ws.cell(current, 5, year)
+                        ws.cell(current, 6, nNF)
+                        ws.cell(current, 7, final_name)
+                        ws.cell(current, 8, farm_ie)
+                        ws.cell(current, 9, farm_name)
+                        ws.cell(current, 10, final_id)
+                        ws.cell(current, 11, prod)
+                        ws.cell(current, 12, cfop)
+                        ws.cell(current, valor_col, total)
+                        ws.cell(current, 15, nat)
+                        ws.cell(current, 16, key)
+                        ws.cell(current, 17, None)
+
+                        if farm_name == "ISENTO":
+                            if key not in self.isento_keys: self.isento_keys[key] = []
+                            self.isento_keys[key].append(current)
+                            self.log_msg(f"Nota ISENTO registrada (linha {current})", "info")
+
+                        last = max(last, current)
+                        self.log_msg(f"Linha {current}: Nota completa R$ {total:.2f} emitida em {date} ({operation_type})", "success")
+
                 else:
-                    # ---------- NFSe (padrão nacional SPED) ----------
+                    # ========== NFSE ==========
                     is_nfse = True
                     infs = root.find('.//s:infNFSe', ns_nfse)
                     if infs is None:
                         raise ValueError("XML não parece ser NF-e nem NFSe suportado")
 
-                    nfse_id = (infs.get('Id') or '').strip()  # ex.: "NFS5221601..."
-                
-                    # número da NFSe
+                    nfse_id = (infs.get('Id') or '').strip()
+
                     nNF = (infs.findtext('.//s:nNFSe', default='', namespaces=ns_nfse) or '').strip()
                     if not nNF:
                         nNF = (infs.findtext('.//s:nDFSe', default='', namespaces=ns_nfse) or '').strip()
-                
-                    # data de emissão: vários municípios mudam a tag — tentamos algumas
+
                     dh = (infs.findtext('.//s:dhEmiNFSe', default='', namespaces=ns_nfse)
                           or infs.findtext('.//s:dhEmi', default='', namespaces=ns_nfse)
                           or root.findtext('.//s:DPS//s:dhEmi', default='', namespaces=ns_nfse) or '')
@@ -1268,275 +1476,102 @@ class RuralXmlImporter(QWidget):
                     date  = dt.strftime("%d/%m/%Y")
                     month = dt.month
                     year  = dt.year
-                
-                    # participantes (prestador=emit, tomador=toma)
+
                     emit = infs.find('.//s:emit', ns_nfse)
                     toma = infs.find('.//s:toma', ns_nfse)
-                    emit_name = (emit.findtext('s:xNome', default='', namespaces=ns_nfse) or '')
-
-                    # toma pode não existir: proteja os findtext
-                    toma_name = ((toma.findtext('s:xNome', default='', namespaces=ns_nfse) if toma is not None else '') or '')
+                    emit_name = (emit.findtext('s:xNome', default='', namespaces=ns_nfse) or '') if emit is not None else ''
+                    toma_name = (toma.findtext('s:xNome', default='', namespaces=ns_nfse) or '') if toma is not None else ''
 
                     emit_id = ((emit.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
-                                emit.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip())
+                                emit.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip()) if emit is not None else ''
 
-                    toma_id = (((toma.findtext('s:CNPJ', default='', namespaces=ns_nfse) if toma is not None else '') or
-                                (toma.findtext('s:CPF',  default='', namespaces=ns_nfse) if toma is not None else '') or '').strip())
-                
-                    # --- NOVO: se NÃO houver tomador e o INTERMEDIÁRIO for o CLEUBER, usar o intermediário como tomador ---
+                    toma_id = ((toma.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
+                                toma.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip()) if toma is not None else ''
+
                     interm = (root.find('.//s:interm', ns_nfse) or root.find('.//s:DPS//s:interm', ns_nfse))
                     if (not toma_id or not toma_name) and interm is not None:
-                        interm_id = ((interm.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
-                                      interm.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip())
-                        if interm_id == CLEUBER_CPF:
-                            # promove o intermediário a "tomador" para fins de classificação
-                            toma = interm
-                            toma_id = interm_id
-                            toma_name = (interm.findtext('s:xNome', default='', namespaces=ns_nfse) or '')
+                        toma = interm
+                        toma_id = ((interm.findtext('s:CNPJ', default='', namespaces=ns_nfse) or
+                                    interm.findtext('s:CPF',  default='', namespaces=ns_nfse) or '').strip())
+                        toma_name = (interm.findtext('s:xNome', default='', namespaces=ns_nfse) or '')
 
-                    cleuber_emit = (emit_id == CLEUBER_CPF)
-                    cleuber_dest = (toma_id == CLEUBER_CPF)
-                
-                    # valor: preferir vLiq; fallback vServ no DPS
                     vliq = (infs.findtext('.//s:valores/s:vLiq', default='', namespaces=ns_nfse) or '').strip()
                     if vliq:
                         total = float(str(vliq).replace(',', '.'))
                     else:
                         vserv = (root.findtext('.//s:DPS//s:valores//s:vServ', default='0', namespaces=ns_nfse) or '0')
                         total = float(str(vserv).replace(',', '.'))
-                
-                    # descrição do serviço (xProd equivalente)
+
                     prod = (root.findtext('.//s:DPS//s:xDescServ', default='', namespaces=ns_nfse) or '')
-                    cfop = ""  # NFSe não tem CFOP
-                
-                    # IE -> fazenda; se não houver IE, cair para cidade (NFSe)
-                    farm_ie = ''
-                    farm_name = 'ISENTO'
+                    cfop = ""
 
-                    # 1) tentar IE em emit/toma (quando houver)
-                    ie_node = None
+                    emit_ie_nfse = emit.findtext('s:IE', default='', namespaces=ns_nfse) if emit is not None else ''
+                    toma_ie_nfse = toma.findtext('s:IE', default='', namespaces=ns_nfse) if toma is not None else ''
+
+                    # cidades para fallback
+                    def _nfse_get_uf(root, infs, emit, toma, ns_nfse) -> str:
+                        xpaths = [
+                            's:UFIncid',
+                            './/s:ender/s:UF', './/s:enderNac/s:UF',
+                            './/s:prest//s:end//s:endNac/s:UF',
+                            './/s:prest//s:enderNac/s:UF',
+                            './/s:toma//s:end//s:endNac/s:UF',
+                            './/s:toma//s:enderNac/s:UF',
+                            './/s:emit//s:enderNac/s:UF',
+                            './/s:DPS//s:prest//s:end//s:endNac/s:UF',
+                            './/s:DPS//s:toma//s:end//s:endNac/s:UF',
+                        ]
+                        for xp in xpaths:
+                            v = ''
+                            if infs is not None:
+                                try:
+                                    v = infs.findtext(xp, default='', namespaces=ns_nfse)
+                                except Exception:
+                                    v = ''
+                            if not v:
+                                v = root.findtext(xp, default='', namespaces=ns_nfse)
+                            if v:
+                                return v.strip().upper()
+                        return ''
+
+                    uf = _nfse_get_uf(root, infs, emit, toma, ns_nfse)
+
+                    emit_city = ''
+                    dest_city = ''
                     if emit is not None:
-                        ie_node = emit.find('s:IE', ns_nfse)
-                    if (ie_node is None or not (ie_node.text or '').strip()) and toma is not None:
-                        ie_node = toma.find('s:IE', ns_nfse)
+                        emit_city = (emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) or
+                                     emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) or '')
+                    if toma is not None:
+                        dest_city = (toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) or
+                                     toma.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) or '')
 
-                    if ie_node is not None:
-                        ie_txt = (ie_node.text or '').strip()
-                        if ie_txt in FARM_MAPPING:
-                            farm_ie = ie_txt
-                            farm_name = FARM_MAPPING[ie_txt]
+                    owner_key, owner_side, farm_ie, farm_name = self._resolve_owner_from_parties(
+                        emit_id, toma_id, emit_ie_nfse, toma_ie_nfse, emit_city, uf, dest_city, uf
+                    )
 
-                    # 2) se não achou IE mapeada, SEMPRE tentar por cidade (independe de Cleuber)
-                    if farm_name == 'ISENTO':
-                        import unicodedata, re
-
-                        def _nfse_get_uf(root, infs, emit, toma, ns_nfse) -> str:
-                            # tenta em várias posições comuns da NFSe (Abrasf/SPED)
-                            xpaths = [
-                                's:UFIncid',                                   # no infNFSe
-                                './/s:ender/s:UF', './/s:enderNac/s:UF',       # emit/toma com ender OU enderNac
-                                './/s:prest//s:end//s:endNac/s:UF',
-                                './/s:prest//s:enderNac/s:UF',
-                                './/s:toma//s:end//s:endNac/s:UF',
-                                './/s:toma//s:enderNac/s:UF',
-                                './/s:emit//s:enderNac/s:UF',
-                                './/s:DPS//s:prest//s:end//s:endNac/s:UF',     # dentro do DPS
-                                './/s:DPS//s:toma//s:end//s:endNac/s:UF',   # TOMADOR dentro do DPS  ← NOVO
-                            ]
-                            for xp in xpaths:
-                                v = infs.findtext(xp, default='', namespaces=ns_nfse)
-                                if not v:
-                                    v = root.findtext(xp, default='', namespaces=ns_nfse)
-                                if v:
-                                    return v.strip().upper()
-                            return ''
-
-                        def _normalize_no_accents(s: str) -> str:
-                            s = (s or '').strip()
-                            if not s:
-                                return ''
-                            s_noacc = unicodedata.normalize('NFKD', s)
-                            return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
-
-                        def _variants(city: str, uf: str):
-                            """Gera variações para casar com CODIGOS_CIDADES"""
-                            city = (city or '').strip()
-                            if not city:
-                                return []
-                            noacc = _normalize_no_accents(city)
-                            base = re.sub(r'\s*-\s*[A-Z]{2}$', '', noacc, flags=re.I).strip()  # remove sufixo "- UF" se vier
-                            variants = [city, city.upper(), noacc, noacc.upper()]
-                            if uf and base:
-                                variants += [f'{base} - {uf}', f'{base.upper()} - {uf}']
-                            return variants
-
-                        uf = _nfse_get_uf(root, infs, emit, toma, ns_nfse)
-
-                        root.findtext('.//s:DPS//s:toma//s:end//s:endNac//s:xMun', default='', namespaces=ns_nfse) or '',
-
-                        # candidatos de cidade por ordem de preferência (NFSe padrão SPED)
-                        cand_raw = [
-                            infs.findtext('s:xLocIncid', default='', namespaces=ns_nfse) or '',
-                            infs.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) or '',
-                            infs.findtext('s:xLocEmi', default='', namespaces=ns_nfse) or '',
-                            # endereços (alguns layouts trazem xMun)
-                            emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
-                            emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else '',
-                            toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma is not None else '',
-                            toma.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if toma is not None else '',
-                        ]
-
-                        # --- NOVO (NFSe): priorizar TOMADOR usando códigos IBGE (cMun) quando não houver xMun ---
-                        IBGE_TO_CITY = {
-                            "5221452": "Trombas",              # GO
-                            "5201405": "Aparecida de Goiânia", # GO (prestador desse XML)
-                            "5218003": "Porangatu",            # GO
-                            "3170107": "Uberaba",              # MG
-                            "5213772": "Nova Crixás",   
-                            "5205406": "Ceres",
-                            "5208806": "Goianira",
-                            "5218607": "Rialma",
-                            "5214861": "Nova Glória",
-                        }
-                        def _uf_from_ibge(code: str) -> str:
-                            if not code or len(code) < 2: return ''
-                            return {
-                                "11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
-                                "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
-                                "31":"MG","32":"ES","33":"RJ","35":"SP",
-                                "41":"PR","42":"SC","43":"RS",
-                                "50":"MS","51":"MT","52":"GO","53":"DF",
-                            }.get(code[:2], '')
-
-                        # 1) Tente cMun do TOMADOR primeiro
-                        candidatos_cod = []
-                        if toma is not None:
-                            candidatos_cod.append(toma.findtext('s:enderNac/s:cMun', default='', namespaces=ns_nfse) or '')
-                        # 2) Também considere códigos no infNFSe (incidência/prestação)
-                        candidatos_cod += [
-                            infs.findtext('s:cLocIncid', default='', namespaces=ns_nfse) or '',
-                            infs.findtext('s:cLocPrestacao', default='', namespaces=ns_nfse) or '',
-                        ]
-
-                        # 3) TOMADOR dentro do DPS (quando não vem em infNFSe)
-                        candidatos_cod.append(root.findtext('.//s:DPS//s:toma//s:end//s:endNac//s:cMun', default='', namespaces=ns_nfse) or '')
-
-
-                        # Converta códigos em "Cidade - UF" e coloque no início de cand_raw (maior prioridade)
-                        for cod in candidatos_cod:
-                            cod = (cod or '').strip()
-                            if not cod:
-                                continue
-                            nome = IBGE_TO_CITY.get(cod, '')
-                            if not nome:
-                                continue
-                            uf_cod = _uf_from_ibge(cod) or uf
-                            cand_raw.insert(0, f"{nome} - {uf_cod}" if uf_cod else nome)
-
-                        for raw in cand_raw:
-                            for key_try in _variants(raw, uf):
-                                if not key_try:
-                                    continue
-                                # 1) tentativa direta
-                                if key_try in CODIGOS_CIDADES:
-                                    farm_name = CODIGOS_CIDADES[key_try]
-                                    break
-                                # 2) tentativa normalizada (robusta a acento/hífen/caixa)
-                                k_norm = _norm_city_key(key_try)            # <= usa a função do item 1
-                                if k_norm in CODIGOS_CIDADES_NORM:          # <= usa o dicionário normalizado do item 1
-                                    farm_name = CODIGOS_CIDADES_NORM[k_norm]
-                                    break
-                            
-                    # define contraparte e coluna do valor (NFSe: serviço prestado/ tomado ≈ tpNF)
-                    if cleuber_emit:
-                        final_name, final_id = toma_name, toma_id
-                        valor_col = 13  # receita quando Cleuber é prestador
-                        operation_type = "RECEITA (NFSe — Cleuber Prestador)"
-                    elif cleuber_dest:
-                        final_name, final_id = emit_name, emit_id
-                        valor_col = 14  # despesa quando Cleuber é tomador
-                        operation_type = "DESPESA (NFSe — Cleuber Tomador)"
-                    else:
-                        final_name, final_id = emit_name, emit_id
-                        valor_col = 14  # mais conservador: tratamos como despesa
-                        operation_type = "DESPESA (NFSe — Cleuber não encontrado)"
-                        self.log_msg(f"Cleuber não encontrado na NFSe. Usando: {operation_type}", "warning")
-                # === FIM DO BLOCO NOVO ===
-
-                # --- NOVO (NF-e): campos usados na planilha/ISENTO ---
-                if not is_nfse:
-                    prod  = root.findtext('.//n:det/n:prod/n:xProd', default='', namespaces=ns) or ''
-                    cfop  = root.findtext('.//n:det/n:prod/n:CFOP', default='', namespaces=ns) or ''
-                    v_total_txt = root.findtext('.//n:ICMSTot/n:vNF', default='0', namespaces=ns) or '0'
-                    try:
-                        total = float(str(v_total_txt).replace(',', '.'))
-                    except Exception:
-                        total = 0.0
-
-                    # Chave da NFe (para marcação de ISENTO por chNFe)
-                    key = (root.findtext('.//n:protNFe//n:chNFe', default='', namespaces=ns)
-                           or root.findtext('.//n:infProt/n:chNFe', default='', namespaces=ns) or '')
-                    
-                    if key:
-                        self.key_xml[key] = xml_file
-
-                # --- NOVO (NFSe): normalizações para escrita na planilha ---
-                if is_nfse:
-                    # 'nat' não existe em NFSe; use algo descritivo
                     nat = "SERVIÇO"
-                    # Chave da NFSe: usar o atributo Id de <infNFSe>; se não houver, cair para nNF
                     if nfse_id:
-                        # normaliza: remove prefixos não numéricos (ex.: "NFS") e mantém só os dígitos
-                        import re
-                        key = re.sub(r'^\D+', '', nfse_id)
+                        import re as _re
+                        key = _re.sub(r'^\D+', '', nfse_id)
                     else:
                         key = nNF or ""
-
                     if key:
                         self.key_xml[key] = xml_file
 
-                dups = root.findall('.//n:dup', ns)
-                if dups:
-                    self.log_msg(f"Nota fiscal {nNF} possui {len(dups)} parcela(s)", "info")
-                    for dup in dups:
-                        while ws.cell(current, 3).value:
-                            current += 1
+                    if owner_key and owner_side == "emit":
+                        final_name, final_id = toma_name, toma_id
+                        valor_col = 13
+                        operation_type = f"RECEITA (NFSe — {owner_key} Prestador)"
+                    elif owner_key and owner_side == "dest":
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 14
+                        operation_type = f"DESPESA (NFSe — {owner_key} Tomador)"
+                    else:
+                        final_name, final_id = emit_name, emit_id
+                        valor_col = 14
+                        operation_type = f"DESPESA (NFSe — {PRODUTOR_PADRAO} não identificado)"
+                        self.log_msg(f"{PRODUTOR_PADRAO} não identificado na NFSe. Usando fallback genérico.", "warning")
 
-                        dVenc = dup.find('n:dVenc', ns).text
-                        vDup = float(dup.find('n:vDup', ns).text)
-
-                        dt_venc = datetime.strptime(dVenc, "%Y-%m-%d")
-                        date_parc = dt_venc.strftime("%d/%m/%Y")
-                        month_parc = dt_venc.month
-                        year_parc = dt_venc.year
-
-                        src_row = start if current == start else current - 1
-                        self.copy_row_style(ws, src_row, current, cols_style)
-
-                        ws.cell(current, 3, date_parc)
-                        ws.cell(current, 4, month_parc)
-                        ws.cell(current, 5, year_parc)
-                        ws.cell(current, 6, nNF)
-                        ws.cell(current, 7, final_name)
-                        ws.cell(current, 8, farm_ie)
-                        ws.cell(current, 9, farm_name)
-                        ws.cell(current, 10, final_id)
-                        ws.cell(current, 11, prod)
-                        ws.cell(current, 12, cfop)
-                        ws.cell(current, valor_col, vDup)
-                        ws.cell(current, 15, nat)
-                        ws.cell(current, 16, key)
-                        ws.cell(current, 17, None)
-
-                        if farm_name == "ISENTO":
-                            if key not in self.isento_keys: self.isento_keys[key] = []
-                            self.isento_keys[key].append(current)
-                            self.log_msg(f"Nota ISENTO registrada (linha {current})", "info")
-
-                        last = max(last, current)
-                        self.log_msg(f"Linha {current}: Parcela R$ {vDup:.2f} vencendo em {date_parc} ({operation_type})", "success")
-                        current += 1
-                else:
                     while ws.cell(current, 3).value:
                         current += 1
 
@@ -1582,31 +1617,34 @@ class RuralXmlImporter(QWidget):
             try:
                 if self.isento_keys:
                     self.log_msg(f"Revisando {len(self.isento_keys)} nota(s) ISENTA(s) pela cidade do prestador…", "info")
-            
+
                 for key, linhas in self.isento_keys.items():
                     xml_path = self.key_xml.get(key, "")
                     if not xml_path or not os.path.exists(xml_path):
                         continue
-                    
+
                     try:
                         tree_fix = ET.parse(xml_path)
                         root_fix = tree_fix.getroot()
                         ns_nfe  = {'n': 'http://www.portalfiscal.inf.br/nfe'}
                         ns_nfse = {'s': 'http://www.sped.fazenda.gov.br/nfse'}
-            
-                        # Detecta tipo
+
                         is_nfse_fix = root_fix.find('.//s:infNFSe', ns_nfse) is not None
-            
+
+                        active = (self.config.get('active_owner') or self.active_owner or 'CLEUBER').upper()
+                        if active not in CODIGOS_CIDADES_BY_OWNER:
+                            active = 'CLEUBER'
+                        city_map = CODIGOS_CIDADES_BY_OWNER[active]
+                        city_norm_map = CODIGOS_CIDADES_NORM_BY_OWNER[active]
+
                         def _normalize_no_accents(s: str) -> str:
-                            import unicodedata
                             s = (s or '').strip()
                             if not s:
                                 return ''
                             s_noacc = unicodedata.normalize('NFKD', s)
                             return ''.join(ch for ch in s_noacc if not unicodedata.combining(ch))
-            
+
                         def _variants(city: str, uf: str):
-                            import re
                             city = (city or '').strip()
                             if not city:
                                 return []
@@ -1616,7 +1654,7 @@ class RuralXmlImporter(QWidget):
                             if uf and base:
                                 out += [f"{base} - {uf}", f"{base.upper()} - {uf}"]
                             return out
-            
+
                         def _nfse_get_uf(root, infs, emit, toma) -> str:
                             xps = [
                                 's:UFIncid',
@@ -1635,13 +1673,11 @@ class RuralXmlImporter(QWidget):
                                 if v:
                                     return v.strip().upper()
                             return ''
-            
-                        # 1) Cidade/UF do PRESTADOR
+
                         city_candidates = []
                         uf = ""
-            
+
                         if not is_nfse_fix:
-                            # NF-e: prestador = emit
                             emit = root_fix.find('.//n:emit', ns_nfe)
                             if emit is not None:
                                 city_candidates += [emit.findtext('n:enderEmit/n:xMun', default='', namespaces=ns_nfe) or '']
@@ -1649,80 +1685,49 @@ class RuralXmlImporter(QWidget):
                                 if uf_txt:
                                     uf = uf_txt.strip().upper()
                         else:
-                            # NFSe: vamos tentar PRIMEIRO o TOMADOR, depois o PRESTADOR (emit)
-                            infs = root_fix.find('.//s:infNFSe', ns_nfse)
-                            emit = infs.find('.//s:emit', ns_nfse) if infs is not None else None
-                            toma = infs.find('.//s:toma', ns_nfse) if infs is not None else None
+                            infs2 = root_fix.find('.//s:infNFSe', ns_nfse)
+                            emit2 = infs2.find('.//s:emit', ns_nfse) if infs2 is not None else None
+                            toma2 = infs2.find('.//s:toma', ns_nfse) if infs2 is not None else None
 
-                            # cidade/UF: primeiro tomador (se houver), depois prestador
                             city_candidates = [
-                                # fontes do TOMADOR
-                                (infs.findtext('s:xLocIncid', default='', namespaces=ns_nfse) or ''),  # muitos municípios usam incidência = local do serviço/tomador
-                                (toma.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma is not None else ''),
-                                (toma.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if toma is not None else ''),
-                                # fontes do PRESTADOR (fallback)
-                                (infs.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) if infs is not None else ''),
-                                (infs.findtext('s:xLocEmi', default='', namespaces=ns_nfse) if infs is not None else ''),
-                                (emit.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit is not None else ''),
-                                (emit.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit is not None else ''),
+                                (infs2.findtext('s:xLocIncid', default='', namespaces=ns_nfse) if infs2 is not None else ''),
+                                (toma2.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if toma2 is not None else ''),
+                                (toma2.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if toma2 is not None else ''),
+                                (infs2.findtext('s:xLocPrestacao', default='', namespaces=ns_nfse) if infs2 is not None else ''),
+                                (infs2.findtext('s:xLocEmi', default='', namespaces=ns_nfse) if infs2 is not None else ''),
+                                (emit2.findtext('s:ender/s:xMun', default='', namespaces=ns_nfse) if emit2 is not None else ''),
+                                (emit2.findtext('s:enderNac/s:xMun', default='', namespaces=ns_nfse) if emit2 is not None else ''),
                             ]
 
-                            # UF cobrindo ender/enderNac/DPS (mantém sua função utilitária)
-                            uf = _nfse_get_uf(root_fix, infs, emit, toma)
-            
-                            # --- NOVO: cMun do TOMADOR (IBGE) quando xMun não vier
-                            IBGE_TO_CITY = {
-                                "5221452": "Trombas",
-                                "5201405": "Aparecida de Goiânia",
-                                "5218003": "Porangatu",
-                                "3170107": "Uberaba",
-                            }
-                            def _uf_from_ibge(code: str) -> str:
-                                if not code or len(code) < 2: return ''
-                                return {"11":"RO","12":"AC","13":"AM","14":"RR","15":"PA","16":"AP","17":"TO",
-                                        "21":"MA","22":"PI","23":"CE","24":"RN","25":"PB","26":"PE","27":"AL","28":"SE","29":"BA",
-                                        "31":"MG","32":"ES","33":"RJ","35":"SP",
-                                        "41":"PR","42":"SC","43":"RS",
-                                        "50":"MS","51":"MT","52":"GO","53":"DF"}.get(code[:2], '')
+                            uf = _nfse_get_uf(root_fix, infs2, emit2, toma2)
 
-                            if toma is not None:
-                                cmun_tom = (toma.findtext('s:enderNac/s:cMun', default='', namespaces=ns_nfse) or '').strip()
-                                if cmun_tom and IBGE_TO_CITY.get(cmun_tom):
-                                    uf_cod = _uf_from_ibge(cmun_tom) or uf
-                                    city_candidates.insert(0, f"{IBGE_TO_CITY[cmun_tom]} - {uf_cod}" if uf_cod else IBGE_TO_CITY[cmun_tom])
-
-
-                        # 2) Tenta mapear no CODIGOS_CIDADES
                         farm_name_new = None
                         for raw in city_candidates:
                             for key_try in _variants(raw, uf):
                                 if not key_try:
                                     continue
-                                # 1) direto
-                                if key_try in CODIGOS_CIDADES:
-                                    farm_name_new = CODIGOS_CIDADES[key_try]
+                                if key_try in city_map:
+                                    farm_name_new = city_map[key_try]
                                     break
-                                # 2) normalizado
                                 k_norm = _norm_city_key(key_try)
-                                if k_norm in CODIGOS_CIDADES_NORM:
-                                    farm_name_new = CODIGOS_CIDADES_NORM[k_norm]
+                                if k_norm in city_norm_map:
+                                    farm_name_new = city_norm_map[k_norm]
                                     break
                             if farm_name_new:
                                 break
-                            
-                        # 3) Se achou, atualiza as linhas dessa nota (coluna 9 = FAZENDA)
+
                         if farm_name_new:
                             for lin in linhas:
                                 ws.cell(lin, 9, farm_name_new)
                             self.log_msg(f"ISENTO corrigido via cidade do prestador (key {key} → {farm_name_new})", "success")
-            
+
                     except Exception as inner_e:
                         self.log_msg(f"Falha ao revisar key {key}: {inner_e}", "error")
-            
+
             except Exception as _e:
                 self.log_msg(f"Falha na correção pós-loop de ISENTOS: {_e}", "error")
             # ====== FIM DA CORREÇÃO PÓS-LOOP ======
-            
+
         if last >= start:
             self.extend_table(ws, header, last)
 
@@ -1761,6 +1766,12 @@ class RuralXmlImporter(QWidget):
             erros = []
             encontrados = 0
 
+            # usa perfil ativo para o mapeamento
+            active = (self.config.get('active_owner') or self.active_owner or 'CLEUBER').upper()
+            if active not in CODIGOS_CIDADES_BY_OWNER:
+                active = 'CLEUBER'
+            city_map = CODIGOS_CIDADES_BY_OWNER[active]
+
             for dirpath, _, filenames in os.walk(self.isento_path):
                 for filename in filenames:
                     if not filename.lower().endswith(".xml"):
@@ -1768,10 +1779,9 @@ class RuralXmlImporter(QWidget):
 
                     caminho_arquivo = os.path.join(dirpath, filename)
                     try:
-                        tree = ET.parse(campo= caminho_arquivo)  # <- intentionally wrong?
-                    except TypeError:
-                        # corrige caso Python reclame do nome errado do parâmetro (garante compatibilidade)
                         tree = ET.parse(caminho_arquivo)
+                    except Exception:
+                        continue
 
                     root = tree.getroot()
                     ns = {"nfe": "http://www.portalfiscal.inf.br/nfe"}
@@ -1787,7 +1797,7 @@ class RuralXmlImporter(QWidget):
                         erros.append((chave, None))
                     else:
                         cidade = elem_mun.text
-                        codigo = CODIGOS_CIDADES.get(cidade)
+                        codigo = city_map.get(cidade)
                         if codigo:
                             resultados[chave] = codigo
                             encontrados += 1
